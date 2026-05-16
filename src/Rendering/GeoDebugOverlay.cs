@@ -2085,6 +2085,7 @@ namespace CityTimelineMod.Rendering
             );
 
             DrawDisplayPresetButtons();
+            DrawBundleWaterContractInfo();
             DrawVisualSettingsStatus();
 
             GUILayout.Space(12f);
@@ -2296,6 +2297,24 @@ namespace CityTimelineMod.Rendering
 
             GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
         }
+        private void DrawBundleWaterContractInfo()
+        {
+            if (_config == null || double.IsNaN(_config.RecommendedCs2WaterLevel))
+                return;
+
+            GUILayout.Space(8f);
+            GUILayout.Label("Contrat eau du bundle");
+            GUILayout.Label("Niveau d'eau conseillé CS2 : " + _config.RecommendedCs2WaterLevel.ToString("0.###"));
+
+            if (!double.IsNaN(_config.BelowSeaReserveMeters))
+                GUILayout.Label("Réserve sous eau : " + _config.BelowSeaReserveMeters.ToString("0.###") + " m");
+
+            if (!double.IsNaN(_config.WaterReferenceElevationMeters))
+                GUILayout.Label("Altitude eau référence : " + _config.WaterReferenceElevationMeters.ToString("0.###") + " m");
+
+            GUILayout.Label("À reporter dans l'éditeur CS2 si tu veux le niveau réel conseillé.");
+        }
+
         private void DrawVisualSettingsStatus()
         {
             GUILayout.Space(6f);

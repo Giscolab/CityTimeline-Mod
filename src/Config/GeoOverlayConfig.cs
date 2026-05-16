@@ -30,6 +30,11 @@ namespace CityTimelineMod.Config
 
 		internal string ConfigPath = null;
 		internal string BundleManifestPath = null;
+        internal double RecommendedCs2WaterLevel = double.NaN;
+        internal double WaterReferenceElevationMeters = double.NaN;
+        internal double BelowSeaReserveMeters = double.NaN;
+        internal string WaterContractSource = null;
+        internal string WaterContractFormula = null;
 
                 internal string PackPath = null;
 		internal bool UseSegmentCubes = true;
@@ -752,6 +757,40 @@ Log.Info(
                 }
 
                 var heightmap = manifest["heightmap"] as JObject;
+
+                var water = manifest["water"] as JObject;
+                if (water != null)
+                {
+                    config.RecommendedCs2WaterLevel = GetDouble(
+                        water,
+                        "recommendedCs2WaterLevel",
+                        config.RecommendedCs2WaterLevel
+                    );
+
+                    config.WaterReferenceElevationMeters = GetDouble(
+                        water,
+                        "waterReferenceElevationMeters",
+                        config.WaterReferenceElevationMeters
+                    );
+
+                    config.BelowSeaReserveMeters = GetDouble(
+                        water,
+                        "belowSeaReserveMeters",
+                        config.BelowSeaReserveMeters
+                    );
+
+                    config.WaterContractSource = GetString(
+                        water,
+                        "source",
+                        config.WaterContractSource
+                    );
+
+                    config.WaterContractFormula = GetString(
+                        water,
+                        "formula",
+                        config.WaterContractFormula
+                    );
+                }
                 if (heightmap != null)
                 {
                     config.HeightMapSizeKm = GetFloat(heightmap, "sizeKm", config.HeightMapSizeKm);
@@ -785,6 +824,16 @@ Log.Info(
                 }
 
                 Log.Info("GeoOverlayConfig: bundle manifest loaded " + manifestPath);
+
+                if (!double.IsNaN(config.RecommendedCs2WaterLevel))
+                {
+                    Log.Info(
+                        "GeoOverlayConfig: water recommendedCs2WaterLevel=" +
+                        config.RecommendedCs2WaterLevel +
+                        ", waterReferenceElevationMeters=" + config.WaterReferenceElevationMeters +
+                        ", belowSeaReserveMeters=" + config.BelowSeaReserveMeters
+                    );
+                }
                 Log.Info(
                     "GeoOverlayConfig: manifest applied originLon=" + config.OriginLon +
                     ", originLat=" + config.OriginLat +
