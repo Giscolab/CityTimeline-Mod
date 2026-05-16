@@ -1,0 +1,21 @@
+﻿{
+  "sourceProject": "cs2-minneapolis-zoning",
+  "city": "Zone CS2",
+  "bboxOrder": "south,west,north,east",
+  "heightmapBbox": {
+    "south": 33.584339,
+    "west": -117.869246,
+    "north": 33.756051,
+    "east": -117.662922
+  },
+  "center": {
+    "lat": 33.670195,
+    "lon": -117.766084
+  },
+  "heightmapSizeMeters": 19115,
+  "generatedFiles": [
+    "roads_major_clipped.geojson",
+    "roads_driveable_clipped.geojson",
+    "zoning_polygons.geojson"
+  ]
+}

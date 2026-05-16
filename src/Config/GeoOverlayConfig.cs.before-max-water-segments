@@ -1,0 +1,291 @@
+using System;
+using System.Globalization;
+using System.IO;
+using Newtonsoft.Json.Linq;
+using CityTimelineMod.Util;
+
+namespace CityTimelineMod.Config
+{
+    internal sealed class GeoOverlayConfig
+    {
+        internal bool UseGeoJsonCenter = true;
+        internal double OriginLon = -117.795;
+        internal double OriginLat = 33.7025;
+
+        internal float WorldOriginX = 0f;
+        internal float WorldOriginZ = 0f;
+        internal float WorldScale = 1f;
+        internal float GroundMargin = 6f;
+		internal float OverlayRotationDegrees = 0f;
+		internal float OverlayScaleX = 1f;
+		internal float OverlayScaleZ = 1f;
+
+		internal bool FlipX = false;
+		internal bool FlipZ = false;
+		internal bool EnableCalibrationControls = true;
+		internal float CalibrationMoveStep = 100f;
+		internal float CalibrationRotationStep = 1f;
+		internal float CalibrationScaleStep = 0.01f;
+
+		internal string ConfigPath = null;
+
+                internal string PackPath = null;
+		internal bool UseSegmentCubes = true;
+
+                internal bool RenderWaterLines = true;
+                internal bool RenderWaterAreas = true;
+                internal bool RenderRoads = true;
+		internal float SegmentWidth = 35f;
+		internal float SegmentHeight = 10f;
+
+		// Paramètres séparés pour les routes debug
+		internal float RoadSegmentWidth = 24f;
+		internal float RoadSegmentHeight = 30f;
+		internal int MaxRoadSegmentsDebug = 2000;
+
+        internal bool UseLineRenderer = false;
+        internal float LineWidth = 60f;
+
+        internal bool DebugBeacons = true;
+        internal float BeaconHeight = 1000f;
+        internal float BeaconWidth = 80f;
+
+        internal bool DebugTower = true;
+        internal float TowerHeight = 3000f;
+        internal float TowerWidth = 180f;
+
+        // --- Nouveaux champs ---
+        internal int MaxRenderedSegments = 500;
+        internal int PointStride = 1;
+
+        internal static GeoOverlayConfig Load(string modDir)
+        {
+            var config = new GeoOverlayConfig();
+            var path = Path.Combine(modDir, "config.json");
+            config.ConfigPath = path;
+
+            if (!File.Exists(path))
+            {
+                Log.Info("GeoOverlayConfig: config.json not found. Using defaults.");
+                return config;
+            }
+
+            try
+            {
+                var json = File.ReadAllText(path);
+                var root = JObject.Parse(json);
+
+                config.UseGeoJsonCenter = GetBool(root, "useGeoJsonCenter", config.UseGeoJsonCenter);
+                config.OriginLon = GetDouble(root, "originLon", config.OriginLon);
+                config.OriginLat = GetDouble(root, "originLat", config.OriginLat);
+                config.PackPath = GetString(root, "packPath", config.PackPath);
+
+                config.WorldOriginX = GetFloat(root, "worldOriginX", config.WorldOriginX);
+                config.WorldOriginZ = GetFloat(root, "worldOriginZ", config.WorldOriginZ);
+                config.WorldScale = GetFloat(root, "worldScale", config.WorldScale);
+                config.GroundMargin = GetFloat(root, "groundMargin", config.GroundMargin);
+config.OverlayRotationDegrees = GetFloat(root, "overlayRotationDegrees", config.OverlayRotationDegrees);
+config.OverlayScaleX = GetFloat(root, "overlayScaleX", config.OverlayScaleX);
+config.OverlayScaleZ = GetFloat(root, "overlayScaleZ", config.OverlayScaleZ);
+config.FlipX = GetBool(root, "flipX", config.FlipX);
+config.FlipZ = GetBool(root, "flipZ", config.FlipZ);
+config.EnableCalibrationControls = GetBool(root, "enableCalibrationControls", config.EnableCalibrationControls);
+config.CalibrationMoveStep = GetFloat(root, "calibrationMoveStep", config.CalibrationMoveStep);
+config.CalibrationRotationStep = GetFloat(root, "calibrationRotationStep", config.CalibrationRotationStep);
+config.CalibrationScaleStep = GetFloat(root, "calibrationScaleStep", config.CalibrationScaleStep);
+config.UseSegmentCubes = GetBool(root, "useSegmentCubes", config.UseSegmentCubes);
+config.RenderWaterLines = GetBool(root, "renderWaterLines", config.RenderWaterLines);
+config.RenderWaterAreas = GetBool(root, "renderWaterAreas", config.RenderWaterAreas);
+config.RenderRoads = GetBool(root, "renderRoads", config.RenderRoads);
+config.SegmentWidth = GetFloat(root, "segmentWidth", config.SegmentWidth);
+config.SegmentHeight = GetFloat(root, "segmentHeight", config.SegmentHeight);
+
+config.RoadSegmentWidth = GetFloat(root, "roadSegmentWidth", config.RoadSegmentWidth);
+config.RoadSegmentHeight = GetFloat(root, "roadSegmentHeight", config.RoadSegmentHeight);
+config.MaxRoadSegmentsDebug = GetInt(root, "maxRoadSegmentsDebug", config.MaxRoadSegmentsDebug);
+
+                config.UseLineRenderer = GetBool(root, "useLineRenderer", config.UseLineRenderer);
+                config.LineWidth = GetFloat(root, "lineWidth", config.LineWidth);
+
+                config.DebugBeacons = GetBool(root, "debugBeacons", config.DebugBeacons);
+                config.BeaconHeight = GetFloat(root, "beaconHeight", config.BeaconHeight);
+                config.BeaconWidth = GetFloat(root, "beaconWidth", config.BeaconWidth);
+
+                config.DebugTower = GetBool(root, "debugTower", config.DebugTower);
+                config.TowerHeight = GetFloat(root, "towerHeight", config.TowerHeight);
+                config.TowerWidth = GetFloat(root, "towerWidth", config.TowerWidth);
+
+                // --- Nouveaux paramètres ---
+                config.MaxRenderedSegments = GetInt(root, "maxRenderedSegments", config.MaxRenderedSegments);
+                config.PointStride = GetInt(root, "pointStride", config.PointStride);
+
+if (config.PointStride < 1)
+    config.PointStride = 1;
+
+if (config.MaxRenderedSegments < 1)
+    config.MaxRenderedSegments = 1;
+
+if (config.RoadSegmentWidth < 1f)
+    config.RoadSegmentWidth = 1f;
+
+if (config.RoadSegmentHeight < 1f)
+    config.RoadSegmentHeight = 1f;
+
+if (config.MaxRoadSegmentsDebug < 1)
+    config.MaxRoadSegmentsDebug = 1;
+
+if (config.OverlayScaleX <= 0f)
+    config.OverlayScaleX = 1f;
+
+if (config.OverlayScaleZ <= 0f)
+    config.OverlayScaleZ = 1f;
+
+                Log.Info("GeoOverlayConfig: loaded " + path);
+                Log.Info("GeoOverlayConfig: packPath=" + (string.IsNullOrWhiteSpace(config.PackPath) ? "(empty)" : config.PackPath));
+Log.Info(
+    "GeoOverlayConfig: renderWaterLines=" + config.RenderWaterLines +
+    ", renderWaterAreas=" + config.RenderWaterAreas +
+    ", renderRoads=" + config.RenderRoads
+);
+
+Log.Info(
+    "GeoOverlayConfig: roadSegmentWidth=" + config.RoadSegmentWidth +
+    ", roadSegmentHeight=" + config.RoadSegmentHeight +
+    ", maxRoadSegmentsDebug=" + config.MaxRoadSegmentsDebug + 
+    " | overlayRotationDegrees=" + config.OverlayRotationDegrees +
+    ", overlayScaleX=" + config.OverlayScaleX +
+    ", overlayScaleZ=" + config.OverlayScaleZ +
+    ", flipX=" + config.FlipX +
+    ", flipZ=" + config.FlipZ
+);
+
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GeoOverlayConfig: failed to load config.json. Using defaults. " + ex);
+            }
+
+            return config;
+        }
+
+        internal void SaveCalibrationToConfig()
+        {
+            if (string.IsNullOrWhiteSpace(ConfigPath))
+            {
+                Log.Error("GeoOverlayConfig: cannot save calibration. ConfigPath is empty.");
+                return;
+            }
+
+            try
+            {
+                JObject root;
+
+                if (File.Exists(ConfigPath))
+                {
+                    var json = File.ReadAllText(ConfigPath);
+                    root = JObject.Parse(json);
+                }
+                else
+                {
+                    root = new JObject();
+                }
+
+                root["worldOriginX"] = WorldOriginX;
+                root["worldOriginZ"] = WorldOriginZ;
+                root["worldScale"] = WorldScale;
+
+                root["overlayRotationDegrees"] = OverlayRotationDegrees;
+                root["overlayScaleX"] = OverlayScaleX;
+                root["overlayScaleZ"] = OverlayScaleZ;
+                root["flipX"] = FlipX;
+                root["flipZ"] = FlipZ;
+
+                root["renderWaterLines"] = RenderWaterLines;
+                root["renderWaterAreas"] = RenderWaterAreas;
+                root["renderRoads"] = RenderRoads;
+
+                if (!string.IsNullOrWhiteSpace(PackPath))
+                    root["packPath"] = PackPath;
+
+                File.WriteAllText(ConfigPath, root.ToString(), System.Text.Encoding.UTF8);
+
+                Log.Info(
+                    "GeoOverlayConfig: calibration saved. " +
+                    "worldOriginX=" + WorldOriginX +
+                    ", worldOriginZ=" + WorldOriginZ +
+                    ", worldScale=" + WorldScale +
+                    ", overlayRotationDegrees=" + OverlayRotationDegrees +
+                    ", overlayScaleX=" + OverlayScaleX +
+                    ", overlayScaleZ=" + OverlayScaleZ +
+                    ", flipX=" + FlipX +
+                    ", flipZ=" + FlipZ
+                );
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GeoOverlayConfig: failed to save calibration. " + ex);
+            }
+        }
+
+        private static string GetString(JObject root, string name, string fallback)
+        {
+            var token = root[name];
+            if (token == null) return fallback;
+
+            var value = token.ToString();
+            if (string.IsNullOrWhiteSpace(value))
+                return fallback;
+
+            return value;
+        }
+
+        private static bool GetBool(JObject root, string name, bool fallback)
+        {
+            var token = root[name];
+            if (token == null) return fallback;
+
+            bool value;
+            if (bool.TryParse(token.ToString(), out value))
+                return value;
+
+            return fallback;
+        }
+
+        private static float GetFloat(JObject root, string name, float fallback)
+        {
+            var token = root[name];
+            if (token == null) return fallback;
+
+            float value;
+            if (float.TryParse(token.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+                return value;
+
+            return fallback;
+        }
+
+        private static double GetDouble(JObject root, string name, double fallback)
+        {
+            var token = root[name];
+            if (token == null) return fallback;
+
+            double value;
+            if (double.TryParse(token.ToString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+                return value;
+
+            return fallback;
+        }
+
+        // --- Nouveau helper ---
+        private static int GetInt(JObject root, string name, int fallback)
+        {
+            var token = root[name];
+            if (token == null) return fallback;
+
+            int value;
+            if (int.TryParse(token.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+                return value;
+
+            return fallback;
+        }
+    }
+}

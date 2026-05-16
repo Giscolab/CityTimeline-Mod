@@ -1,0 +1,814 @@
+﻿using System;
+using System.Collections.Generic;
+using CityTimelineMod.Config;
+using CityTimelineMod.Importers;
+using CityTimelineMod.Terrain;
+using CityTimelineMod.Util;
+using UnityEngine;
+
+namespace CityTimelineMod.Rendering
+{
+    internal static class GeoDebugOverlay
+    {
+        private const string RootName = "CityTimelineMod_GroundOverlay";
+
+        internal static void Install(List<List<GeoPoint>> lines, GeoOverlayConfig config)
+        {
+            Install(lines, new List<List<GeoPoint>>(), config);
+        }
+
+        internal static void Install(
+            List<List<GeoPoint>> waterLines,
+            List<List<GeoPoint>> roadLines,
+            GeoOverlayConfig config
+        )
+        {
+            var existing = GameObject.Find(RootName);
+            if (existing != null)
+                UnityEngine.Object.Destroy(existing);
+
+            var root = new GameObject(RootName);
+            UnityEngine.Object.DontDestroyOnLoad(root);
+
+            var overlay = root.AddComponent<GroundOverlayBehaviour>();
+            overlay.Setup(waterLines, roadLines, config);
+
+            Log.Info("GroundOverlay: installed HARD visible segment overlay.");
+        }
+    }
+
+    internal sealed class GroundOverlayBehaviour : MonoBehaviour
+    {
+        private enum CalibrationMode
+        {
+            Global,
+            Water,
+            Roads,
+            Render
+        }
+
+        private List<List<GeoPoint>> _waterLines;
+        private List<List<GeoPoint>> _roadLines;
+        private GeoOverlayConfig _config;
+        private GeoBounds _bounds;
+        private bool _created;
+        private CalibrationMode _activeCalibrationMode = CalibrationMode.Global;
+
+        private int _debugWaterSegmentLogs;
+        private int _debugRoadSegmentLogs;
+        private Vector3 _liveCalibrationOffset = Vector3.zero;
+        private float _liveCalibrationRotationDegrees = 0f;
+        private float _liveCalibrationScaleX = 1f;
+        private float _liveCalibrationScaleZ = 1f;
+
+        internal void Setup(
+            List<List<GeoPoint>> waterLines,
+            List<List<GeoPoint>> roadLines,
+            GeoOverlayConfig config
+        )
+        {
+            _waterLines = waterLines ?? new List<List<GeoPoint>>();
+            _roadLines = roadLines ?? new List<List<GeoPoint>>();
+            _config = config;
+
+            // Important :
+            // on garde les bounds de l'eau comme référence,
+            // sinon les routes déplaceraient le centre/origine validé.
+            _bounds = CalculateBounds(_waterLines);
+        }
+
+        private void Update()
+        {
+            if (!_created)
+            {
+                _created = true;
+                CreateOverlay();
+                return;
+            }
+
+            HandleCalibrationInput();
+        }
+
+        private void CreateOverlay()
+        {
+            if (_waterLines == null || _waterLines.Count == 0)
+            {
+                Log.Info("GroundOverlay: no water geometry.");
+                return;
+            }
+
+            var originLon = _config.UseGeoJsonCenter ? _bounds.CenterLon : _config.OriginLon;
+            var originLat = _config.UseGeoJsonCenter ? _bounds.CenterLat : _config.OriginLat;
+
+            Log.Info("GroundOverlay: creating HARD visible segment overlay.");
+            Log.Info("GroundOverlay: bounds lon=[" + _bounds.MinLon + ", " + _bounds.MaxLon + "], lat=[" + _bounds.MinLat + ", " + _bounds.MaxLat + "]");
+            Log.Info("GroundOverlay: center lon=" + _bounds.CenterLon + ", lat=" + _bounds.CenterLat);
+            Log.Info("GroundOverlay: origin lon=" + originLon + ", lat=" + originLat);
+            Log.Info("GroundOverlay: world origin x=" + _config.WorldOriginX + ", z=" + _config.WorldOriginZ);
+            Log.Info("GroundOverlay: worldScale=" + _config.WorldScale + ", groundMargin=" + _config.GroundMargin);
+
+            Log.Info(
+                "GroundOverlay: overlayRotationDegrees=" + _config.OverlayRotationDegrees +
+                ", overlayScaleX=" + _config.OverlayScaleX +
+                ", overlayScaleZ=" + _config.OverlayScaleZ +
+                ", flipX=" + _config.FlipX +
+                ", flipZ=" + _config.FlipZ
+            );
+
+            Log.Info("GroundOverlay: water segmentWidth=" + _config.SegmentWidth + ", segmentHeight=" + _config.SegmentHeight);
+            Log.Info("GroundOverlay: maxRenderedSegments=" + _config.MaxRenderedSegments + ", pointStride=" + _config.PointStride);
+            Log.Info(
+                "GroundOverlay: roadSegmentWidth=" + _config.RoadSegmentWidth +
+                ", roadSegmentHeight=" + _config.RoadSegmentHeight +
+                ", maxRoadSegmentsDebug=" + _config.MaxRoadSegmentsDebug
+            );
+
+            var cyan = CreateMaterial(Color.cyan);
+            var orange = CreateMaterial(new Color(1f, 0.45f, 0f));
+            var red = CreateMaterial(Color.red);
+            var green = CreateMaterial(Color.green);
+            var yellow = CreateMaterial(Color.yellow);
+            var magenta = CreateMaterial(Color.magenta);
+
+            var stride = Math.Max(1, _config.PointStride);
+
+            var createdWaterSegments = 0;
+            var createdWaterLines = 0;
+
+            Vector3 firstWorld = Vector3.zero;
+            Vector3 lastWorld = Vector3.zero;
+            var hasEndpoints = false;
+
+            // ==========================================================
+            // EAU : rendu debug large conservé
+            // ==========================================================
+            foreach (var line in _waterLines)
+            {
+                if (line == null || line.Count < 2)
+                    continue;
+
+                createdWaterLines++;
+
+                for (var i = 0; i < line.Count - stride; i += stride)
+                {
+                    if (createdWaterSegments >= _config.MaxRenderedSegments)
+                        break;
+
+                    var a = GeoTransform.ToWorld(line[i], _config, originLon, originLat);
+                    var b = GeoTransform.ToWorld(line[Math.Min(i + stride, line.Count - 1)], _config, originLon, originLat);
+
+                    a.y = ResolveY(a) + _config.GroundMargin;
+                    b.y = ResolveY(b) + _config.GroundMargin;
+
+                    if (!hasEndpoints)
+                    {
+                        firstWorld = a;
+                        hasEndpoints = true;
+                    }
+
+                    lastWorld = b;
+
+                    if (CreateOrientedWaterCube(
+                        "cyan_water_segment_" + createdWaterSegments,
+                        a,
+                        b,
+                        cyan,
+                        _config.SegmentWidth,
+                        _config.SegmentHeight
+                    ))
+                    {
+                        createdWaterSegments++;
+                    }
+                }
+
+                if (createdWaterSegments >= _config.MaxRenderedSegments)
+                    break;
+            }
+
+            // ==========================================================
+            // ROUTES : rendu orienté, largeur métrique réelle
+            // ==========================================================
+            var createdRoadSegments = 0;
+            var createdRoadLines = 0;
+
+            if (_roadLines != null && _roadLines.Count > 0)
+            {
+                foreach (var road in _roadLines)
+                {
+                    if (road == null || road.Count < 2)
+                        continue;
+
+                    createdRoadLines++;
+
+                    for (var i = 0; i < road.Count - stride; i += stride)
+                    {
+                        if (createdRoadSegments >= _config.MaxRoadSegmentsDebug)
+                            break;
+
+                        var a = GeoTransform.ToWorld(road[i], _config, originLon, originLat);
+                        var b = GeoTransform.ToWorld(road[Math.Min(i + stride, road.Count - 1)], _config, originLon, originLat);
+
+                        a.y = ResolveY(a) + _config.GroundMargin;
+                        b.y = ResolveY(b) + _config.GroundMargin;
+
+                        if (CreateOrientedRoadCube(
+                            "orange_road_segment_" + createdRoadSegments,
+                            a,
+                            b,
+                            orange,
+                            _config.RoadSegmentWidth,
+                            _config.RoadSegmentHeight
+                        ))
+                        {
+                            createdRoadSegments++;
+                        }
+                    }
+
+                    if (createdRoadSegments >= _config.MaxRoadSegmentsDebug)
+                        break;
+                }
+            }
+
+            var center = new Vector3(
+                _config.WorldOriginX,
+                ResolveY(new Vector3(_config.WorldOriginX, 0f, _config.WorldOriginZ)) + _config.GroundMargin,
+                _config.WorldOriginZ
+            );
+
+            if (_config.DebugBeacons)
+            {
+                CreateBeacon("ground_red_center_beacon", center, red);
+
+                if (hasEndpoints)
+                {
+                    CreateBeacon("ground_green_first_beacon", firstWorld, green);
+                    CreateBeacon("ground_yellow_last_beacon", lastWorld, yellow);
+                }
+            }
+
+            if (_config.DebugTower)
+                CreateTower("ground_magenta_debug_tower", center, magenta);
+
+            Log.Info("GroundOverlay: first world point=" + firstWorld);
+            Log.Info("GroundOverlay: last world point=" + lastWorld);
+            Log.Info("GroundOverlay: center world point=" + center);
+
+            Log.Info(
+                "GroundOverlay: created water lines=" + createdWaterLines +
+                ", water cube segments=" + createdWaterSegments +
+                ", road lines=" + createdRoadLines +
+                ", road cube segments=" + createdRoadSegments
+            );
+        }
+
+        private void HandleCalibrationInput()
+        {
+            if (_config == null || !_config.EnableCalibrationControls)
+                return;
+
+            if (Input.GetKeyDown(KeyCode.F6))
+            {
+                CycleCalibrationMode();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.F7))
+            {
+                LogCalibrationState();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.F8))
+            {
+                RebuildOverlayPreservingLiveTransform();
+                return;
+            }
+
+            // Sauvegarde + bake dans config.json
+            if (Input.GetKeyDown(KeyCode.F9))
+            {
+                SaveAndBakeLiveCalibration();
+                return;
+            }
+
+            if (_activeCalibrationMode != CalibrationMode.Global)
+                return;
+
+            var changed = false;
+
+            var multiplier = 1f;
+
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                multiplier *= 10f;
+
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                multiplier *= 0.1f;
+
+            var moveStep = _config.CalibrationMoveStep * multiplier;
+            var rotationStep = _config.CalibrationRotationStep * multiplier;
+            var scaleStep = _config.CalibrationScaleStep * multiplier;
+
+            // Déplacement X/Z
+            if (Input.GetKeyDown(KeyCode.Keypad8))
+            {
+                _liveCalibrationOffset.z += moveStep;
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Keypad2))
+            {
+                _liveCalibrationOffset.z -= moveStep;
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Keypad6))
+            {
+                _liveCalibrationOffset.x += moveStep;
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Keypad4))
+            {
+                _liveCalibrationOffset.x -= moveStep;
+                changed = true;
+            }
+
+            // Rotation
+            if (Input.GetKeyDown(KeyCode.Keypad7))
+            {
+                _liveCalibrationRotationDegrees -= rotationStep;
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Keypad9))
+            {
+                _liveCalibrationRotationDegrees += rotationStep;
+                changed = true;
+            }
+
+            // Scale uniforme
+            if (Input.GetKeyDown(KeyCode.Keypad1))
+            {
+                _liveCalibrationScaleX = Mathf.Max(0.01f, _liveCalibrationScaleX - scaleStep);
+                _liveCalibrationScaleZ = Mathf.Max(0.01f, _liveCalibrationScaleZ - scaleStep);
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Keypad3))
+            {
+                _liveCalibrationScaleX += scaleStep;
+                _liveCalibrationScaleZ += scaleStep;
+                changed = true;
+            }
+
+            // Scale X
+            if (Input.GetKeyDown(KeyCode.KeypadDivide))
+            {
+                _liveCalibrationScaleX = Mathf.Max(0.01f, _liveCalibrationScaleX - scaleStep);
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.KeypadMultiply))
+            {
+                _liveCalibrationScaleX += scaleStep;
+                changed = true;
+            }
+
+            // Scale Z
+            if (Input.GetKeyDown(KeyCode.KeypadMinus))
+            {
+                _liveCalibrationScaleZ = Mathf.Max(0.01f, _liveCalibrationScaleZ - scaleStep);
+                changed = true;
+            }
+
+            if (Input.GetKeyDown(KeyCode.KeypadPlus))
+            {
+                _liveCalibrationScaleZ += scaleStep;
+                changed = true;
+            }
+
+            // Reset live seulement
+            if (Input.GetKeyDown(KeyCode.Keypad5))
+            {
+                _liveCalibrationOffset = Vector3.zero;
+                _liveCalibrationRotationDegrees = 0f;
+                _liveCalibrationScaleX = 1f;
+                _liveCalibrationScaleZ = 1f;
+                changed = true;
+
+                Log.Info("GroundOverlay calibration: live reset.");
+            }
+
+            if (changed)
+            {
+                ApplyLiveCalibrationTransform();
+                LogLiveCalibrationState();
+            }
+        }
+
+        private void CycleCalibrationMode()
+        {
+            if (_activeCalibrationMode == CalibrationMode.Render)
+                _activeCalibrationMode = CalibrationMode.Global;
+            else
+                _activeCalibrationMode = (CalibrationMode)((int)_activeCalibrationMode + 1);
+
+            Log.Info("GroundOverlay calibration: active mode=" + GetCalibrationModeLabel(_activeCalibrationMode));
+        }
+
+        private void RebuildOverlayPreservingLiveTransform()
+        {
+            var livePosition = transform.position;
+            var liveRotation = transform.rotation;
+            var liveScale = transform.localScale;
+
+            transform.position = Vector3.zero;
+            transform.rotation = Quaternion.identity;
+            transform.localScale = Vector3.one;
+
+            ClearOverlayChildren();
+            CreateOverlay();
+
+            transform.position = livePosition;
+            transform.rotation = liveRotation;
+            transform.localScale = liveScale;
+
+            Log.Info("GroundOverlay calibration: overlay rebuilt. mode=" + GetCalibrationModeLabel(_activeCalibrationMode));
+        }
+
+        private void ApplyLiveCalibrationTransform()
+        {
+            transform.position = new Vector3(
+                _liveCalibrationOffset.x,
+                0f,
+                _liveCalibrationOffset.z
+            );
+
+            transform.rotation = Quaternion.Euler(
+                0f,
+                _liveCalibrationRotationDegrees,
+                0f
+            );
+
+            transform.localScale = new Vector3(
+                _liveCalibrationScaleX,
+                1f,
+                _liveCalibrationScaleZ
+            );
+        }
+
+        private void LogLiveCalibrationState()
+        {
+            Log.Info(
+                "GroundOverlay calibration LIVE: " +
+                "mode=" + GetCalibrationModeLabel(_activeCalibrationMode) +
+                ", offsetX=" + _liveCalibrationOffset.x +
+                ", offsetZ=" + _liveCalibrationOffset.z +
+                ", rotationDelta=" + _liveCalibrationRotationDegrees +
+                ", scaleXDelta=" + _liveCalibrationScaleX +
+                ", scaleZDelta=" + _liveCalibrationScaleZ
+            );
+        }
+
+        private void LogCalibrationState()
+        {
+            Log.Info(
+                "GroundOverlay calibration STATE: " +
+                "mode=" + GetCalibrationModeLabel(_activeCalibrationMode) +
+                ", offsetX=" + _liveCalibrationOffset.x +
+                ", offsetZ=" + _liveCalibrationOffset.z +
+                ", rotationDelta=" + _liveCalibrationRotationDegrees +
+                ", scaleXDelta=" + _liveCalibrationScaleX +
+                ", scaleZDelta=" + _liveCalibrationScaleZ +
+                ", worldOriginX=" + _config.WorldOriginX +
+                ", worldOriginZ=" + _config.WorldOriginZ +
+                ", worldScale=" + _config.WorldScale +
+                ", overlayRotationDegrees=" + _config.OverlayRotationDegrees +
+                ", overlayScaleX=" + _config.OverlayScaleX +
+                ", overlayScaleZ=" + _config.OverlayScaleZ +
+                ", pointStride=" + _config.PointStride +
+                ", waterWidth=" + _config.SegmentWidth +
+                ", waterHeight=" + _config.SegmentHeight +
+                ", roadWidth=" + _config.RoadSegmentWidth +
+                ", roadHeight=" + _config.RoadSegmentHeight +
+                ", waterLines=" + (_waterLines != null ? _waterLines.Count : 0) +
+                ", roadLines=" + (_roadLines != null ? _roadLines.Count : 0)
+            );
+        }
+
+        private static string GetCalibrationModeLabel(CalibrationMode mode)
+        {
+            switch (mode)
+            {
+                case CalibrationMode.Global:
+                    return "Global";
+                case CalibrationMode.Water:
+                    return "Eau";
+                case CalibrationMode.Roads:
+                    return "Routes";
+                case CalibrationMode.Render:
+                    return "Rendu";
+                default:
+                    return mode.ToString();
+            }
+        }
+
+        private void SaveAndBakeLiveCalibration()
+        {
+            if (_config == null)
+                return;
+
+            _config.WorldOriginX += _liveCalibrationOffset.x;
+            _config.WorldOriginZ += _liveCalibrationOffset.z;
+
+            _config.OverlayRotationDegrees += _liveCalibrationRotationDegrees;
+            _config.OverlayScaleX *= _liveCalibrationScaleX;
+            _config.OverlayScaleZ *= _liveCalibrationScaleZ;
+
+            _config.SaveCalibrationToConfig();
+
+            Log.Info(
+                "GroundOverlay calibration SAVED: " +
+                "worldOriginX=" + _config.WorldOriginX +
+                ", worldOriginZ=" + _config.WorldOriginZ +
+                ", overlayRotationDegrees=" + _config.OverlayRotationDegrees +
+                ", overlayScaleX=" + _config.OverlayScaleX +
+                ", overlayScaleZ=" + _config.OverlayScaleZ
+            );
+
+            _liveCalibrationOffset = Vector3.zero;
+            _liveCalibrationRotationDegrees = 0f;
+            _liveCalibrationScaleX = 1f;
+            _liveCalibrationScaleZ = 1f;
+
+            transform.position = Vector3.zero;
+            transform.rotation = Quaternion.identity;
+            transform.localScale = Vector3.one;
+
+            ClearOverlayChildren();
+
+            CreateOverlay();
+        }
+
+        private void ClearOverlayChildren()
+        {
+            var children = new List<GameObject>();
+
+            for (var i = 0; i < transform.childCount; i++)
+                children.Add(transform.GetChild(i).gameObject);
+
+            foreach (var child in children)
+                UnityEngine.Object.Destroy(child);
+
+            Log.Info("GroundOverlay calibration: cleared children=" + children.Count);
+        }
+
+        private bool CreateWaterDebugCube(
+            string name,
+            Vector3 a,
+            Vector3 b,
+            Material material
+        )
+        {
+            var mid = (a + b) * 0.5f;
+            var delta = b - a;
+
+            var sizeX = Mathf.Abs(delta.x) + _config.SegmentWidth;
+            var sizeZ = Mathf.Abs(delta.z) + _config.SegmentWidth;
+
+            sizeX = Mathf.Max(sizeX, _config.SegmentWidth);
+            sizeZ = Mathf.Max(sizeZ, _config.SegmentWidth);
+
+            var height = _config.SegmentHeight;
+
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(transform, true);
+
+            cube.transform.position = new Vector3(
+                mid.x,
+                mid.y + height * 0.5f,
+                mid.z
+            );
+
+            cube.transform.rotation = Quaternion.identity;
+            cube.transform.localScale = new Vector3(sizeX, height, sizeZ);
+
+            RemoveCollider(cube);
+            ApplyMaterial(cube, material);
+
+            if (_debugWaterSegmentLogs < 5)
+            {
+                _debugWaterSegmentLogs++;
+                Log.Info(
+                    "GroundOverlay: CREATED water debug cube " +
+                    name +
+                    " pos=" + cube.transform.position +
+                    " scale=" + cube.transform.localScale
+                );
+            }
+
+            return true;
+        }
+
+        private bool CreateOrientedRoadCube(
+            string name,
+            Vector3 a,
+            Vector3 b,
+            Material material,
+            float roadWidth,
+            float roadHeight
+        )
+        {
+            var mid = (a + b) * 0.5f;
+
+            var delta = b - a;
+            delta.y = 0f;
+
+            var length = delta.magnitude;
+
+            if (length < 0.1f)
+                return false;
+
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(transform, true);
+
+            cube.transform.position = new Vector3(
+                mid.x,
+                mid.y + roadHeight * 0.5f,
+                mid.z
+            );
+
+            cube.transform.rotation = Quaternion.LookRotation(delta.normalized, Vector3.up);
+
+            // Local X = largeur de route en mètres CS2
+            // Local Y = hauteur debug
+            // Local Z = longueur du segment
+            //
+            // On ajoute un léger recouvrement pour éviter les micro-coupures
+            // entre deux segments successifs.
+            cube.transform.localScale = new Vector3(
+                roadWidth,
+                roadHeight,
+                length + roadWidth * 0.35f
+            );
+
+            RemoveCollider(cube);
+            ApplyMaterial(cube, material);
+
+            if (_debugRoadSegmentLogs < 10)
+            {
+                _debugRoadSegmentLogs++;
+                Log.Info(
+                    "GroundOverlay: CREATED oriented road cube " +
+                    name +
+                    " pos=" + cube.transform.position +
+                    " scale=" + cube.transform.localScale +
+                    " length=" + length
+                );
+            }
+
+            return true;
+        }
+
+        private void CreateBeacon(string name, Vector3 basePosition, Material material)
+        {
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(transform, true);
+            cube.transform.position = basePosition + Vector3.up * (_config.BeaconHeight * 0.5f);
+            cube.transform.localScale = new Vector3(_config.BeaconWidth, _config.BeaconHeight, _config.BeaconWidth);
+
+            RemoveCollider(cube);
+            ApplyMaterial(cube, material);
+
+            Log.Info("GroundOverlay: beacon created: " + name + " at " + cube.transform.position);
+        }
+
+        private void CreateTower(string name, Vector3 basePosition, Material material)
+        {
+            var cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.name = name;
+            cube.transform.SetParent(transform, true);
+            cube.transform.position = basePosition + Vector3.up * (_config.TowerHeight * 0.5f);
+            cube.transform.localScale = new Vector3(_config.TowerWidth, _config.TowerHeight, _config.TowerWidth);
+
+            RemoveCollider(cube);
+            ApplyMaterial(cube, material);
+
+            Log.Info("GroundOverlay: tower created: " + name + " at " + cube.transform.position);
+        }
+
+        private static float ResolveY(Vector3 world)
+        {
+            float y;
+            if (TerrainHeightSampler.TrySampleHeight(new Vector3(world.x, 0f, world.z), out y))
+                return y;
+
+            return 0f;
+        }
+
+        private static void RemoveCollider(GameObject obj)
+        {
+            var collider = obj.GetComponent<Collider>();
+            if (collider != null)
+                UnityEngine.Object.Destroy(collider);
+        }
+
+        private static void ApplyMaterial(GameObject obj, Material material)
+        {
+            var renderer = obj.GetComponent<Renderer>();
+            if (renderer != null && material != null)
+                renderer.material = material;
+        }
+
+        private static Material CreateMaterial(Color color)
+        {
+            Shader shader = Shader.Find("HDRP/Unlit");
+
+            if (shader == null)
+                shader = Shader.Find("Unlit/Color");
+
+            if (shader == null)
+                shader = Shader.Find("Sprites/Default");
+
+            if (shader == null)
+                shader = Shader.Find("Standard");
+
+            if (shader == null)
+                return null;
+
+            var material = new Material(shader);
+            material.color = color;
+
+            if (material.HasProperty("_BaseColor"))
+                material.SetColor("_BaseColor", color);
+
+            if (material.HasProperty("_Color"))
+                material.SetColor("_Color", color);
+
+            return material;
+        }
+
+        private static GeoBounds CalculateBounds(List<List<GeoPoint>> lines)
+        {
+            var bounds = new GeoBounds();
+            var initialized = false;
+
+            if (lines != null)
+            {
+                foreach (var line in lines)
+                {
+                    if (line == null)
+                        continue;
+
+                    foreach (var point in line)
+                    {
+                        if (!initialized)
+                        {
+                            bounds.MinLon = point.Lon;
+                            bounds.MaxLon = point.Lon;
+                            bounds.MinLat = point.Lat;
+                            bounds.MaxLat = point.Lat;
+                            initialized = true;
+                        }
+                        else
+                        {
+                            if (point.Lon < bounds.MinLon) bounds.MinLon = point.Lon;
+                            if (point.Lon > bounds.MaxLon) bounds.MaxLon = point.Lon;
+                            if (point.Lat < bounds.MinLat) bounds.MinLat = point.Lat;
+                            if (point.Lat > bounds.MaxLat) bounds.MaxLat = point.Lat;
+                        }
+                    }
+                }
+            }
+
+            if (!initialized)
+            {
+                bounds.MinLon = 0.0;
+                bounds.MaxLon = 0.0;
+                bounds.MinLat = 0.0;
+                bounds.MaxLat = 0.0;
+                bounds.CenterLon = 0.0;
+                bounds.CenterLat = 0.0;
+                return bounds;
+            }
+
+            bounds.CenterLon = (bounds.MinLon + bounds.MaxLon) / 2.0;
+            bounds.CenterLat = (bounds.MinLat + bounds.MaxLat) / 2.0;
+
+            return bounds;
+        }
+
+        private sealed class GeoBounds
+        {
+            internal double MinLon;
+            internal double MaxLon;
+            internal double MinLat;
+            internal double MaxLat;
+            internal double CenterLon;
+            internal double CenterLat;
+        }
+    }
+}

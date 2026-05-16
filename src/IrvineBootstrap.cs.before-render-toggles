@@ -1,0 +1,160 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using CityTimelineMod.Config;
+using CityTimelineMod.Importers;
+using CityTimelineMod.Rendering;
+using CityTimelineMod.Util;
+
+namespace CityTimelineMod
+{
+    internal static class IrvineBootstrap
+    {
+        private static bool _ran = false;
+
+        internal static void RunOnce()
+        {
+            if (_ran)
+                return;
+
+            _ran = true;
+
+            try
+            {
+                var modDir = ResolveModDirectory();
+                var config = GeoOverlayConfig.Load(modDir);
+
+                var legacyFromMinneapolisRoot = Path.Combine(modDir, "data", "irvine-ca", "from-minneapolis");
+                var geojsonRoot = legacyFromMinneapolisRoot;
+
+                if (!string.IsNullOrWhiteSpace(config.PackPath))
+                {
+                    var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
+
+                    if (Directory.Exists(candidateGeojsonRoot))
+                    {
+                        geojsonRoot = candidateGeojsonRoot;
+                    }
+                    else
+                    {
+                        Log.Error("Bootstrap: packPath geojson folder not found, fallback to legacy. candidate=" + candidateGeojsonRoot);
+                    }
+                }
+
+                var lines = Path.Combine(geojsonRoot, "water_lines_clipped.geojson");
+                var areas = Path.Combine(geojsonRoot, "water_areas_clipped.geojson");
+                var roadsMajor = Path.Combine(geojsonRoot, "roads_major_clipped.geojson");
+
+                Log.Info("Bootstrap started.");
+                Log.Info("modDir=" + modDir);
+                Log.Info("packPath=" + (string.IsNullOrWhiteSpace(config.PackPath) ? "(empty)" : config.PackPath));
+                Log.Info("geojsonRoot=" + geojsonRoot);
+                Log.Info("lines=" + lines);
+                Log.Info("areas=" + areas);
+                Log.Info("roadsMajor=" + roadsMajor);
+
+                var lineStats = GeoJson.AnalyzeLines(lines);
+                var lineGeometries = GeoJson.LoadLineGeometries(lines);
+                var areaCount = GeoJson.CountFeatures(areas);
+                var areaOutlines = GeoJson.LoadPolygonOutlines(areas);
+
+                var roadMajorGeometries = GeoJson.LoadLineGeometries(roadsMajor);
+
+                Log.Info(
+                    "Loaded OK. Water line features: " + lineStats.FeatureCount +
+                    ", line geometries: " + lineStats.LineGeometryCount +
+                    ", points: " + lineStats.PointCount +
+                    ", unsupported geometries: " + lineStats.UnsupportedGeometryCount +
+                    ", water areas: " + areaCount
+                );
+
+                if (lineStats.FirstPoint != null)
+                    Log.Info("First line point: lon=" + lineStats.FirstPoint.Lon + ", lat=" + lineStats.FirstPoint.Lat);
+
+                if (lineStats.LastPoint != null)
+                    Log.Info("Last line point: lon=" + lineStats.LastPoint.Lon + ", lat=" + lineStats.LastPoint.Lat);
+
+                Log.Info("Loaded area outlines: " + areaOutlines.Count);
+                Log.Info("Loaded major roads geometries: " + roadMajorGeometries.Count);
+
+                var renderGeometries = new List<List<GeoPoint>>();
+                renderGeometries.AddRange(lineGeometries);
+                renderGeometries.AddRange(areaOutlines);
+
+                // Étape 5 volontaire :
+                // On charge les routes et on les logge,
+                // mais on ne les ajoute pas encore au rendu.
+                // renderGeometries.AddRange(roadMajorGeometries);
+
+                Log.Info("Total render geometries: " + renderGeometries.Count);
+
+                GeoDebugOverlay.Install(renderGeometries, roadMajorGeometries, config);
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex.ToString());
+            }
+        }
+
+        private static string ResolveModDirectory()
+        {
+            try
+            {
+                var location = typeof(Mod).Assembly.Location;
+
+                if (!string.IsNullOrWhiteSpace(location) && File.Exists(location))
+                {
+                    var dir = Path.GetDirectoryName(location);
+
+                    if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                        return dir;
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                var codeBase = typeof(Mod).Assembly.CodeBase;
+
+                if (!string.IsNullOrWhiteSpace(codeBase))
+                {
+                    var uri = new Uri(codeBase);
+                    var localPath = uri.LocalPath;
+
+                    if (!string.IsNullOrWhiteSpace(localPath) && File.Exists(localPath))
+                    {
+                        var dir = Path.GetDirectoryName(localPath);
+
+                        if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir))
+                            return dir;
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+            var fallback = Path.GetFullPath(
+                Path.Combine(
+                    localAppData,
+                    "..",
+                    "LocalLow",
+                    "Colossal Order",
+                    "Cities Skylines II",
+                    "Mods",
+                    "CityTimelineMod"
+                )
+            );
+
+            if (!Directory.Exists(fallback))
+                throw new DirectoryNotFoundException("Could not resolve mod directory. Fallback does not exist: " + fallback);
+
+            return fallback;
+        }
+    }
+}
+

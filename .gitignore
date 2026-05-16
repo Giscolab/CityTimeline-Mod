@@ -1,0 +1,24 @@
+# Ignore build outputs
+bin/
+obj/
+*.user
+*.suo
+
+# Rider / VSCode / Visual Studio junk
+.idea/
+.vscode/
+*.csproj.user
+
+# Logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Unity / CS2 toolchain transient process id
+Library/ilpp.pid
+
+# Local Git surgery backups
+.git-backups/
+*.bundle
