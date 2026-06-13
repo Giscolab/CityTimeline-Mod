@@ -1,0 +1,227 @@
+import React, { ReactNode, useState } from "react";
+
+type ButtonVariant = "default" | "primary" | "danger" | "diag";
+
+function cx(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(" ");
+}
+
+export function Section(props: {
+  num: string;
+  title: string;
+  state?: string;
+  note?: string;
+  noteTone?: "default" | "bug";
+  children: ReactNode;
+}) {
+  return (
+    <section className="card section_sop">
+      <header className="ctm-section-header header_l0j first_l25">
+        <div className="ctm-section-header-inner header_hMN">
+          <span className="num">{props.num}</span>
+          <div className="ctm-section-title title_mu8">{props.title}</div>
+          {props.state ? <span className="state always">{props.state}</span> : null}
+        </div>
+      </header>
+      {props.note ? <div className={cx("note", props.noteTone === "bug" && "bug")}>{props.note}</div> : null}
+      <div className="items">{props.children}</div>
+    </section>
+  );
+}
+
+export function Foldout(props: {
+  num: string;
+  title: string;
+  state?: string;
+  note?: string;
+  noteTone?: "default" | "bug";
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <details className="card foldout section_sop" open={props.defaultOpen}>
+      <summary className="ctm-section-header header_l0j first_l25">
+        <div className="ctm-section-header-inner header_hMN">
+          <span className="ctm-foldout-arrow" aria-hidden="true" />
+          <span className="num">{props.num}</span>
+          <div className="ctm-section-title title_mu8">{props.title}</div>
+          {props.state ? <span className="state">{props.state}</span> : null}
+        </div>
+      </summary>
+      {props.note ? <div className={cx("note", props.noteTone === "bug" && "bug")}>{props.note}</div> : null}
+      <div className="items">{props.children}</div>
+    </details>
+  );
+}
+
+export function GroupTitle({ children }: { children: ReactNode }) {
+  return <div className="group-title">{children}</div>;
+}
+
+export function Readout({ children }: { children: ReactNode }) {
+  return (
+    <div className="readout field_amr field_cjf">
+      <div className="label_VSW label_T__">{children}</div>
+    </div>
+  );
+}
+
+export function Row(props: { columns?: 2 | 3; children: ReactNode }) {
+  return <div className={cx("row", props.columns === 2 && "cols-2", props.columns === 3 && "cols-3")}>{props.children}</div>;
+}
+
+export function HudButton(props: {
+  children: ReactNode;
+  variant?: ButtonVariant;
+  disabled?: boolean;
+  centered?: boolean;
+  onClick?: () => void;
+}) {
+  const disabled = Boolean(props.disabled);
+  return (
+    <button
+      type="button"
+      className={cx("btn button_WWa", props.variant, props.centered && "is-centered", disabled && "is-disabled")}
+      disabled={disabled}
+      aria-disabled={disabled}
+      onClick={disabled ? undefined : props.onClick}
+    >
+      {props.children}
+    </button>
+  );
+}
+
+export function ToggleField(props: {
+  id: string;
+  children: ReactNode;
+  defaultChecked?: boolean;
+  disabled?: boolean;
+  type?: "checkbox" | "radio";
+  name?: string;
+  onChange?: (checked: boolean) => void;
+}) {
+  const [checked, setChecked] = useState(Boolean(props.defaultChecked));
+  const disabled = Boolean(props.disabled);
+  return (
+    <label
+      htmlFor={props.id}
+      className={cx("toggle field_amr field_cjf toggle-item_uwk", checked ? "checked" : "unchecked", disabled && "is-disabled")}
+    >
+      <input
+        id={props.id}
+        className="ctm-native-input"
+        type={props.type || "checkbox"}
+        name={props.name}
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => {
+          setChecked(event.currentTarget.checked);
+          props.onChange?.(event.currentTarget.checked);
+        }}
+      />
+      <span className="toggle-label label_VSW label_T__">{props.children}</span>
+      <span className={cx("toggle_cca toggle_ATa item-mouse-states_Fmi", checked ? "checked" : "unchecked")} aria-hidden="true">
+        <span className={cx("checkmark_NXV", checked ? "checked" : "unchecked")} />
+      </span>
+    </label>
+  );
+}
+
+export function SliderField(props: {
+  label: string;
+  min: number;
+  max: number;
+  defaultValue: number;
+  disabled?: boolean;
+  suffix?: string;
+}) {
+  const [value, setValue] = useState(props.defaultValue);
+  return (
+    <div className={cx("field field_amr field_cjf slider", props.disabled && "is-disabled")}>
+      <div className="field-label label_VSW label_T__">
+        {props.label} <span className="field-value">· {value}{props.suffix || ""}</span>
+      </div>
+      <div className="field-control">
+        <input
+          type="range"
+          min={props.min}
+          max={props.max}
+          value={value}
+          disabled={props.disabled}
+          onChange={(event) => setValue(Number(event.currentTarget.value))}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function SelectField(props: {
+  label: string;
+  value: string;
+  options: Array<string | { value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="field field_amr field_cjf selector">
+      <div className="field-label label_VSW label_T__">{props.label}</div>
+      <div className="field-control">
+        <select value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)}>
+          {props.options.map((option) => {
+            const value = typeof option === "string" ? option : option.value;
+            const label = typeof option === "string" ? option : option.label;
+
+            return (
+            <option key={value} value={value}>
+              {label}
+            </option>
+            );
+          })}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+export function TextField(props: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  readOnly?: boolean;
+  onChange?: (value: string) => void;
+}) {
+  return (
+    <div className="field field_amr field_cjf">
+      <div className="field-label label_VSW label_T__">{props.label}</div>
+      <div className="field-control">
+        <input
+          type="text"
+          value={props.value}
+          placeholder={props.placeholder}
+          readOnly={props.readOnly}
+          onChange={(event) => props.onChange?.(event.currentTarget.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
+export function NumberField(props: {
+  label: string;
+  value: number;
+  min?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <div className="field field_amr field_cjf">
+      <div className="field-label label_VSW label_T__">{props.label}</div>
+      <div className="field-control">
+        <input
+          type="number"
+          min={props.min}
+          value={props.value}
+          onChange={(event) => props.onChange(Number(event.currentTarget.value))}
+        />
+      </div>
+    </div>
+  );
+}

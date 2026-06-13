@@ -1,0 +1,245 @@
+using System.Collections.Generic;
+using CityTimelineMod.Rendering.Batching;
+using UnityEngine;
+
+namespace CityTimelineMod.Rendering.Roads
+{
+    internal static class RoadGeometryBuilder
+    {
+        internal static bool AppendRoadSegmentRibbon(
+            RoadMeshBatch batch,
+            Vector3 a,
+            Vector3 b,
+            float roadWidth,
+            float ribbonYOffset
+        )
+        {
+            if (batch == null)
+                return false;
+
+            var dx = b.x - a.x;
+            var dz = b.z - a.z;
+            var lengthSq = dx * dx + dz * dz;
+
+            if (lengthSq < 0.01f)
+                return false;
+
+            var length = Mathf.Sqrt(lengthSq);
+            var ux = dx / length;
+            var uz = dz / length;
+            var width = Mathf.Max(0.1f, roadWidth);
+
+            a.y += ribbonYOffset;
+            b.y += ribbonYOffset;
+
+            var px = -uz * width * 0.5f;
+            var pz = ux * width * 0.5f;
+            var baseIndex = batch.Vertices.Count;
+
+            var aLeft = new Vector3(a.x + px, a.y, a.z + pz);
+            var aRight = new Vector3(a.x - px, a.y, a.z - pz);
+            var bLeft = new Vector3(b.x + px, b.y, b.z + pz);
+            var bRight = new Vector3(b.x - px, b.y, b.z - pz);
+
+            batch.Vertices.Add(aLeft);
+            batch.Vertices.Add(aRight);
+            batch.Vertices.Add(bLeft);
+            batch.Vertices.Add(bRight);
+
+            batch.Triangles.Add(baseIndex + 0);
+            batch.Triangles.Add(baseIndex + 2);
+            batch.Triangles.Add(baseIndex + 3);
+            batch.Triangles.Add(baseIndex + 0);
+            batch.Triangles.Add(baseIndex + 3);
+            batch.Triangles.Add(baseIndex + 1);
+
+            batch.SegmentCount++;
+            return true;
+        }
+
+        internal static int AppendRoadPolylineRibbon(
+            RoadMeshBatch batch,
+            IList<Vector3> points,
+            float roadWidth,
+            float ribbonYOffset
+        )
+        {
+            if (batch == null || points == null || points.Count < 2)
+                return 0;
+
+            var cleaned = new List<Vector3>(points.Count);
+
+            for (var i = 0; i < points.Count; i++)
+            {
+                var p = points[i];
+                p.y += ribbonYOffset;
+
+                if (cleaned.Count == 0 || HasMeaningfulHorizontalDistance(cleaned[cleaned.Count - 1], p))
+                    cleaned.Add(p);
+            }
+
+            if (cleaned.Count < 2)
+                return 0;
+
+            var segmentNormals = new List<Vector2>(cleaned.Count - 1);
+
+            for (var i = 0; i < cleaned.Count - 1; i++)
+            {
+                var a = cleaned[i];
+                var b = cleaned[i + 1];
+                var dx = b.x - a.x;
+                var dz = b.z - a.z;
+                var lengthSq = dx * dx + dz * dz;
+
+                if (lengthSq < 0.01f)
+                {
+                    segmentNormals.Add(Vector2.zero);
+                    continue;
+                }
+
+                var length = Mathf.Sqrt(lengthSq);
+                var ux = dx / length;
+                var uz = dz / length;
+
+                segmentNormals.Add(new Vector2(-uz, ux));
+            }
+
+            var halfWidth = Mathf.Max(0.1f, roadWidth) * 0.5f;
+            var baseIndex = batch.Vertices.Count;
+
+            for (var i = 0; i < cleaned.Count; i++)
+            {
+                var offset = ResolvePolylineOffset(segmentNormals, i, halfWidth);
+                var p = cleaned[i];
+
+                batch.Vertices.Add(new Vector3(p.x + offset.x, p.y, p.z + offset.y));
+                batch.Vertices.Add(new Vector3(p.x - offset.x, p.y, p.z - offset.y));
+            }
+
+            var appendedSegments = 0;
+
+            for (var i = 0; i < cleaned.Count - 1; i++)
+            {
+                var segmentNormal = segmentNormals[i];
+
+                if (segmentNormal.sqrMagnitude < 0.0001f)
+                    continue;
+
+                var leftA = baseIndex + i * 2;
+                var rightA = leftA + 1;
+                var leftB = baseIndex + (i + 1) * 2;
+                var rightB = leftB + 1;
+
+                batch.Triangles.Add(leftA);
+                batch.Triangles.Add(leftB);
+                batch.Triangles.Add(rightB);
+
+                batch.Triangles.Add(leftA);
+                batch.Triangles.Add(rightB);
+                batch.Triangles.Add(rightA);
+
+                appendedSegments++;
+            }
+
+            batch.SegmentCount += appendedSegments;
+            return appendedSegments;
+        }
+
+        private static Vector2 ResolvePolylineOffset(IList<Vector2> segmentNormals, int pointIndex, float halfWidth)
+        {
+            if (segmentNormals == null || segmentNormals.Count == 0)
+                return new Vector2(halfWidth, 0f);
+
+            if (pointIndex <= 0)
+                return SafeScaledNormal(segmentNormals[0], halfWidth);
+
+            if (pointIndex >= segmentNormals.Count)
+                return SafeScaledNormal(segmentNormals[segmentNormals.Count - 1], halfWidth);
+
+            var previous = segmentNormals[pointIndex - 1];
+            var next = segmentNormals[pointIndex];
+
+            if (previous.sqrMagnitude < 0.0001f)
+                return SafeScaledNormal(next, halfWidth);
+
+            if (next.sqrMagnitude < 0.0001f)
+                return SafeScaledNormal(previous, halfWidth);
+
+            var miter = previous + next;
+
+            if (miter.sqrMagnitude < 0.0001f)
+                return SafeScaledNormal(next, halfWidth);
+
+            miter.Normalize();
+
+            var denominator = Mathf.Abs(Vector2.Dot(miter, next));
+
+            if (denominator < 0.2f)
+                return SafeScaledNormal(next, halfWidth);
+
+            var miterLength = halfWidth / denominator;
+            var maxMiterLength = halfWidth * 2.5f;
+
+            if (miterLength > maxMiterLength)
+                miterLength = maxMiterLength;
+
+            return miter * miterLength;
+        }
+
+        private static Vector2 SafeScaledNormal(Vector2 normal, float halfWidth)
+        {
+            if (normal.sqrMagnitude < 0.0001f)
+                return new Vector2(halfWidth, 0f);
+
+            normal.Normalize();
+            return normal * halfWidth;
+        }
+
+        private static bool HasMeaningfulHorizontalDistance(Vector3 a, Vector3 b)
+        {
+            var dx = b.x - a.x;
+            var dz = b.z - a.z;
+            return dx * dx + dz * dz >= 0.01f;
+        }
+
+        internal static bool AppendRoadArrow(RoadArrowBatch batch, Vector3 center, Vector3 a, Vector3 b, float size)
+        {
+            if (batch == null)
+                return false;
+
+            var dx = b.x - a.x;
+            var dz = b.z - a.z;
+            var lengthSq = dx * dx + dz * dz;
+
+            if (lengthSq < 0.01f)
+                return false;
+
+            var length = Mathf.Sqrt(lengthSq);
+            var ux = dx / length;
+            var uz = dz / length;
+            var safeSize = Mathf.Max(0.1f, size);
+            var halfWidth = safeSize * 0.35f;
+            var halfLength = safeSize * 0.5f;
+            var px = -uz * halfWidth;
+            var pz = ux * halfWidth;
+
+            var tip = new Vector3(center.x + ux * halfLength, center.y, center.z + uz * halfLength);
+            var tailCenter = new Vector3(center.x - ux * halfLength, center.y, center.z - uz * halfLength);
+            var left = new Vector3(tailCenter.x + px, center.y, tailCenter.z + pz);
+            var right = new Vector3(tailCenter.x - px, center.y, tailCenter.z - pz);
+
+            var baseIndex = batch.Vertices.Count;
+            batch.Vertices.Add(tip);
+            batch.Vertices.Add(left);
+            batch.Vertices.Add(right);
+            batch.Triangles.Add(baseIndex);
+            batch.Triangles.Add(baseIndex + 1);
+            batch.Triangles.Add(baseIndex + 2);
+            batch.Triangles.Add(baseIndex);
+            batch.Triangles.Add(baseIndex + 2);
+            batch.Triangles.Add(baseIndex + 1);
+            batch.ArrowCount++;
+            return true;
+        }
+    }
+}

@@ -1,0 +1,95 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Configurations>Debug;Release</Configurations>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
+    <Nullable>disable</Nullable>
+    <RepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..'))</RepositoryRoot>
+    <ResourcesRoot>$(RepositoryRoot)\resources</ResourcesRoot>
+    <PackagingRoot>$(RepositoryRoot)\packaging</PackagingRoot>
+    <UiOutputRoot>$(RepositoryRoot)\src\CityTimelineMod.UI\dist</UiOutputRoot>
+    <GameManagedRoot>C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II\Cities2_Data\Managed</GameManagedRoot>
+  </PropertyGroup>
+
+  <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
+  <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+
+  <ItemGroup>
+    <Reference Include="Game"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Core"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Logging"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Localization"><Private>false</Private></Reference>
+    <Reference Include="Colossal.IO.AssetDatabase"><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.InputLegacyModule"><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameManagedRoot)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameManagedRoot)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(GameManagedRoot)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Unity.Burst"><Private>false</Private></Reference>
+    <Reference Include="Unity.Collections"><Private>false</Private></Reference>
+    <Reference Include="Unity.Entities"><Private>false</Private></Reference>
+    <Reference Include="Unity.Mathematics"><Private>false</Private></Reference>
+    <Reference Include="Colossal.Mathematics"><HintPath>$(GameManagedRoot)\Colossal.Mathematics.dll</HintPath><Private>false</Private></Reference>
+    <Reference Update="System"><Private>false</Private></Reference>
+    <Reference Update="System.Core"><Private>false</Private></Reference>
+    <Reference Update="System.Data"><Private>false</Private></Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3">
+      <ExcludeAssets>runtime;native;contentfiles;analyzers;buildtransitive</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Lib.Harmony" Version="2.2.2" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(ModPropsFile)" Link="Properties\Mod.props" />
+    <None Include="$(ModTargetsFile)" Link="Properties\Mod.targets" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="$(ResourcesRoot)\defaults\config.json" Link="Resources\config.json" />
+    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\water_lines_clipped.geojson" Link="Resources\legacy-geojson\water_lines_clipped.geojson" />
+    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\water_areas_clipped.geojson" Link="Resources\legacy-geojson\water_areas_clipped.geojson" />
+    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\roads_major_clipped.geojson" Link="Resources\legacy-geojson\roads_major_clipped.geojson" />
+    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\zoning_polygons.geojson" Link="Resources\legacy-geojson\zoning_polygons.geojson" />
+    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\bbox_manifest.json" Link="Resources\legacy-geojson\bbox_manifest.json" />
+  </ItemGroup>
+
+  <Target Name="CityTimelineDeployContent" AfterTargets="DeployWIP">
+    <ItemGroup>
+      <CityTimelineRootFiles Include="$(PackagingRoot)\mod.json" />
+      <CityTimelineRootFiles Include="$(ResourcesRoot)\defaults\config.json" />
+      <CityTimelineDataFiles Include="$(ResourcesRoot)\legacy-geojson\**\*.*" />
+      <CityTimelineUiRootFiles Include="$(UiOutputRoot)\CityTimelineMod.mjs" Condition="Exists('$(UiOutputRoot)\CityTimelineMod.mjs')" />
+      <CityTimelineUiRootFiles Include="$(UiOutputRoot)\CityTimelineMod.css" Condition="Exists('$(UiOutputRoot)\CityTimelineMod.css')" />
+      <CityTimelineUiFontFiles Include="$(UiOutputRoot)\fonts\**\*.*" Condition="Exists('$(UiOutputRoot)\fonts')" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(CityTimelineRootFiles)"
+          DestinationFiles="@(CityTimelineRootFiles->'$(DeployDir)\%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(CityTimelineDataFiles)"
+          DestinationFiles="@(CityTimelineDataFiles->'$(DeployDir)\data\legacy-geojson\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(CityTimelineUiRootFiles)"
+          DestinationFiles="@(CityTimelineUiRootFiles->'$(DeployDir)\%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+
+    <Copy SourceFiles="@(CityTimelineUiFontFiles)"
+          DestinationFiles="@(CityTimelineUiFontFiles->'$(DeployDir)\fonts\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyHarmonyToOutput" AfterTargets="Build">
+    <ItemGroup>
+      <HarmonyRuntime Include="$(PkgLib_Harmony)\lib\net472\0Harmony.dll" Condition="Exists('$(PkgLib_Harmony)\lib\net472\0Harmony.dll')" />
+      <HarmonyRuntime Include="$(PkgLib_Harmony)\lib\net48\0Harmony.dll" Condition="Exists('$(PkgLib_Harmony)\lib\net48\0Harmony.dll')" />
+      <HarmonyRuntime Include="$(PkgLib_Harmony)\lib\netstandard2.0\0Harmony.dll" Condition="Exists('$(PkgLib_Harmony)\lib\netstandard2.0\0Harmony.dll')" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HarmonyRuntime)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>
