@@ -161,22 +161,64 @@ export function SelectField(props: {
   options: Array<string | { value: string; label: string }>;
   onChange: (value: string) => void;
 }) {
+  // CoHTML does not expose the native HTMLSelectElement.options collection
+  // expected by ReactDOM. A native <select>/<option> therefore crashes the
+  // game UI renderer. Keep this control entirely button-based.
+  const options = props.options.map((option) =>
+    typeof option === "string"
+      ? { value: option, label: option }
+      : option,
+  );
+
+  const currentIndex = Math.max(
+    0,
+    options.findIndex((option) => option.value === props.value),
+  );
+  const current = options[currentIndex];
+  const disabled = options.length === 0;
+
+  const selectOffset = (offset: number) => {
+    if (disabled) return;
+
+    const nextIndex =
+      (currentIndex + offset + options.length) % options.length;
+
+    props.onChange(options[nextIndex].value);
+  };
+
   return (
     <div className="field field_amr field_cjf selector">
       <div className="field-label label_VSW label_T__">{props.label}</div>
-      <div className="field-control">
-        <select value={props.value} onChange={(event) => props.onChange(event.currentTarget.value)}>
-          {props.options.map((option) => {
-            const value = typeof option === "string" ? option : option.value;
-            const label = typeof option === "string" ? option : option.label;
+      <div className="field-control ctm-choice-control">
+        <button
+          type="button"
+          className="ctm-choice-step button_WWa"
+          aria-label={`${props.label} : choix précédent`}
+          disabled={disabled}
+          onClick={() => selectOffset(-1)}
+        >
+          ‹
+        </button>
 
-            return (
-            <option key={value} value={value}>
-              {label}
-            </option>
-            );
-          })}
-        </select>
+        <button
+          type="button"
+          className="ctm-choice-value button_WWa"
+          aria-label={`${props.label} : choix suivant`}
+          disabled={disabled}
+          onClick={() => selectOffset(1)}
+        >
+          {current ? current.label : props.value || "—"}
+        </button>
+
+        <button
+          type="button"
+          className="ctm-choice-step button_WWa"
+          aria-label={`${props.label} : choix suivant`}
+          disabled={disabled}
+          onClick={() => selectOffset(1)}
+        >
+          ›
+        </button>
       </div>
     </div>
   );

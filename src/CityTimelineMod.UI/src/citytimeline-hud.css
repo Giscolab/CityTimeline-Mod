@@ -404,9 +404,7 @@
 }
 
 .field-control input,
-.field-control select,
-.road-toolbar input,
-.road-toolbar select {
+.road-toolbar input {
   width: 100%;
   height: 32rem;
   background-color: #101723;
@@ -418,6 +416,58 @@
   padding: 6rem 8rem;
   font-family: inherit;
   font-size: 13rem;
+}
+
+
+.ctm-choice-control {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 32rem;
+}
+
+.ctm-choice-control button {
+  height: 32rem;
+  border-width: 1rem;
+  border-style: solid;
+  border-color: var(--hud-line);
+  background-color: #101723;
+  color: var(--hud-text);
+  font-family: inherit;
+  font-size: 13rem;
+}
+
+.ctm-choice-step {
+  width: 34rem;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--hud-accent);
+  font-size: 18rem;
+  font-weight: 700;
+}
+
+.ctm-choice-step:first-child {
+  border-radius: 5rem 0 0 5rem;
+}
+
+.ctm-choice-step:last-child {
+  border-radius: 0 5rem 5rem 0;
+}
+
+.ctm-choice-value {
+  min-width: 0;
+  flex: 1 1 auto;
+  border-left-width: 0 !important;
+  border-right-width: 0 !important;
+  border-radius: 0;
+  padding: 5rem 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctm-choice-control button:disabled {
+  opacity: 0.45;
 }
 
 .selector {
