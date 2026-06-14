@@ -43,6 +43,11 @@ namespace CityTimelineMod.Options
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ModEnabled)), "Activer CityTimelineMod" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ModEnabled)), "Active ou désactive le comportement principal du mod." },
 
+                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
+                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Raccourci du panneau React/CoHTML. Valeur par défaut : Alt+Z. Le HUD IMGUI Alt+H reste indépendant." },
+                { _settings.GetBindingKeyLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
+                { _settings.GetBindingKeyHintLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
+
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Afficher le HUD debug" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Affiche ou masque le HUD IMGUI. Raccourci : Alt+H. Le mini CTM Alt+T reste géré par le runtime." },
 

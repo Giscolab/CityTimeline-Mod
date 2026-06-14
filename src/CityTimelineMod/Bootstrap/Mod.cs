@@ -8,18 +8,25 @@ using CityTimelineMod.Options;
 using Colossal.Localization;
 using CityTimelineMod.LargeMap;
 using CityTimelineMod.PlayableWorld;
+using CityTimelineMod.Systems;
 
 namespace CityTimelineMod
 {
     public sealed class Mod : IMod
     {
         private CityTimelineSettings _settings;
+
+        internal static CityTimelineSettings Settings { get; private set; }
+
         public static ILog Log = LogManager.GetLogger(nameof(CityTimelineMod)).SetShowsErrorsInUI(true);
 
         public void OnLoad(UpdateSystem updateSystem)
         {
             _settings = new CityTimelineSettings(this);
+            Settings = _settings;
+
             _settings.RegisterInOptionsUI();
+            _settings.RegisterKeyBindings();
             GameManager.instance.localizationManager.AddSource("fr-FR", new CityTimelineSettingsLocale(_settings));
             GameManager.instance.localizationManager.AddSource("en-US", new CityTimelineSettingsLocale(_settings));
             _settings.SetDefaults();
@@ -53,7 +60,8 @@ namespace CityTimelineMod
                 updateSystem.UpdateAt<CityTimelineMod.Roads.RuntimeRoadToolSystem>(SystemUpdatePhase.ToolUpdate);
                 updateSystem.UpdateAt<CityTimelineMod.Systems.RuntimeRoadToolDriverSystem>(SystemUpdatePhase.ToolUpdate);
                 updateSystem.UpdateAt<CityTimelineMod.Roads.VanillaNetCourseProbeSystem>(SystemUpdatePhase.ToolUpdate);
-                Log.Info("[CityTimelineMod] RuntimeRoadToolSystem registered.");
+                updateSystem.UpdateAt<CityTimelineMod.UI.CityTimelineUISystem>(SystemUpdatePhase.UIUpdate);
+                Log.Info("[CityTimelineMod] Runtime road and CoHTML UI systems registered.");
 
                 foreach (SystemUpdatePhase phase in Enum.GetValues(typeof(SystemUpdatePhase)))
                 {
@@ -85,6 +93,7 @@ namespace CityTimelineMod
         {
             _settings?.UnregisterInOptionsUI();
             _settings = null;
+            Settings = null;
             try { PlayableWorldPatcher.Uninstall(); }
             catch (Exception ex)
             {
@@ -112,5 +121,7 @@ namespace CityTimelineMod
         }
     }
 }
+
+
 
 

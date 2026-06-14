@@ -63,27 +63,19 @@ function Remove-PathIfExists {
 
     if (Test-Path -LiteralPath $Path) {
         Remove-Item -LiteralPath $Path -Recurse -Force
-        Write-Host "Removed obsolete path: $Path"
     }
 }
 
-Write-Host "Repo:    $repoRoot"
-Write-Host "AppData: $dst"
-Write-Host "Runtime config source of truth: $appConfig"
-
-$deployTemp = Join-Path $repoRoot ".tmp\deploy-temp"
-New-Item -ItemType Directory -Force -Path $deployTemp | Out-Null
-$env:TEMP = $deployTemp
-$env:TMP = $deployTemp
-
 # 1) Build DLL.
-dotnet clean $csproj
+$dotnetOutput = dotnet clean $csproj --nologo -v:q 2>&1
 if ($LASTEXITCODE -ne 0) {
+    $dotnetOutput | Out-Host
     throw "dotnet clean failed"
 }
 
-dotnet build $csproj -c Debug
+$dotnetOutput = dotnet build $csproj -c Debug --nologo -v:q 2>&1
 if ($LASTEXITCODE -ne 0) {
+    $dotnetOutput | Out-Host
     throw "dotnet build failed"
 }
 
@@ -91,6 +83,7 @@ if (!(Test-Path $dll)) {
     throw "Build succeeded but DLL was not found: $dll"
 }
 
+[Console]::WriteLine("C# OK")
 # 2) Build frontend. Webpack cleans the generated UI folder before emitting files.
 if (!(Test-Path $uiSrc)) {
     throw "UI source directory missing: $uiSrc"
@@ -98,10 +91,14 @@ if (!(Test-Path $uiSrc)) {
 
 Push-Location $uiSrc
 try {
-    npm run build
+    $webpackOutput = npm run build 2>&1
+
     if ($LASTEXITCODE -ne 0) {
+        $webpackOutput | Out-Host
         throw "npm run build failed"
     }
+
+    [Console]::WriteLine("React OK")
 }
 finally {
     Pop-Location
@@ -143,17 +140,14 @@ foreach ($obsoleteRootFile in $obsoleteRootFiles) {
 
     if (Test-Path -LiteralPath $path) {
         Remove-Item -LiteralPath $path -Force
-        Write-Host "Removed obsolete UI file: $path"
     }
 }
 
 # 5) Deploy DLL and Harmony.
 Copy-Item -Force $dll (Join-Path $dst "CityTimelineMod.dll")
-Write-Host "Copied DLL."
 
 if (Test-Path $harmonyDll) {
     Copy-Item -Force $harmonyDll (Join-Path $dst "0Harmony.dll")
-    Write-Host "Copied 0Harmony.dll."
 }
 else {
     Write-Warning "0Harmony.dll not found in build output. CityTimelineMod may fail to load."
@@ -173,10 +167,8 @@ if (Test-Path $srcData) {
     }
 
     $global:LASTEXITCODE = 0
-    Write-Host "Mirrored data files."
 }
 else {
-    Write-Host "No legacy GeoJSON resource directory found. Existing runtime data left untouched."
 }
 
 # 7) Deploy the single CS2 UI module to the code mod root.
@@ -186,19 +178,14 @@ Copy-Item -Force (Join-Path $uiOut "CityTimelineMod.css") (Join-Path $dst "CityT
 $dstFonts = Join-Path $dst "fonts"
 New-Item -ItemType Directory -Force -Path $dstFonts | Out-Null
 Copy-Item -Force (Join-Path $uiOut "fonts\overpass.ttf") (Join-Path $dstFonts "overpass.ttf")
-Write-Host "Copied CS2 UI module files."
 
 # 8) Config policy.
 # AppData config.json is authoritative at runtime.
 # The repository default is a read-only initialization template.
 if (Test-Path $appConfig) {
-    Write-Host "Kept existing AppData runtime config."
 }
 elseif (Test-Path $repoConfig) {
     Copy-Item -Force $repoConfig $appConfig
-    Write-Host "AppData config was missing. Initialized from repository default:"
-    Write-Host "  $repoConfig"
-    Write-Host "  -> $appConfig"
 }
 else {
     throw "No config.json found in AppData or repository defaults. Cannot deploy safely."
@@ -210,7 +197,6 @@ if (!(Test-Path -LiteralPath $repoManifest)) {
 }
 
 Copy-Item -Force $repoManifest (Join-Path $dst "mod.json")
-Write-Host "Copied code mod.json from packaging."
 
 # 10) Validate deployed runtime payload.
 $requiredFiles = @(
@@ -251,20 +237,9 @@ foreach ($forbiddenPath in $forbiddenPaths) {
     }
 }
 
-Write-Host "Deployment validation OK."
-
 # 11) Clean temp files only.
 Get-ChildItem $dst -Filter "ilpp.pid" -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
-Write-Host ""
-Write-Host "Deployed to: $dst"
-Write-Host ""
-Write-Host "Config status:"
-Get-Item $appConfig, $repoConfig |
-    Select-Object FullName, Length, LastWriteTime
+[Console]::WriteLine("Deploy OK: $dst")
 
-Write-Host ""
-Write-Host "Runtime UI files:"
-Get-Item (Join-Path $dst "CityTimelineMod.mjs"), (Join-Path $dst "CityTimelineMod.css"), (Join-Path $dst "fonts\overpass.ttf") |
-    Select-Object FullName, Length, LastWriteTime

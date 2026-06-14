@@ -4,6 +4,7 @@ using System.Text;
 using CityTimelineMod.Roads;
 using CityTimelineMod.Rendering;
 using Colossal.IO.AssetDatabase;
+using Game.Input;
 using Game.Modding;
 using Game.Settings;
 using Newtonsoft.Json;
@@ -122,6 +123,14 @@ namespace CityTimelineMod.Options
         {
             LoadFromRuntimeConfig();
         }
+
+        [SettingsUIKeyboardBinding(
+            BindingKeyboard.Z,
+            nameof(KeyBindingToggleCohtmlHud),
+            alt: true
+        )]
+        [SettingsUISection(SectionGeneral, GroupMain)]
+        public ProxyBinding KeyBindingToggleCohtmlHud { get; set; }
 
         [SettingsUISection(SectionGeneral, GroupMain)]
         public bool ModEnabled

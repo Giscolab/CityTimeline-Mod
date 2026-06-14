@@ -7,7 +7,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "build": "webpack --config webpack.config.js"
+    "build": "webpack --config webpack.config.js --mode production",
+    "dev": "webpack --config webpack.config.js --mode development --watch"
   },
   "dependencies": {
     "classnames": "^2.3.2",
