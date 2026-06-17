@@ -23,6 +23,8 @@ namespace CityTimelineMod.Roads
         private const int MinCommittedEdgeStableFrames = 2;
         private const int DefaultRequestsPerFinalizeBatch = 256;
         private const int Earth2CitiesEmitPerFrame = 5000;
+        private const int ConfirmedFastFlushCommitMultiplier = 4;
+        private const int ConfirmedFastFlushMaxCommitRequests = 2048;
 
         private ToolOutputBarrier _toolOutputBarrier;
         private EntityQuery _tempQuery;
@@ -77,14 +79,43 @@ namespace CityTimelineMod.Roads
         private int _currentCommitOutsideWorld57344;
         private int _currentCommitSkippedDegenerateRequests;
         private int _maxRequestsPerFinalizeBatch = DefaultRequestsPerFinalizeBatch;
-        private string _runtimeRoadImportPipelineMode = "fast-flush";
+        private string _runtimeRoadImportPipelineMode = "confirmed-fast-flush";
 
-        private bool IsFastFlushPipeline
+        private bool IsLegacyFastFlushPipeline
         {
             get
             {
-                return string.Equals(_runtimeRoadImportPipelineMode, "fast-flush", StringComparison.OrdinalIgnoreCase);
+                return string.Equals(_runtimeRoadImportPipelineMode, "legacy-fast-flush", StringComparison.OrdinalIgnoreCase);
             }
+        }
+
+        private bool IsConfirmedFastFlushPipeline
+        {
+            get
+            {
+                return string.Equals(_runtimeRoadImportPipelineMode, "confirmed-fast-flush", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        private int GetCurrentCommitLimit()
+        {
+            if (IsLegacyFastFlushPipeline)
+                return int.MaxValue;
+
+            var batchLimit = Math.Max(1, _maxRequestsPerFinalizeBatch);
+
+            if (IsConfirmedFastFlushPipeline)
+            {
+                var requested = batchLimit * ConfirmedFastFlushCommitMultiplier;
+                return Math.Min(ConfirmedFastFlushMaxCommitRequests, Math.Max(batchLimit, requested));
+            }
+
+            return batchLimit;
+        }
+
+        private bool IsCommitLimitBounded(int commitLimit)
+        {
+            return commitLimit > 0 && commitLimit < int.MaxValue;
         }
 
 private int _lastLoggedQueueCount = -1;
@@ -259,18 +290,7 @@ _activeImportPhase = "queued";
 
         public void SetRuntimeRoadImportPipelineMode(string value)
         {
-            var normalized = string.IsNullOrWhiteSpace(value)
-                ? "fast-flush"
-                : value.Trim().ToLowerInvariant().Replace("_", "-");
-
-            if (normalized == "fast" || normalized == "flush" || normalized == "earth2cities")
-                normalized = "fast-flush";
-
-            if (normalized == "batch" || normalized == "safe")
-                normalized = "batch-safe";
-
-            if (normalized != "fast-flush" && normalized != "batch-safe")
-                normalized = "fast-flush";
+            var normalized = NormalizeRuntimeRoadImportPipelineMode(value);
 
             if (string.Equals(_runtimeRoadImportPipelineMode, normalized, StringComparison.Ordinal))
             {
@@ -603,9 +623,8 @@ _activeImportPhase = "queued";
 
                 var ecb = _toolOutputBarrier.CreateCommandBuffer();
                 var emittedThisFrame = 0;
-                var commitLimit = IsFastFlushPipeline
-                    ? int.MaxValue
-                    : Math.Max(1, _maxRequestsPerFinalizeBatch);
+                var commitLimit = GetCurrentCommitLimit();
+                var boundedCommitLimit = IsCommitLimitBounded(commitLimit);
 
                 while (_pendingRequestCount > 0 &&
                        _readIndex < _queue.Count &&
@@ -639,7 +658,7 @@ _activeImportPhase = "queued";
                     _activeImportEmitted += emittedThisFrame;
 
                     var allQueuedEmitted = _pendingRequestCount <= 0;
-                    var reachedCommitLimit = !IsFastFlushPipeline && _currentCommitEmitted >= commitLimit;
+                    var reachedCommitLimit = boundedCommitLimit && _currentCommitEmitted >= commitLimit;
                     var transactionReadyForApply = allQueuedEmitted || reachedCommitLimit;
 
                     if (transactionReadyForApply)
@@ -647,12 +666,12 @@ _activeImportPhase = "queued";
                         _waitingForTemp = true;
                         _waitingForTempFrames = 0;
                         _activeImportPhase = allQueuedEmitted
-                            ? "earth2cities-transaction-emitted"
-                            : "batch-safe-commit-limit-emitted";
+                            ? _runtimeRoadImportPipelineMode + "-transaction-emitted"
+                            : _runtimeRoadImportPipelineMode + "-commit-limit-emitted";
                     }
                     else
                     {
-                        _activeImportPhase = "earth2cities-emitting-single-transaction";
+                        _activeImportPhase = _runtimeRoadImportPipelineMode + "-emitting-transaction";
                     }
 
                     if (_activeImportBatchIndex <= 5 || _activeImportBatchIndex % 10 == 0 || _waitingForTemp)
@@ -839,7 +858,7 @@ _activeImportPhase = "queued";
         {
             return
                 "Progression : phase=" + SafeLog(_activeImportPhase) +
-                " | pipeline=earth2cities-transactional" +
+                " | pipeline=" + SafeLog(_runtimeRoadImportPipelineMode) +
                 " | queued=" + _activeImportTotalQueued +
                 " | emitted=" + _activeImportEmitted +
                 " | finalized=" + _activeImportFinalized +
@@ -1376,6 +1395,41 @@ _activeImportPhase = "queued";
                 " pending=" + _pendingRequestCount +
                 " waitingForTemp=" + _waitingForTemp
             );
+        }
+
+        private static string NormalizeRuntimeRoadImportPipelineMode(string value)
+        {
+            var normalized = string.IsNullOrWhiteSpace(value)
+                ? "confirmed-fast-flush"
+                : value.Trim().ToLowerInvariant().Replace("_", "-");
+
+            if (normalized == "fast" ||
+                normalized == "flush" ||
+                normalized == "fast-flush" ||
+                normalized == "earth2cities" ||
+                normalized == "confirmed" ||
+                normalized == "confirmed-chunks" ||
+                normalized == "confirmed-fast-flush")
+            {
+                return "confirmed-fast-flush";
+            }
+
+            if (normalized == "legacy" ||
+                normalized == "legacy-fast" ||
+                normalized == "legacy-fast-flush" ||
+                normalized == "unbounded-fast-flush")
+            {
+                return "legacy-fast-flush";
+            }
+
+            if (normalized == "batch" ||
+                normalized == "safe" ||
+                normalized == "batch-safe")
+            {
+                return "batch-safe";
+            }
+
+            return "confirmed-fast-flush";
         }
 
         private static string SafeLog(string value)

@@ -9,7 +9,7 @@ namespace CityTimelineMod.Roads
             public int ProcessedRoads;
             public int QueuedSegments;
             public int QueuedInside14336;
-            public int DeferredOutside14336Inside57344;
+            public int QueuedOutside14336Inside57344;
             public int SkippedOutside57344;
             public int RequestedMaxSegments;
             public int EffectiveMaxSegments;

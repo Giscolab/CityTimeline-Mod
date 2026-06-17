@@ -155,7 +155,6 @@ namespace CityTimelineMod.Rendering
         private bool _controlPanelLogOnce;
         private bool _controlPanelCalibrationUnlocked;
         private bool _controlPanelRebuildPending;
-        private string _currentDisplayPresetLabel = "Custom";
         private string _visualSettingsStatusMessage = "Réglages live.";
         private bool _visualSettingsDirty;
         private List<BundleCatalogEntry> _bundleCatalogEntries = new List<BundleCatalogEntry>();
@@ -239,7 +238,6 @@ namespace CityTimelineMod.Rendering
                 _config.LoadVisualSettingsFromConfig();
                 SyncVisibilityStateFromConfig();
 
-                _currentDisplayPresetLabel = "Options";
                 _visualSettingsDirty = false;
                 _visualSettingsStatusMessage = "Options CS2 appliquées depuis config.json.";
                 _controlPanelRebuildPending = false;

@@ -90,17 +90,6 @@ namespace CityTimelineMod.Rendering
             return Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
         }
 
-        private void SetWaterRenderFlags(bool visible)
-        {
-            if (_config == null)
-                return;
-
-            _config.RenderWaterLines = visible;
-            _config.RenderWaterAreas = visible;
-            _config.RenderWaterAreaOutlines = visible;
-            _config.RenderWaterAreaFillMeshes = visible;
-        }
-
         private static float ResolveY(Vector3 world)
         {
             float y;

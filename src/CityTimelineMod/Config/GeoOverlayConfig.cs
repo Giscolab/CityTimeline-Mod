@@ -242,10 +242,10 @@ internal bool RenderZoning = true;
         // Plus petit = meilleur snapping progressif, mais plus lent.
         // 64 = qualité, 128/256 = compromis, 512+ = rapide.
         internal int RuntimeRoadImportBatchSize = 256;
-        internal string RuntimeRoadImportPipelineMode = "fast-flush";
-        // fast-flush = import massif stable en une transaction vanilla.
-        // Les jonctions internes sont préparées avant l'import par RuntimeRoadTopologyBuilder.
-        // batch-safe = mode expérimental : CS2 annule souvent les previews entre commits.
+        internal string RuntimeRoadImportPipelineMode = "confirmed-fast-flush";
+        // confirmed-fast-flush = chunks rapides bornés, appliqués et confirmés avant le chunk suivant.
+        // legacy-fast-flush = ancienne transaction massive unique, conservée pour diagnostic uniquement.
+        // batch-safe = petits commits stricts, plus lents mais utiles pour isoler les erreurs.
 
         internal bool UseLineRenderer = false;
         internal float LineWidth = 60f;

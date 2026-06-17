@@ -646,24 +646,39 @@ Log.Info(
         private static string NormalizeRuntimeRoadImportPipelineMode(string value)
         {
             var normalized = string.IsNullOrWhiteSpace(value)
-                ? "fast-flush"
+                ? "confirmed-fast-flush"
                 : value.Trim().ToLowerInvariant();
 
             normalized = normalized.Replace("_", "-");
 
-            if (normalized == "fast" || normalized == "flush" || normalized == "earth2cities")
-                return "fast-flush";
-
-            if (normalized == "batch" || normalized == "safe")
-                return "fast-flush";
-
-            if (normalized != "fast-flush" && normalized != "batch-safe")
+            if (normalized == "fast" ||
+                normalized == "flush" ||
+                normalized == "fast-flush" ||
+                normalized == "earth2cities" ||
+                normalized == "confirmed" ||
+                normalized == "confirmed-chunks" ||
+                normalized == "confirmed-fast-flush")
             {
-                Log.Error("GeoOverlayConfig: invalid runtimeRoadImportPipelineMode=" + normalized + ". Fallback to fast-flush.");
-                return "fast-flush";
+                return "confirmed-fast-flush";
             }
 
-            return normalized;
+            if (normalized == "legacy" ||
+                normalized == "legacy-fast" ||
+                normalized == "legacy-fast-flush" ||
+                normalized == "unbounded-fast-flush")
+            {
+                return "legacy-fast-flush";
+            }
+
+            if (normalized == "batch" ||
+                normalized == "safe" ||
+                normalized == "batch-safe")
+            {
+                return "batch-safe";
+            }
+
+            Log.Error("GeoOverlayConfig: invalid runtimeRoadImportPipelineMode=" + normalized + ". Fallback to confirmed-fast-flush.");
+            return "confirmed-fast-flush";
         }
 
         private static string NormalizeRuntimeRoadImportSourceFilter(string value)

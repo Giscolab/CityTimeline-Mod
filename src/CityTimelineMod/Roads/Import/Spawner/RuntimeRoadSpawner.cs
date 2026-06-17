@@ -145,6 +145,7 @@ namespace CityTimelineMod.Roads
                 "Stage : " + Safe(config.RuntimeRoadImportStageFilter) + "\n" +
                 "Max demandé : " + (config.RuntimeRoadImportMaxSegments <= 0 ? "illimite" : config.RuntimeRoadImportMaxSegments.ToString(CultureInfo.InvariantCulture)) + "\n" +
                 "Cap vanilla transaction : " + VanillaSafeSingleApplyMaxSegments.ToString(CultureInfo.InvariantCulture) + "\n" +
+                "Emprise : worldmap 57,344 km\n" +
                 "Batch : " + config.RuntimeRoadImportBatchSize.ToString(CultureInfo.InvariantCulture) + "\n" +
                 "Cache : " + count.ToString(CultureInfo.InvariantCulture) + " lignes\n" +
                 progress;
@@ -274,7 +275,7 @@ namespace CityTimelineMod.Roads
                     ", roads=" + result.ProcessedRoads +
                     ", queuedSegments=" + result.QueuedSegments +
                     ", queuedInside14336=" + result.QueuedInside14336 +
-                    ", deferredOutside14336Inside57344=" + result.DeferredOutside14336Inside57344 +
+                    ", queuedOutside14336Inside57344=" + result.QueuedOutside14336Inside57344 +
                     ", skippedOutside57344=" + result.SkippedOutside57344 +
                     ", requestedMaxSegments=" + result.RequestedMaxSegments +
                     ", effectiveMaxSegments=" + result.EffectiveMaxSegments +

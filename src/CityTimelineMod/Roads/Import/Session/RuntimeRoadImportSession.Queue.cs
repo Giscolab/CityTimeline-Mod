@@ -50,6 +50,12 @@ namespace CityTimelineMod.Roads
                 );
 
                 Util.Log.Info(
+                    "[RoadImport] spatial scope: worldMap57344=true" +
+                    ", central14336DiagnosticOnly=true" +
+                    ", worldHalfSizeMeters=" + WorldMapHalfSizeMeters.ToString("0", CultureInfo.InvariantCulture)
+                );
+
+                Util.Log.Info(
                     "[RoadImport] junction analysis: sharedWorldPoints=" + junctionKeys.Count +
                     ", canonicalJunctions=" + junctionPositions.Count +
                     ", quantizeStepMeters=" + junctionQuantizeStep.ToString("0.###", CultureInfo.InvariantCulture)
@@ -165,12 +171,6 @@ namespace CityTimelineMod.Roads
                             continue;
                         }
 
-                        if (!IsSegmentInsideVanillaPlayable(start, end))
-                        {
-                            result.DeferredOutside14336Inside57344++;
-                            continue;
-                        }
-
                         plannedRequests.Add(new RoadRequest
                         {
                             Prefab = prefab,
@@ -182,14 +182,20 @@ namespace CityTimelineMod.Roads
                     }
                 }
 
-var topologyOptions = new RuntimeRoadTopologyOptions
-{
-    EndpointSnapToleranceMeters = _config.RuntimeRoadImportSnapToleranceMeters,
-    IntersectionSnapToleranceMeters = Math.Max(2.5f, Math.Min(_config.RuntimeRoadImportSnapToleranceMeters, _config.RuntimeRoadImportSnapToleranceMeters * 0.75f)),
-    MinimumSegmentLengthMeters = minLength,
-    SplitIntersections = true,
-    MaxIntersectionTests = 5000000
-};
+                var topologyOptions = new RuntimeRoadTopologyOptions
+                {
+                    EndpointSnapToleranceMeters = _config.RuntimeRoadImportSnapToleranceMeters,
+                    IntersectionSnapToleranceMeters = Math.Max(
+                        2.5f,
+                        Math.Min(
+                            _config.RuntimeRoadImportSnapToleranceMeters,
+                            _config.RuntimeRoadImportSnapToleranceMeters * 0.75f
+                        )
+                    ),
+                    MinimumSegmentLengthMeters = minLength,
+                    SplitIntersections = true,
+                    MaxIntersectionTests = 5000000
+                };
 
                 RuntimeRoadTopologyResult topologyStats;
                 var topologyBuilder = new RuntimeRoadTopologyBuilder(topologyOptions);
@@ -210,15 +216,13 @@ var topologyOptions = new RuntimeRoadTopologyOptions
                         continue;
                     }
 
-                    if (!IsSegmentInsideVanillaPlayable(request.Start, request.End))
-                    {
-                        result.DeferredOutside14336Inside57344++;
-                        continue;
-                    }
-
                     _tool.QueueRoadEdge(request.Prefab, request.PrefabBase, request.Start, request.End, request.RoadName);
 
-                    result.QueuedInside14336++;
+                    if (IsSegmentInsideVanillaPlayable(request.Start, request.End))
+                        result.QueuedInside14336++;
+                    else
+                        result.QueuedOutside14336Inside57344++;
+
                     result.QueuedSegments++;
 
                     if (_segmentLogs < 5)

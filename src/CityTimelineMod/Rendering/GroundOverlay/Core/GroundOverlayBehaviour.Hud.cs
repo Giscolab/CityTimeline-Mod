@@ -16,6 +16,7 @@ namespace CityTimelineMod.Rendering
         private bool _hudShowRendering = false;
         private bool _hudShowPerformance = false;
         private bool _hudShowCalibration = false;
+        private string _currentDisplayPresetLabel = "Custom";
 
         private const int HudSafeMaxRoadSegments = 1000000;
         private const int HudSafeMaxPathSegments = 1000;
@@ -643,10 +644,10 @@ RequestOverlayRebuild("HUD reload visual settings", true);
 
             GUILayout.BeginHorizontal();
 
-            if (GUILayout.Button("Pipeline fast-flush"))
+            if (GUILayout.Button("Pipeline confirmed-fast-flush"))
             {
-                _config.RuntimeRoadImportPipelineMode = "fast-flush";
-                MarkVisualSettingsDirty("Pipeline import runtime = fast-flush.");
+                _config.RuntimeRoadImportPipelineMode = "confirmed-fast-flush";
+                MarkVisualSettingsDirty("Pipeline import runtime = confirmed-fast-flush.");
             }
 
             if (GUILayout.Button("Pipeline batch-safe"))
@@ -657,7 +658,18 @@ RequestOverlayRebuild("HUD reload visual settings", true);
 
             GUILayout.EndHorizontal();
 
+            GUILayout.BeginHorizontal();
+
+            if (GUILayout.Button("Pipeline legacy-fast-flush"))
+            {
+                _config.RuntimeRoadImportPipelineMode = "legacy-fast-flush";
+                MarkVisualSettingsDirty("Pipeline import runtime = legacy-fast-flush.");
+            }
+
+            GUILayout.EndHorizontal();
+
             GUILayout.Label("Batch : 64 qualité / 128-256 compromis / 512+ rapide.");
+            GUILayout.Label("confirmed-fast-flush = chunks bornés ; legacy-fast-flush = transaction massive expérimentale.");
             GUILayout.Label("Mode import : " + SafeHudValue(_config.RuntimeRoadImportSelectionMode));
             GUILayout.Label("Source : " + SafeHudValue(_config.RuntimeRoadImportSourceFilter));
             GUILayout.Label("Highway : " + SafeHudValue(_config.RuntimeRoadImportHighwayFilter));
@@ -919,6 +931,17 @@ RequestOverlayRebuild("HUD reload visual settings", true);
                 ApplyDisplayPreset("bounds");
 
             GUILayout.EndHorizontal();
+        }
+
+        private void SetWaterRenderFlags(bool visible)
+        {
+            if (_config == null)
+                return;
+
+            _config.RenderWaterLines = visible;
+            _config.RenderWaterAreas = visible;
+            _config.RenderWaterAreaOutlines = visible;
+            _config.RenderWaterAreaFillMeshes = visible;
         }
 
         private void ApplyDisplayPreset(string preset)
