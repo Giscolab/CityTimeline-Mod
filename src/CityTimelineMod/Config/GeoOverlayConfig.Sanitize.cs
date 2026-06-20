@@ -42,6 +42,28 @@ namespace CityTimelineMod.Config
             PathChunksPerFrame = Mathf.Clamp(PathChunksPerFrame, 1, 64);
             RoadRenderMode = NormalizeRoadRenderMode(RoadRenderMode);
             PathRenderMode = NormalizeRoadRenderMode(PathRenderMode);
+            ZoningResidentialAlpha = Clamp01(ZoningResidentialAlpha);
+            ZoningCommercialAlpha = Clamp01(ZoningCommercialAlpha);
+            ZoningIndustrialAlpha = Clamp01(ZoningIndustrialAlpha);
+            ZoningOfficeAlpha = Clamp01(ZoningOfficeAlpha);
+            ParkingAlpha = Clamp01(ParkingAlpha);
+
+            ZoningResidentialAlpha = Clamp01(ZoningResidentialAlpha);
+            ZoningCommercialAlpha = Clamp01(ZoningCommercialAlpha);
+            ZoningIndustrialAlpha = Clamp01(ZoningIndustrialAlpha);
+            ZoningOfficeAlpha = Clamp01(ZoningOfficeAlpha);
+            ParkingAlpha = Clamp01(ParkingAlpha);
+
+            ServicesWaterAlpha = Clamp01(ServicesWaterAlpha);
+            ServicesElectricityAlpha = Clamp01(ServicesElectricityAlpha);
+            ServicesEducationAlpha = Clamp01(ServicesEducationAlpha);
+            ServicesFireAlpha = Clamp01(ServicesFireAlpha);
+            ServicesHealthAlpha = Clamp01(ServicesHealthAlpha);
+            ServicesParksAlpha = Clamp01(ServicesParksAlpha);
+            ServicesWasteAlpha = Clamp01(ServicesWasteAlpha);
+            ServicesTransportAlpha = Clamp01(ServicesTransportAlpha);
+            ServicesCommunicationAlpha = Clamp01(ServicesCommunicationAlpha);
+
             RoadSemanticFilterMode = NormalizeRoadSemanticFilterMode(RoadSemanticFilterMode);
             RuntimeRoadImportMaxSegments = Math.Max(1, RuntimeRoadImportMaxSegments);
             RuntimeRoadImportStride = Math.Max(1, RuntimeRoadImportStride);

@@ -39,9 +39,7 @@ namespace CityTimelineMod.Options
         public const string GroupWorldMapBounds = "worldmapbounds";
         public const string GroupHeightMapBounds = "heightmapbounds";
         public const string GroupMapCenter = "mapcenter";
-        public const string GroupDiagnostics = "diagnostics";
-
-        private const string ModFolderName = "CityTimelineMod";
+private const string ModFolderName = "CityTimelineMod";
 
         private bool _suppressConfigWrite;
 
@@ -305,12 +303,7 @@ namespace CityTimelineMod.Options
 
         [SettingsUIButton]
         [SettingsUISection(SectionNetwork, GroupRoutes)]
-        public bool DumpRuntimeRoadImportDiagnostics
-        {
-            set => RuntimeRoadSpawner.DumpImportedRoadDiagnostics(20);
-        }
-
-        [SettingsUITextInput]
+[SettingsUITextInput]
         [SettingsUISection(SectionNetwork, GroupRoutes)]
         public string RoadColorDefault
         {
@@ -938,4 +931,6 @@ namespace CityTimelineMod.Options
         }
     }
 }
+
+
 

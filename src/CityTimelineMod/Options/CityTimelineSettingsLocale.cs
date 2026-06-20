@@ -34,8 +34,7 @@ namespace CityTimelineMod.Options
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupHeightMapBounds), "Limite heightmap" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupMapCenter), "Centre carte" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupBounds), "Limites worldmap / heightmap" },
-                { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupDiagnostics), "Développement" },
-                { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupRoutes), "Routes" },
+{ _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupRoutes), "Routes" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupPaths), "Chemins" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupWater), "Eau" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupZoning), "Zonage" },
@@ -122,11 +121,7 @@ namespace CityTimelineMod.Options
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.UndoRuntimeRoadImport)), "Undo import routes runtime désactivé" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.UndoRuntimeRoadImport)), "Désactivé en V1: la suppression directe des entités réseau CS2 est non sûre." },
-
-                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.DumpRuntimeRoadImportDiagnostics)), "Diagnostic routes importées" },
-                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.DumpRuntimeRoadImportDiagnostics)), "Logge les composants ECS des routes importées taggées: Edge, Road, Curve, PrefabRef, Composition, EdgeGeometry, StartNodeGeometry, EndNodeGeometry, Temp, Updated." },
-
-                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RoadColorDefault)), "Couleur routes non classées" },
+{ _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RoadColorDefault)), "Couleur routes non classées" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.RoadColorDefault)), couleurs },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RoadColorMotorway)), "Couleur autoroutes" },
@@ -226,4 +221,6 @@ namespace CityTimelineMod.Options
         }
     }
 }
+
+
 

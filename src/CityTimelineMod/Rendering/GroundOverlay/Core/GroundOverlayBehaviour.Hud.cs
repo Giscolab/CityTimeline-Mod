@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using CityTimelineMod.Bundles;
-using CityTimelineMod.Roads;
 using CityTimelineMod.Rendering.Roads;
 using CityTimelineMod.Util;
 using UnityEngine;
@@ -9,14 +9,57 @@ namespace CityTimelineMod.Rendering
 {
     internal sealed partial class GroundOverlayBehaviour
     {
-        private bool _hudShowBundleDetails = false;
-        private bool _hudShowOverlayDetails = false;
-        private bool _hudShowRouteStats = false;
-        private bool _hudShowLayers = true;
-        private bool _hudShowRendering = false;
-        private bool _hudShowPerformance = false;
-        private bool _hudShowCalibration = false;
-        private string _currentDisplayPresetLabel = "Custom";
+
+        private bool _modernHudShowPerformance = false;
+        private bool _modernHudShowDetailedRouteStats = false;
+        private enum ModernHudTab
+        {
+            Bundle,
+            Couches,
+            Statistiques,
+            Calage
+        }
+
+        private struct ModernHudChangeState
+        {
+            public bool VisibilityChanged;
+            public bool AlphaChanged;
+            public bool RebuildPending;
+        }
+        private ModernHudTab _modernHudTab = ModernHudTab.Bundle;
+
+        private readonly Dictionary<string, bool> _modernHudLayerVisible =
+            new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase);
+
+        private readonly Dictionary<string, float> _modernHudLayerOpacity =
+            new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+        
+		private bool _controlPanelMouseInside;
+        private static Texture2D _hudTexWindow;
+        private static Texture2D _hudTexPanel;
+        private static Texture2D _hudTexSection;
+        private static Texture2D _hudTexButton;
+        private static Texture2D _hudTexButtonHover;
+        private static Texture2D _hudTexButtonActive;
+
+        private static GUIStyle _hudTabStyle;
+        private static GUIStyle _hudTabActiveStyle;
+        private static GUIStyle _hudPanelStyle;
+        private static GUIStyle _hudSectionStyle;
+        private static GUIStyle _hudFooterStyle;
+        private static GUIStyle _hudSubblockStyle;
+        private static GUIStyle _hudMeterStyle;
+
+        private static readonly Color HudBgWindow = new Color32(0x22, 0x22, 0x22, 0xff);
+        private static readonly Color HudBgPanel = new Color32(0x2b, 0x2b, 0x2b, 0xff);
+        private static readonly Color HudBgSection = new Color32(0x33, 0x33, 0x33, 0xff);
+        private static readonly Color HudBgButton = new Color32(0x44, 0x44, 0x44, 0xff);
+        private static readonly Color HudBgButtonHover = new Color32(0x55, 0x55, 0x55, 0xff);
+        private static readonly Color HudBgButtonActive = new Color32(0x66, 0x66, 0x66, 0xff);
+
+        private static readonly Color HudTextMain = new Color32(0xf0, 0xf0, 0xf0, 0xff);
+        private static readonly Color HudTextMuted = new Color32(0xbb, 0xbb, 0xbb, 0xff);
+        private static readonly Color HudAccent = new Color32(0x7f, 0xb3, 0xff, 0xff);
 
         private const int HudSafeMaxRoadSegments = 1000000;
         private const int HudSafeMaxPathSegments = 1000;
@@ -26,29 +69,214 @@ namespace CityTimelineMod.Rendering
 
         private void UpdateOverlayHud()
         {
-            // Ancien HUD TextMesh supprimé.
-            // Le panneau interactif est rendu par OnGUI().
+            // HUD IMGUI moderne rendu par OnGUI().
         }
+
+        private static Texture2D CreateHudTexture(Color color)
+        {
+            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            texture.hideFlags = HideFlags.HideAndDontSave;
+            texture.SetPixel(0, 0, color);
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        private static void EnsureHudTextures()
+        {
+            if (_hudTexWindow != null)
+                return;
+
+            _hudTexWindow = CreateHudTexture(HudBgWindow);
+            _hudTexPanel = CreateHudTexture(HudBgPanel);
+            _hudTexSection = CreateHudTexture(HudBgSection);
+            _hudTexButton = CreateHudTexture(HudBgButton);
+            _hudTexButtonHover = CreateHudTexture(HudBgButtonHover);
+            _hudTexButtonActive = CreateHudTexture(HudBgButtonActive);
+        }
+
+        private static void ApplyHudStyleState(
+            GUIStyle style,
+            Texture2D normal,
+            Texture2D hover,
+            Texture2D active,
+            Color textColor
+        )
+        {
+            if (style == null)
+                return;
+
+            style.normal.background = normal;
+            style.hover.background = hover ?? normal;
+            style.active.background = active ?? normal;
+            style.focused.background = normal;
+
+            style.onNormal.background = normal;
+            style.onHover.background = hover ?? normal;
+            style.onActive.background = active ?? normal;
+            style.onFocused.background = normal;
+
+            style.normal.textColor = textColor;
+            style.hover.textColor = textColor;
+            style.active.textColor = textColor;
+            style.focused.textColor = textColor;
+
+            style.onNormal.textColor = textColor;
+            style.onHover.textColor = textColor;
+            style.onActive.textColor = textColor;
+            style.onFocused.textColor = textColor;
+        }
+
+        private static void EnsureHudStyles()
+        {
+            if (_hudTabStyle != null)
+                return;
+
+            _hudPanelStyle = new GUIStyle(GUI.skin.box);
+            _hudPanelStyle.padding = new RectOffset(8, 8, 8, 8);
+            _hudPanelStyle.margin = new RectOffset(0, 0, 0, 0);
+            ApplyHudStyleState(
+                _hudPanelStyle,
+                _hudTexPanel,
+                _hudTexPanel,
+                _hudTexPanel,
+                HudTextMain
+            );
+
+            _hudSectionStyle = new GUIStyle(GUI.skin.box);
+            _hudSectionStyle.padding = new RectOffset(8, 8, 8, 8);
+            _hudSectionStyle.margin = new RectOffset(0, 0, 0, 8);
+            ApplyHudStyleState(
+                _hudSectionStyle,
+                _hudTexSection,
+                _hudTexSection,
+                _hudTexSection,
+                HudTextMain
+            );
+
+            _hudFooterStyle = new GUIStyle(GUI.skin.box);
+            _hudFooterStyle.padding = new RectOffset(8, 8, 8, 8);
+            _hudFooterStyle.margin = new RectOffset(0, 0, 8, 0);
+            ApplyHudStyleState(
+                _hudFooterStyle,
+                _hudTexPanel,
+                _hudTexPanel,
+                _hudTexPanel,
+                HudTextMain
+            );
+
+            _hudTabStyle = new GUIStyle(GUI.skin.button);
+            _hudTabStyle.fontSize = 15;
+            _hudTabStyle.alignment = TextAnchor.MiddleCenter;
+            _hudTabStyle.padding = new RectOffset(8, 8, 4, 4);
+            _hudTabStyle.margin = new RectOffset(1, 1, 0, 0);
+            ApplyHudStyleState(
+                _hudTabStyle,
+                _hudTexButton,
+                _hudTexButtonHover,
+                _hudTexButtonActive,
+                HudTextMuted
+            );
+
+            _hudTabActiveStyle = new GUIStyle(GUI.skin.button);
+            _hudTabActiveStyle.fontSize = 15;
+            _hudTabActiveStyle.alignment = TextAnchor.MiddleCenter;
+            _hudTabActiveStyle.padding = new RectOffset(8, 8, 4, 4);
+            _hudTabActiveStyle.margin = new RectOffset(1, 1, 0, 0);
+            ApplyHudStyleState(
+                _hudTabActiveStyle,
+                _hudTexSection,
+                _hudTexSection,
+                _hudTexButtonActive,
+                HudAccent
+            );
+
+            _hudSubblockStyle = new GUIStyle(GUI.skin.box);
+            _hudSubblockStyle.fontSize = 16;
+            _hudSubblockStyle.padding = new RectOffset(8, 8, 6, 6);
+            _hudSubblockStyle.margin = new RectOffset(0, 0, 0, 8);
+            ApplyHudStyleState(
+                _hudSubblockStyle,
+                _hudTexPanel,
+                _hudTexPanel,
+                _hudTexPanel,
+                HudTextMain
+            );
+
+            _hudMeterStyle = new GUIStyle(GUI.skin.box);
+            _hudMeterStyle.fontSize = 15;
+            _hudMeterStyle.padding = new RectOffset(8, 8, 6, 6);
+            _hudMeterStyle.margin = new RectOffset(0, 0, 4, 6);
+            ApplyHudStyleState(
+                _hudMeterStyle,
+                _hudTexSection,
+                _hudTexSection,
+                _hudTexSection,
+                HudTextMain
+            );
+        }
+
 
         private static void ApplyControlPanelGuiSkin()
         {
             if (GUI.skin == null)
                 return;
 
+            EnsureHudTextures();
+
             GUI.skin.window.fontSize = 16;
-            GUI.skin.label.fontSize = 16;
-            GUI.skin.toggle.fontSize = 16;
-            GUI.skin.button.fontSize = 16;
+            GUI.skin.window.padding = new RectOffset(8, 8, 6, 8);
+            GUI.skin.window.margin = new RectOffset(0, 0, 0, 0);
+
+            GUI.skin.label.fontSize = 15;
+            GUI.skin.toggle.fontSize = 15;
+            GUI.skin.button.fontSize = 15;
+
+            ApplyHudStyleState(
+                GUI.skin.window,
+                _hudTexWindow,
+                _hudTexWindow,
+                _hudTexWindow,
+                HudTextMain
+            );
+
+            ApplyHudStyleState(
+                GUI.skin.box,
+                _hudTexPanel,
+                _hudTexPanel,
+                _hudTexPanel,
+                HudTextMain
+            );
+
+            ApplyHudStyleState(
+                GUI.skin.button,
+                _hudTexButton,
+                _hudTexButtonHover,
+                _hudTexButtonActive,
+                HudTextMain
+            );
+
+            GUI.skin.label.normal.textColor = HudTextMain;
+            GUI.skin.label.hover.textColor = HudTextMain;
+            GUI.skin.label.active.textColor = HudTextMain;
+            GUI.skin.label.focused.textColor = HudTextMain;
+
+            GUI.skin.toggle.normal.textColor = HudTextMain;
+            GUI.skin.toggle.hover.textColor = HudTextMain;
+            GUI.skin.toggle.active.textColor = HudTextMain;
+            GUI.skin.toggle.focused.textColor = HudTextMain;
 
             GUI.skin.horizontalSlider.fixedHeight = 18f;
             GUI.skin.horizontalSliderThumb.fixedWidth = 18f;
             GUI.skin.horizontalSliderThumb.fixedHeight = 18f;
+
+            EnsureHudStyles();
         }
+
 
         private void NormalizeControlPanelRect()
         {
-            var hudWidth = Mathf.Min(680f, Mathf.Max(360f, Screen.width - 16f));
-            var hudHeight = Mathf.Min(900f, Mathf.Max(420f, Screen.height - 16f));
+            var hudWidth = Mathf.Min(920f, Mathf.Max(360f, Screen.width - 16f));
+            var hudHeight = Mathf.Min(780f, Mathf.Max(420f, Screen.height - 16f));
 
             if (_controlPanelRect.width >= hudWidth && _controlPanelRect.height >= hudHeight)
                 return;
@@ -58,6 +286,58 @@ namespace CityTimelineMod.Rendering
 
             _controlPanelRect = new Rect(x, y, hudWidth, hudHeight);
         }
+
+
+        private static bool IsHudMouseEvent(EventType type)
+        {
+            return type == EventType.MouseDown
+                || type == EventType.MouseUp
+                || type == EventType.MouseDrag
+                || type == EventType.MouseMove
+                || type == EventType.ScrollWheel
+                || type == EventType.ContextClick;
+        }
+
+        private void RefreshControlPanelMouseCapture()
+        {
+            var evt = Event.current;
+
+            if (evt == null || _config == null || !_config.ShowOverlayHud)
+            {
+                _controlPanelMouseInside = false;
+                return;
+            }
+
+            _controlPanelMouseInside = _controlPanelRect.Contains(evt.mousePosition);
+
+            if (!_controlPanelMouseInside)
+                return;
+
+            Input.ResetInputAxes();
+
+            GUI.FocusWindow(93014);
+            GUI.BringWindowToFront(93014);
+        }
+
+        private void ConsumeMouseEventsInsideControlPanel()
+        {
+            var evt = Event.current;
+
+            if (evt == null)
+                return;
+
+            if (!_controlPanelMouseInside)
+                return;
+
+            Input.ResetInputAxes();
+
+            if (!IsHudMouseEvent(evt.type))
+                return;
+
+            if (evt.type != EventType.Used)
+                evt.Use();
+        }
+
 
         private void OnGUI()
         {
@@ -73,59 +353,327 @@ namespace CityTimelineMod.Rendering
             ApplyControlPanelGuiSkin();
             NormalizeControlPanelRect();
 
-            _controlPanelRect = GUI.Window(
+            RefreshControlPanelMouseCapture();
+
+            _controlPanelRect = GUI.ModalWindow(
                 93014,
                 _controlPanelRect,
                 DrawControlPanelWindow,
-                "CityTimelineMod — Panneau HUD"
+                "CityTimelineMod - Panneau HUD"
             );
+
+            RefreshControlPanelMouseCapture();
+            ConsumeMouseEventsInsideControlPanel();
+			}
+
+
+        private void DrawControlPanelWindow(int windowId)
+        {
+            DrawControlPanelWindowModern(windowId);
         }
 
-        private static bool DrawHudFoldout(string label, ref bool expanded)
-        {
-            var text = (expanded ? "▼ " : "▶ ") + label;
 
-            if (GUILayout.Button(text))
+        private void DrawControlPanelWindowModern(int windowId)
+        {
+            if (_config == null)
+            {
+                GUILayout.Label("Configuration indisponible.");
+                GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
+                return;
+            }
+
+            var changes = new ModernHudChangeState();
+
+            GUILayout.BeginVertical(_hudPanelStyle);
+
+            DrawModernTabBar();
+
+            _controlPanelScroll = GUILayout.BeginScrollView(
+                _controlPanelScroll,
+                GUILayout.Width(_controlPanelRect.width - 18f),
+                GUILayout.Height(Mathf.Max(220f, _controlPanelRect.height - 176f))
+            );
+
+            GUILayout.BeginVertical(_hudSectionStyle);
+
+            switch (_modernHudTab)
+            {
+                case ModernHudTab.Bundle:
+                    DrawModernBundleTab();
+                    break;
+
+                case ModernHudTab.Couches:
+                    DrawModernLayersTab(ref changes);
+                    break;
+
+                case ModernHudTab.Statistiques:
+                    DrawModernStatsTab();
+                    break;
+
+                case ModernHudTab.Calage:
+                    DrawModernCalibrationTab(ref changes);
+                    break;
+            }
+
+            GUILayout.EndVertical();
+
+            GUILayout.EndScrollView();
+
+            GUILayout.EndVertical();
+
+            ApplyModernHudChanges(changes);
+
+            DrawModernFooter();
+
+            GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
+        }
+
+
+        private void DrawModernTabBar()
+        {
+            GUILayout.BeginHorizontal(_hudPanelStyle);
+
+            DrawModernTabButton("Bundle", ModernHudTab.Bundle);
+            DrawModernTabButton("Couches", ModernHudTab.Couches);
+            DrawModernTabButton("Statistiques", ModernHudTab.Statistiques);
+            DrawModernTabButton("Calage", ModernHudTab.Calage);
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.Space(0f);
+        }
+
+
+        private void DrawModernTabButton(string label, ModernHudTab tab)
+        {
+            var active = _modernHudTab == tab;
+            var style = active ? _hudTabActiveStyle : _hudTabStyle;
+
+            if (GUILayout.Button(label, style, GUILayout.Height(28f)))
+                _modernHudTab = tab;
+        }
+
+        private static bool DrawModernFoldout(string label, ref bool expanded)
+        {
+            var previousColor = GUI.contentColor;
+            GUI.contentColor = expanded ? HudAccent : HudTextMain;
+
+            var text = (expanded ? "▼ " : "▶ ") + label;
+            var clicked = GUILayout.Button(text);
+
+            GUI.contentColor = previousColor;
+
+            if (clicked)
                 expanded = !expanded;
 
             return expanded;
         }
 
-        private void DrawCompactHudSummary()
+        private static void BeginModernSubblock(string title)
         {
-            if (_config == null)
-                return;
+            GUILayout.BeginVertical(_hudSubblockStyle);
+
+            var previousColor = GUI.contentColor;
+            GUI.contentColor = HudTextMain;
+            GUILayout.Label(title);
+            GUI.contentColor = previousColor;
+
+            GUILayout.Space(4f);
+        }
+
+
+        private static void EndModernSubblock()
+        {
+            GUILayout.EndVertical();
+            GUILayout.Space(8f);
+        }
+
+        private static void DrawModernKeyValue(string label, string value)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(label, GUILayout.Width(180f));
+            GUILayout.Label(SafeHudValue(value));
+            GUILayout.EndHorizontal();
+        }
+
+        private static void DrawModernStatRow(string label, string value)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(label, GUILayout.Width(260f));
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(SafeHudValue(value), GUILayout.Width(90f));
+            GUILayout.EndHorizontal();
+        }
+
+        private static string FormatDoubleOrEllipsis(double value, string format = "0.###")
+        {
+            return double.IsNaN(value)
+                ? "..."
+                : value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string FormatFloat(float value, string format)
+        {
+            return value.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static void DrawModernMeterScale(string left, string midLeft, string center, string midRight, string right)
+        {
+            GUILayout.BeginHorizontal();
+            GUILayout.Label(left, GUILayout.Width(64f));
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(midLeft, GUILayout.Width(64f));
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(center, GUILayout.Width(64f));
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(midRight, GUILayout.Width(64f));
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(right, GUILayout.Width(64f));
+            GUILayout.EndHorizontal();
+        }
+
+        private static float QuantizeSliderValue(float value, float min, float max, float step)
+        {
+            if (step <= 0f)
+                return Mathf.Clamp(value, min, max);
+
+            var normalized = Mathf.Round((value - min) / step) * step + min;
+            return Mathf.Clamp(normalized, min, max);
+        }
+
+        private static bool DrawModernPercentMeter(string label, ref float percent)
+        {
+            var safeValue = Mathf.Clamp(percent, 0f, 100f);
+
+            GUILayout.BeginVertical(_hudMeterStyle);
+
+            GUILayout.BeginHorizontal();
+
+            var previousColor = GUI.contentColor;
+            GUI.contentColor = HudTextMuted;
+            GUILayout.Label(label);
+            GUI.contentColor = previousColor;
+
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(Mathf.RoundToInt(safeValue).ToString(System.Globalization.CultureInfo.InvariantCulture) + " %", GUILayout.Width(56f));
+
+            GUILayout.EndHorizontal();
+
+            var next = GUILayout.HorizontalSlider(safeValue, 0f, 100f, GUILayout.Height(22f));
+            next = QuantizeSliderValue(next, 0f, 100f, 5f);
+
+            DrawModernMeterScale("0 %", "25 %", "50 %", "75 %", "100 %");
+
+            GUILayout.EndVertical();
+
+            if (Mathf.Abs(next - percent) < 0.001f)
+                return false;
+
+            percent = next;
+            return true;
+        }
+
+
+        private static bool DrawModernFloatMeter(
+            string label,
+            ref float value,
+            float min,
+            float max,
+            float step,
+            string format,
+            string left,
+            string midLeft,
+            string center,
+            string midRight,
+            string right
+        )
+        {
+            var safeValue = Mathf.Clamp(value, min, max);
+
+            GUILayout.BeginVertical(_hudMeterStyle);
+
+            GUILayout.BeginHorizontal();
+
+            var previousColor = GUI.contentColor;
+            GUI.contentColor = HudTextMuted;
+            GUILayout.Label(label);
+            GUI.contentColor = previousColor;
+
+            GUILayout.FlexibleSpace();
+            GUILayout.Label(FormatFloat(safeValue, format), GUILayout.Width(72f));
+
+            GUILayout.EndHorizontal();
+
+            var next = GUILayout.HorizontalSlider(safeValue, min, max, GUILayout.Height(22f));
+            next = QuantizeSliderValue(next, min, max, step);
+
+            DrawModernMeterScale(left, midLeft, center, midRight, right);
+
+            GUILayout.EndVertical();
+
+            if (Mathf.Abs(next - value) < 0.0001f)
+                return false;
+
+            value = next;
+            return true;
+        }
+
+
+        private void DrawModernBundleTab()
+        {
+            EnsureBundleCatalogLoaded();
+
+            BeginModernSubblock("Bundle actif");
+
+            DrawModernKeyValue("Actif :", _config.ActiveBundleId);
+            DrawModernKeyValue(
+                "Nom :",
+                !string.IsNullOrWhiteSpace(_config.ActiveBundleDisplayName)
+                    ? _config.ActiveBundleDisplayName
+                    : "(vide)"
+            );
+
+            if (_bundleCatalogEntries != null && _bundleCatalogEntries.Count > 0)
+            {
+                if (_selectedBundleIndex < 0 || _selectedBundleIndex >= _bundleCatalogEntries.Count)
+                {
+                    _selectedBundleIndex = BundleCatalog.FindIndexById(_bundleCatalogEntries, _config.ActiveBundleId);
+
+                    if (_selectedBundleIndex < 0)
+                        _selectedBundleIndex = 0;
+                }
+
+                var selected = _bundleCatalogEntries[_selectedBundleIndex];
+
+                DrawModernKeyValue("ID :", selected.Id);
+                DrawModernKeyValue(
+                    "Centre :",
+                    (!double.IsNaN(selected.CenterLon) && !double.IsNaN(selected.CenterLat))
+                        ? selected.CenterLon.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture) +
+                          " / " +
+                          selected.CenterLat.ToString("0.######", System.Globalization.CultureInfo.InvariantCulture)
+                        : "..."
+                );
+            }
+            else
+            {
+                DrawModernKeyValue("ID :", "...");
+                DrawModernKeyValue("Centre :", "...");
+            }
+
+            GUILayout.Label("Statut catalogue : " + SafeHudValue(_bundleSelectorStatusMessage));
+
+            EndModernSubblock();
+
+            BeginModernSubblock("Résumé GeoJSON");
 
             var stats = _roadSemanticStats ?? new RoadSemanticStats();
+
+            DrawModernKeyValue("Routes :", stats.Roads.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            DrawModernKeyValue("Chemins :", stats.Paths.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            DrawModernKeyValue("Total objets :", stats.Total.ToString(System.Globalization.CultureInfo.InvariantCulture));
+
             var state = _progressiveRebuild;
-
-            GUILayout.Space(6f);
-            GUILayout.Label("Résumé");
-
-            GUILayout.Label(
-                "Bundle : " +
-                (!string.IsNullOrWhiteSpace(_config.ActiveBundleDisplayName)
-                    ? _config.ActiveBundleDisplayName
-                    : SafeHudValue(_config.ActiveBundleId))
-            );
-
-            GUILayout.Label(
-                "GeoJSON : routes=" + stats.Roads +
-                " | chemins=" + stats.Paths +
-                " | total=" + stats.Total
-            );
-
-            GUILayout.Label(
-                "Import CS2 : enabled=" + _config.RuntimeRoadImportEnabled +
-                " | pipeline=" + SafeHudValue(_config.RuntimeRoadImportPipelineMode) +
-                " | max=" + (_config.RuntimeRoadImportMaxSegments <= 0 ? "illimité" : _config.RuntimeRoadImportMaxSegments.ToString()) +
-                " | mode=" + SafeHudValue(_config.RuntimeRoadImportSelectionMode)
-            );
-
-            if (_config.RuntimeRoadImportShowProgressInHud)
-            {
-                GUILayout.Label(RuntimeRoadSpawner.GetRuntimeImportHudText());
-            }
 
             if (state != null)
             {
@@ -140,203 +688,651 @@ namespace CityTimelineMod.Rendering
             {
                 GUILayout.Label("Overlay : idle");
             }
-        }
 
-        private void DrawControlPanelWindow(int windowId)
-        {
-            var visibilityChanged = false;
-            var alphaChanged = false;
+            EndModernSubblock();
 
-            _controlPanelScroll = GUILayout.BeginScrollView(
-                _controlPanelScroll,
-                GUILayout.Width(_controlPanelRect.width - 18f),
-                GUILayout.Height(_controlPanelRect.height - 38f)
-            );
+            BeginModernSubblock("État overlay / rebuild");
+            DrawVisualSettingsStatus();
+            DrawProgressiveRebuildStatus();
+            EndModernSubblock();
 
-            DrawDisplayPresetButtons();
-            DrawCompactHudSummary();
-            DrawRuntimeRoadImportSection();
+            BeginModernSubblock("Contrat eau du bundle");
 
-            if (DrawHudFoldout("Détails bundle / eau", ref _hudShowBundleDetails))
+            DrawModernKeyValue("Niveau d'eau réel conseillé :", FormatDoubleOrEllipsis(_config.RecommendedCs2WaterLevel) + " m");
+            DrawModernKeyValue("Réserve sous eau :", FormatDoubleOrEllipsis(_config.BelowSeaReserveMeters) + " m");
+            DrawModernKeyValue("Niveau mer / océan :", FormatDoubleOrEllipsis(_config.WaterReferenceElevationMeters) + " m");
+            DrawModernKeyValue("Niveau lacs / rivières :", "...");
+            DrawModernKeyValue("Niveau eaux artificielles :", "...");
+
+            EndModernSubblock();
+
+            BeginModernSubblock("Actions bundle");
+
+            if (_bundleCatalogEntries == null || _bundleCatalogEntries.Count == 0)
             {
-                DrawBundleSelector();
-                DrawBundleSummarySection();
-                DrawBundleWaterContractInfo();
-            }
+                GUILayout.Label(_bundleSelectorStatusMessage);
 
-            if (DrawHudFoldout("État overlay / rebuild", ref _hudShowOverlayDetails))
-            {
-                DrawVisualSettingsStatus();
-                DrawProgressiveRebuildStatus();
-            }
+                if (GUILayout.Button("Recharger catalogue"))
+                    ReloadBundleCatalog();
 
-            if (DrawHudFoldout("Statistiques routes GeoJSON", ref _hudShowRouteStats))
-            {
-                DrawRoadSemanticStatsSection();
-            }
-
-            if (!DrawHudFoldout("Couches visibles / transparence", ref _hudShowLayers))
-            {
-                GUILayout.EndScrollView();
-                GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
+                EndModernSubblock();
                 return;
             }
 
-            GUILayout.Space(12f);
-            GUILayout.Label("Couches visibles");
+            var activeSelected = _bundleCatalogEntries[_selectedBundleIndex];
 
-            visibilityChanged |= DrawLayerToggle("Zonage", ref _config.RenderZoning);
-            visibilityChanged |= DrawLayerToggle("Routes", ref _config.RenderRoads);
-            visibilityChanged |= DrawLayerToggle("Chemins", ref _config.RenderPaths);
-
-            var waterVisible = _config.RenderWaterLines && _config.RenderWaterAreas;
-            var newWaterVisible = GUILayout.Toggle(waterVisible, "Eau");
-            if (newWaterVisible != waterVisible)
-            {
-                _config.RenderWaterLines = newWaterVisible;
-                _config.RenderWaterAreas = newWaterVisible;
-                visibilityChanged = true;
-            }
-
-            visibilityChanged |= DrawLayerToggle("Limites worldmap / heightmap", ref _config.RenderMapBounds);
-
-            GUILayout.Space(12f);
-            GUILayout.Label("Transparence");
-
-            alphaChanged |= DrawFloatSlider("Alpha zonage", ref _config.ZoningAlpha, 0f, 1f, "0.00");
-            alphaChanged |= DrawFloatSlider("Alpha routes", ref _config.RoadAlpha, 0f, 1f, "0.00");
-            alphaChanged |= DrawFloatSlider("Alpha chemins", ref _config.PathAlpha, 0f, 1f, "0.00");
-
-            var waterMainAlpha = _config.WaterLineAlpha;
-            if (DrawFloatSlider("Alpha eau lignes/contours", ref waterMainAlpha, 0f, 1f, "0.00"))
-            {
-                _config.WaterLineAlpha = waterMainAlpha;
-                _config.WaterAreaOutlineAlpha = waterMainAlpha;
-                alphaChanged = true;
-            }
-
-            alphaChanged |= DrawFloatSlider("Alpha eau remplissage", ref _config.WaterAreaFillAlpha, 0f, 1f, "0.00");
-
-            if (DrawFloatSlider("Alpha limites", ref _config.MapBoundsAlpha, 0f, 1f, "0.00"))
-            {
-                alphaChanged = true;
-                _controlPanelRebuildPending = true;
-            }
-
-            GUILayout.Space(12f);
-            GUILayout.Label("Hauteur");
-
-            if (DrawFloatSlider("Ground margin", ref _config.GroundMargin, 0f, 600f, "0"))
-            {
-                _controlPanelRebuildPending = true;
-            }
-
-            if (!DrawHudFoldout("Performance overlay", ref _hudShowPerformance))
-            {
-                GUILayout.Space(8f);
-            }
-            else
-            {
-                GUILayout.Space(12f);
-                GUILayout.Label("Performance");
-
-                if (DrawIntSlider("Budget zonage", ref _config.MaxZoningFillMeshesDebug, 0, 20000))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-
-                if (DrawIntSlider("Budget routes", ref _config.MaxRoadSegmentsDebug, 1000, 800000))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-
-                if (DrawIntSlider("Budget chemins", ref _config.MaxPathSegmentsDebug, 1000, 800000))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-
-                if (DrawIntSlider("Budget eau segments", ref _config.MaxWaterSegmentsDebug, 1000, 400000))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-
-                if (DrawIntSlider("Budget eau surfaces", ref _config.MaxWaterAreaFillMeshesDebug, 0, 2000))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-
-                if (DrawIntSlider("Niveau routes", ref _config.MinimumRoadDebugTier, 0, 4))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-
-                if (DrawIntSlider("Pas / pointStride", ref _config.PointStride, 1, 20))
-                {
-                    _controlPanelRebuildPending = true;
-                }
-            }
-
-            if (DrawHudFoldout("Rendu avancé routes / filtres", ref _hudShowRendering))
-            {
-                DrawExhaustiveRenderSection();
-                DrawRoadRenderingOptionsSection();
-                DrawRoadSemanticFilterSection();
-            }
-
-            if (DrawHudFoldout("Calage avancé", ref _hudShowCalibration))
-            {
-                GUILayout.Space(12f);
-                GUILayout.Label("Calage avancé");
-
-                _controlPanelCalibrationUnlocked = GUILayout.Toggle(
-                    _controlPanelCalibrationUnlocked,
-                    "Déverrouiller le calage"
-                );
-
-                if (_controlPanelCalibrationUnlocked)
-                {
-                    if (DrawFloatSlider("Offset X", ref _config.WorldOriginX, -5000f, 5000f, "0.0"))
-                    {
-                        _controlPanelRebuildPending = true;
-                    }
-
-                    if (DrawFloatSlider("Offset Z", ref _config.WorldOriginZ, -5000f, 5000f, "0.0"))
-                    {
-                        _controlPanelRebuildPending = true;
-                    }
-
-                    if (DrawFloatSlider("Rotation degrés", ref _config.OverlayRotationDegrees, -30f, 30f, "0.00"))
-                    {
-                        _controlPanelRebuildPending = true;
-                    }
-
-                    if (DrawFloatSlider("Scale X", ref _config.OverlayScaleX, 0.5f, 1.5f, "0.000"))
-                    {
-                        _controlPanelRebuildPending = true;
-                    }
-
-                    if (DrawFloatSlider("Scale Z", ref _config.OverlayScaleZ, 0.5f, 1.5f, "0.000"))
-                    {
-                        _controlPanelRebuildPending = true;
-                    }
-
-                    GUILayout.Label(
-                        "worldScale : " +
-                        _config.WorldScale.ToString("0.000000", System.Globalization.CultureInfo.InvariantCulture) +
-                        " / lecture seule"
-                    );
-                }
-                else
-                {
-                    GUILayout.Label("Calage verrouillé.");
-                }
-            }
-
-            GUILayout.Space(12f);
+            GUILayout.Label("Sélection : " + activeSelected.DisplayName);
 
             GUILayout.BeginHorizontal();
 
-            if (GUILayout.Button(_controlPanelRebuildPending ? "Appliquer / reconstruire *" : "Appliquer / reconstruire"))
+            if (GUILayout.Button("← Précédent"))
+                SelectPreviousBundle();
+
+            if (GUILayout.Button("Suivant →"))
+                SelectNextBundle();
+
+            GUILayout.EndHorizontal();
+
+            GUILayout.BeginHorizontal();
+
+            if (GUILayout.Button("Charger bundle sélectionné"))
+            {
+                _pendingBundleReloadId = activeSelected.Id;
+                _bundleSelectorStatusMessage = "Chargement demandé : " + activeSelected.DisplayName;
+                Log.Info("GroundOverlay HUD bundle selector: load requested id=" + activeSelected.Id);
+            }
+
+            if (GUILayout.Button("Recharger catalogue"))
+                ReloadBundleCatalog();
+
+            GUILayout.EndHorizontal();
+
+            EndModernSubblock();
+        }
+
+        private void DrawModernLayersTab(ref ModernHudChangeState changes)
+        {
+            GUILayout.BeginHorizontal();
+
+            GUILayout.BeginVertical();
+            DrawModernLayerControl("zoning.residential", "Bâtiments résidentiels", ref changes);
+            DrawModernLayerControl("zoning.commercial", "Commercial", ref changes);
+            DrawModernLayerControl("zoning.industrial", "Industrie", ref changes);
+            DrawModernLayerControl("zoning.office", "Bureaux", ref changes);
+            DrawModernLayerControl("parking", "Parkings", ref changes);
+            DrawModernLayerControl("roads.paths", "Routes et chemins", ref changes);
+            DrawModernLayerControl("water", "Hydrographie", ref changes);
+            DrawModernLayerControl("services.water", "Eau et égouts", ref changes);
+            DrawModernLayerControl("services.electricity", "Électricité", ref changes);
+            GUILayout.EndVertical();
+
+            GUILayout.BeginVertical();
+            DrawModernLayerControl("services.education", "Éducation et recherche", ref changes);
+            DrawModernLayerControl("services.fire", "Sapeurs-pompiers", ref changes);
+            DrawModernLayerControl("services.health", "Services médicaux et soins mortuaires", ref changes);
+            DrawModernLayerControl("services.parks", "Parcs et loisirs", ref changes);
+            DrawModernLayerControl("services.waste", "Gestion des déchets", ref changes);
+            DrawModernLayerControl("services.transport", "Transports", ref changes);
+            DrawModernLayerControl("services.communication", "Communications", ref changes);
+            GUILayout.EndVertical();
+
+            GUILayout.EndHorizontal();
+        }
+
+
+        private void DrawModernLayerControl(string layerId, string label, ref ModernHudChangeState changes)
+        {
+            BeginModernSubblock(label);
+
+            var visible = GetModernLayerVisible(layerId);
+            var nextVisible = GUILayout.Toggle(visible, label);
+
+            if (nextVisible != visible)
+            {
+                if (SetModernLayerVisible(layerId, nextVisible))
+                    changes.VisibilityChanged = true;
+            }
+
+            var previousEnabled = GUI.enabled;
+            GUI.enabled = previousEnabled && nextVisible;
+
+            var opacityPercent = Mathf.Clamp01(GetModernLayerOpacity(layerId)) * 100f;
+
+            if (DrawModernPercentMeter("Opacité", ref opacityPercent))
+            {
+                if (SetModernLayerOpacity(layerId, opacityPercent / 100f))
+                    changes.AlphaChanged = true;
+            }
+
+            GUI.enabled = previousEnabled;
+
+            EndModernSubblock();
+        }
+
+
+        private void SyncModernLayerStateFromConfig()
+        {
+            if (_config == null)
+                return;
+
+            _modernHudLayerVisible["zoning.residential"] = _config.ZoningResidentialVisible;
+            _modernHudLayerVisible["zoning.commercial"] = _config.ZoningCommercialVisible;
+            _modernHudLayerVisible["zoning.industrial"] = _config.ZoningIndustrialVisible;
+            _modernHudLayerVisible["zoning.office"] = _config.ZoningOfficeVisible;
+            _modernHudLayerVisible["parking"] = _config.ParkingVisible;
+            _modernHudLayerVisible["roads.paths"] = _config.RenderRoads && _config.RenderPaths;
+            _modernHudLayerVisible["water"] = _config.RenderWaterLines && _config.RenderWaterAreas;
+            _modernHudLayerVisible["services.water"] = _config.ServicesWaterVisible;
+            _modernHudLayerVisible["services.electricity"] = _config.ServicesElectricityVisible;
+            _modernHudLayerVisible["services.education"] = _config.ServicesEducationVisible;
+            _modernHudLayerVisible["services.fire"] = _config.ServicesFireVisible;
+            _modernHudLayerVisible["services.health"] = _config.ServicesHealthVisible;
+            _modernHudLayerVisible["services.parks"] = _config.ServicesParksVisible;
+            _modernHudLayerVisible["services.waste"] = _config.ServicesWasteVisible;
+            _modernHudLayerVisible["services.transport"] = _config.ServicesTransportVisible;
+            _modernHudLayerVisible["services.communication"] = _config.ServicesCommunicationVisible;
+
+            _modernHudLayerOpacity["zoning.residential"] = Mathf.Clamp01(_config.ZoningResidentialAlpha);
+            _modernHudLayerOpacity["zoning.commercial"] = Mathf.Clamp01(_config.ZoningCommercialAlpha);
+            _modernHudLayerOpacity["zoning.industrial"] = Mathf.Clamp01(_config.ZoningIndustrialAlpha);
+            _modernHudLayerOpacity["zoning.office"] = Mathf.Clamp01(_config.ZoningOfficeAlpha);
+            _modernHudLayerOpacity["parking"] = Mathf.Clamp01(_config.ParkingAlpha);
+            _modernHudLayerOpacity["roads.paths"] = Mathf.Clamp01((_config.RoadAlpha + _config.PathAlpha) * 0.5f);
+            _modernHudLayerOpacity["water"] = Mathf.Clamp01(_config.WaterLineAlpha);
+            _modernHudLayerOpacity["services.water"] = Mathf.Clamp01(_config.ServicesWaterAlpha);
+            _modernHudLayerOpacity["services.electricity"] = Mathf.Clamp01(_config.ServicesElectricityAlpha);
+            _modernHudLayerOpacity["services.education"] = Mathf.Clamp01(_config.ServicesEducationAlpha);
+            _modernHudLayerOpacity["services.fire"] = Mathf.Clamp01(_config.ServicesFireAlpha);
+            _modernHudLayerOpacity["services.health"] = Mathf.Clamp01(_config.ServicesHealthAlpha);
+            _modernHudLayerOpacity["services.parks"] = Mathf.Clamp01(_config.ServicesParksAlpha);
+            _modernHudLayerOpacity["services.waste"] = Mathf.Clamp01(_config.ServicesWasteAlpha);
+            _modernHudLayerOpacity["services.transport"] = Mathf.Clamp01(_config.ServicesTransportAlpha);
+            _modernHudLayerOpacity["services.communication"] = Mathf.Clamp01(_config.ServicesCommunicationAlpha);
+        }
+
+
+        private bool GetModernLayerVisible(string layerId)
+        {
+            if (_config == null)
+                return true;
+
+            switch (layerId)
+            {
+                case "zoning.residential": return _config.ZoningResidentialVisible;
+                case "zoning.commercial": return _config.ZoningCommercialVisible;
+                case "zoning.industrial": return _config.ZoningIndustrialVisible;
+                case "zoning.office": return _config.ZoningOfficeVisible;
+                case "parking": return _config.ParkingVisible;
+                case "roads": return _config.RenderRoads;
+                case "paths": return _config.RenderPaths;
+                case "roads.paths": return _config.RenderRoads && _config.RenderPaths;
+                case "water": return _config.RenderWaterLines && _config.RenderWaterAreas;
+                case "map.bounds": return _config.RenderMapBounds;
+                case "services.water": return _config.ServicesWaterVisible;
+                case "services.electricity": return _config.ServicesElectricityVisible;
+                case "services.education": return _config.ServicesEducationVisible;
+                case "services.fire": return _config.ServicesFireVisible;
+                case "services.health": return _config.ServicesHealthVisible;
+                case "services.parks": return _config.ServicesParksVisible;
+                case "services.waste": return _config.ServicesWasteVisible;
+                case "services.transport": return _config.ServicesTransportVisible;
+                case "services.communication": return _config.ServicesCommunicationVisible;
+            }
+
+            bool storedValue;
+
+            if (_modernHudLayerVisible.TryGetValue(layerId, out storedValue))
+                return storedValue;
+
+            _modernHudLayerVisible[layerId] = true;
+            return true;
+        }
+
+
+        private bool SetModernLayerVisible(string layerId, bool value)
+        {
+            _modernHudLayerVisible[layerId] = value;
+
+            if (_config == null)
+                return false;
+
+            switch (layerId)
+            {
+                case "zoning.residential": _config.ZoningResidentialVisible = value; if (value) _config.RenderZoning = true; return true;
+                case "zoning.commercial": _config.ZoningCommercialVisible = value; if (value) _config.RenderZoning = true; return true;
+                case "zoning.industrial": _config.ZoningIndustrialVisible = value; if (value) _config.RenderZoning = true; return true;
+                case "zoning.office": _config.ZoningOfficeVisible = value; if (value) _config.RenderZoning = true; return true;
+                case "parking": _config.ParkingVisible = value; if (value) _config.RenderZoning = true; return true;
+
+                case "roads":
+                    _config.RenderRoads = value;
+                    return true;
+
+                case "paths":
+                    _config.RenderPaths = value;
+                    return true;
+
+                case "roads.paths":
+                    _config.RenderRoads = value;
+                    _config.RenderPaths = value;
+                    return true;
+
+                case "water":
+                    _config.RenderWaterLines = value;
+                    _config.RenderWaterAreas = value;
+                    return true;
+
+                case "map.bounds":
+                    _config.RenderMapBounds = value;
+                    return true;
+
+                case "services.water": _config.ServicesWaterVisible = value; return true;
+                case "services.electricity": _config.ServicesElectricityVisible = value; return true;
+                case "services.education": _config.ServicesEducationVisible = value; return true;
+                case "services.fire": _config.ServicesFireVisible = value; return true;
+                case "services.health": _config.ServicesHealthVisible = value; return true;
+                case "services.parks": _config.ServicesParksVisible = value; return true;
+                case "services.waste": _config.ServicesWasteVisible = value; return true;
+                case "services.transport": _config.ServicesTransportVisible = value; return true;
+                case "services.communication": _config.ServicesCommunicationVisible = value; return true;
+            }
+
+            return false;
+        }
+
+
+        private float GetModernLayerOpacity(string layerId)
+        {
+            if (_config == null)
+                return 1f;
+
+            switch (layerId)
+            {
+                case "zoning.residential": return Mathf.Clamp01(_config.ZoningResidentialAlpha);
+                case "zoning.commercial": return Mathf.Clamp01(_config.ZoningCommercialAlpha);
+                case "zoning.industrial": return Mathf.Clamp01(_config.ZoningIndustrialAlpha);
+                case "zoning.office": return Mathf.Clamp01(_config.ZoningOfficeAlpha);
+                case "parking": return Mathf.Clamp01(_config.ParkingAlpha);
+                case "roads": return Mathf.Clamp01(_config.RoadAlpha);
+                case "paths": return Mathf.Clamp01(_config.PathAlpha);
+                case "roads.paths": return Mathf.Clamp01((_config.RoadAlpha + _config.PathAlpha) * 0.5f);
+                case "water": return Mathf.Clamp01(_config.WaterLineAlpha);
+                case "map.bounds": return Mathf.Clamp01(_config.MapBoundsAlpha);
+                case "services.water": return Mathf.Clamp01(_config.ServicesWaterAlpha);
+                case "services.electricity": return Mathf.Clamp01(_config.ServicesElectricityAlpha);
+                case "services.education": return Mathf.Clamp01(_config.ServicesEducationAlpha);
+                case "services.fire": return Mathf.Clamp01(_config.ServicesFireAlpha);
+                case "services.health": return Mathf.Clamp01(_config.ServicesHealthAlpha);
+                case "services.parks": return Mathf.Clamp01(_config.ServicesParksAlpha);
+                case "services.waste": return Mathf.Clamp01(_config.ServicesWasteAlpha);
+                case "services.transport": return Mathf.Clamp01(_config.ServicesTransportAlpha);
+                case "services.communication": return Mathf.Clamp01(_config.ServicesCommunicationAlpha);
+            }
+
+            float storedValue;
+
+            if (_modernHudLayerOpacity.TryGetValue(layerId, out storedValue))
+                return Mathf.Clamp01(storedValue);
+
+            _modernHudLayerOpacity[layerId] = 1f;
+            return 1f;
+        }
+
+
+        private bool SetModernLayerOpacity(string layerId, float value)
+        {
+            var safeValue = Mathf.Clamp01(value);
+            _modernHudLayerOpacity[layerId] = safeValue;
+
+            if (_config == null)
+                return false;
+
+            switch (layerId)
+            {
+                case "zoning.residential": _config.ZoningResidentialAlpha = safeValue; return true;
+                case "zoning.commercial": _config.ZoningCommercialAlpha = safeValue; return true;
+                case "zoning.industrial": _config.ZoningIndustrialAlpha = safeValue; return true;
+                case "zoning.office": _config.ZoningOfficeAlpha = safeValue; return true;
+                case "parking": _config.ParkingAlpha = safeValue; return true;
+
+                case "roads":
+                    _config.RoadAlpha = safeValue;
+                    return true;
+
+                case "paths":
+                    _config.PathAlpha = safeValue;
+                    return true;
+
+                case "roads.paths":
+                    _config.RoadAlpha = safeValue;
+                    _config.PathAlpha = safeValue;
+                    return true;
+
+                case "water":
+                    _config.WaterLineAlpha = safeValue;
+                    _config.WaterAreaOutlineAlpha = safeValue;
+                    _config.WaterAreaFillAlpha = safeValue;
+                    return true;
+
+                case "map.bounds":
+                    _config.MapBoundsAlpha = safeValue;
+                    return true;
+
+                case "services.water": _config.ServicesWaterAlpha = safeValue; return true;
+                case "services.electricity": _config.ServicesElectricityAlpha = safeValue; return true;
+                case "services.education": _config.ServicesEducationAlpha = safeValue; return true;
+                case "services.fire": _config.ServicesFireAlpha = safeValue; return true;
+                case "services.health": _config.ServicesHealthAlpha = safeValue; return true;
+                case "services.parks": _config.ServicesParksAlpha = safeValue; return true;
+                case "services.waste": _config.ServicesWasteAlpha = safeValue; return true;
+                case "services.transport": _config.ServicesTransportAlpha = safeValue; return true;
+                case "services.communication": _config.ServicesCommunicationAlpha = safeValue; return true;
+            }
+
+            return false;
+        }
+
+
+        private void DrawModernStatsTab()
+        {
+            var stats = _roadSemanticStats ?? new RoadSemanticStats();
+            var zero = "0";
+
+            GUILayout.BeginHorizontal();
+
+            GUILayout.BeginVertical();
+
+            BeginModernSubblock("Bâtiments résidentiels");
+            DrawModernStatRow("Résidentiel haute densité :", zero);
+            DrawModernStatRow("Résidentiel moyenne densité :", zero);
+            DrawModernStatRow("Résidentiel basse densité :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Commercial");
+            DrawModernStatRow("Commercial haute densité :", zero);
+            DrawModernStatRow("Commercial basse densité :", zero);
+            DrawModernStatRow("Commerce de détail :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Industrie");
+            DrawModernStatRow("Industrie :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Bureaux");
+            DrawModernStatRow("Bureaux :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Parkings");
+            DrawModernStatRow("Parking en ouvrage :", zero);
+            DrawModernStatRow("Parking de surface :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Routes et chemins");
+            DrawModernStatRow("Autoroute :", zero);
+            DrawModernStatRow("Axe principal :", zero);
+            DrawModernStatRow("Route secondaire :", zero);
+            DrawModernStatRow("Route tertiaire / résidentielle :", zero);
+            DrawModernStatRow("Bretelle / liaison :", zero);
+            DrawModernStatRow("Routes chargées :", stats.Roads.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            DrawModernStatRow("Chemin / piéton :", stats.Paths.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            DrawModernStatRow("Total routes + chemins :", stats.Total.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            EndModernSubblock();
+
+            BeginModernSubblock("Hydrographie");
+            DrawModernStatRow("Cours d'eau / rivières :", zero);
+            DrawModernStatRow("Plans d'eau / surfaces :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Eau et égouts");
+            DrawModernStatRow("Pompage :", zero);
+            DrawModernStatRow("Traitement de l'eau :", zero);
+            DrawModernStatRow("Égouts :", zero);
+            DrawModernStatRow("Traitement des eaux usées :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Électricité");
+            DrawModernStatRow("Production électrique :", zero);
+            DrawModernStatRow("Transformation :", zero);
+            DrawModernStatRow("Stockage :", zero);
+            DrawModernStatRow("Réseau électrique :", zero);
+            EndModernSubblock();
+
+            GUILayout.EndVertical();
+
+            GUILayout.BeginVertical();
+
+            BeginModernSubblock("Éducation et recherche");
+            DrawModernStatRow("École primaire :", zero);
+            DrawModernStatRow("Collège / lycée :", zero);
+            DrawModernStatRow("Université :", zero);
+            DrawModernStatRow("Recherche :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Sapeurs-pompiers");
+            DrawModernStatRow("Caserne locale :", zero);
+            DrawModernStatRow("Grande caserne :", zero);
+            DrawModernStatRow("Surveillance / secours spécialisés :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Services médicaux et soins mortuaires");
+            DrawModernStatRow("Clinique :", zero);
+            DrawModernStatRow("Hôpital :", zero);
+            DrawModernStatRow("Crématorium :", zero);
+            DrawModernStatRow("Cimetière :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Parcs et loisirs");
+            DrawModernStatRow("Parc local :", zero);
+            DrawModernStatRow("Grand parc :", zero);
+            DrawModernStatRow("Sport :", zero);
+            DrawModernStatRow("Loisirs :", zero);
+            DrawModernStatRow("Tourisme :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Gestion des déchets");
+            DrawModernStatRow("Collecte :", zero);
+            DrawModernStatRow("Recyclage :", zero);
+            DrawModernStatRow("Traitement :", zero);
+            DrawModernStatRow("Décharge / stockage :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Transports");
+            DrawModernStatRow("Bus :", zero);
+            DrawModernStatRow("Tram :", zero);
+            DrawModernStatRow("Train :", zero);
+            DrawModernStatRow("Métro :", zero);
+            DrawModernStatRow("Taxi :", zero);
+            DrawModernStatRow("Aérien :", zero);
+            DrawModernStatRow("Maritime :", zero);
+            EndModernSubblock();
+
+            BeginModernSubblock("Communications");
+            DrawModernStatRow("Poste :", zero);
+            DrawModernStatRow("Télécommunications :", zero);
+            DrawModernStatRow("Serveurs / data center :", zero);
+            DrawModernStatRow("Radio / antennes :", zero);
+            EndModernSubblock();
+
+            GUILayout.EndVertical();
+
+            GUILayout.EndHorizontal();
+
+            if (DrawModernFoldout("Performance overlay", ref _modernHudShowPerformance))
+            {
+                BeginModernSubblock("Performance overlay");
+                DrawModernPerformanceSection();
+                EndModernSubblock();
+            }
+
+            if (DrawModernFoldout("Statistiques routes détaillées", ref _modernHudShowDetailedRouteStats))
+            {
+                BeginModernSubblock("Statistiques routes détaillées");
+                DrawRoadSemanticStatsSection();
+                EndModernSubblock();
+            }
+        }
+
+
+        private void DrawModernPerformanceSection()
+        {
+            if (_config == null)
+            {
+                GUILayout.Label("Configuration indisponible.");
+                return;
+            }
+
+            if (DrawIntSlider("Budget zonage", ref _config.MaxZoningFillMeshesDebug, 0, 20000))
+                _controlPanelRebuildPending = true;
+
+            if (DrawIntSlider("Budget routes", ref _config.MaxRoadSegmentsDebug, 1000, 800000))
+                _controlPanelRebuildPending = true;
+
+            if (DrawIntSlider("Budget chemins", ref _config.MaxPathSegmentsDebug, 1000, 800000))
+                _controlPanelRebuildPending = true;
+
+            if (DrawIntSlider("Budget eau segments", ref _config.MaxWaterSegmentsDebug, 1000, 400000))
+                _controlPanelRebuildPending = true;
+
+            if (DrawIntSlider("Budget eau surfaces", ref _config.MaxWaterAreaFillMeshesDebug, 0, 2000))
+                _controlPanelRebuildPending = true;
+
+            if (DrawIntSlider("Niveau routes", ref _config.MinimumRoadDebugTier, 0, 4))
+                _controlPanelRebuildPending = true;
+
+            if (DrawIntSlider("Pas / pointStride", ref _config.PointStride, 1, 20))
+                _controlPanelRebuildPending = true;
+        }
+
+
+        private void DrawModernCalibrationTab(ref ModernHudChangeState changes)
+        {
+            BeginModernSubblock("Calage avancé");
+
+            _controlPanelCalibrationUnlocked = GUILayout.Toggle(
+                _controlPanelCalibrationUnlocked,
+                "Déverrouiller le calage"
+            );
+
+            if (!_controlPanelCalibrationUnlocked)
+            {
+                GUILayout.Label("Calage verrouillé.");
+                EndModernSubblock();
+                return;
+            }
+
+            GUILayout.BeginHorizontal();
+
+            GUILayout.BeginVertical();
+
+            if (DrawModernFloatMeter(
+                "Offset X",
+                ref _config.WorldOriginX,
+                -5000f,
+                5000f,
+                0.1f,
+                "0.0",
+                "-5000",
+                "-2500",
+                "0",
+                "2500",
+                "5000"
+            ))
+                changes.RebuildPending = true;
+
+            if (DrawModernFloatMeter(
+                "Offset Z",
+                ref _config.WorldOriginZ,
+                -5000f,
+                5000f,
+                0.1f,
+                "0.0",
+                "-5000",
+                "-2500",
+                "0",
+                "2500",
+                "5000"
+            ))
+                changes.RebuildPending = true;
+
+            if (DrawModernFloatMeter(
+                "Rotation degrés",
+                ref _config.OverlayRotationDegrees,
+                -30f,
+                30f,
+                0.01f,
+                "0.00",
+                "-30",
+                "-15",
+                "0",
+                "15",
+                "30"
+            ))
+                changes.RebuildPending = true;
+
+            GUILayout.EndVertical();
+
+            GUILayout.BeginVertical();
+
+            if (DrawModernFloatMeter(
+                "Scale X",
+                ref _config.OverlayScaleX,
+                0.5f,
+                1.5f,
+                0.001f,
+                "0.000",
+                "0.5",
+                "0.75",
+                "1.0",
+                "1.25",
+                "1.5"
+            ))
+                changes.RebuildPending = true;
+
+            if (DrawModernFloatMeter(
+                "Scale Z",
+                ref _config.OverlayScaleZ,
+                0.5f,
+                1.5f,
+                0.001f,
+                "0.000",
+                "0.5",
+                "0.75",
+                "1.0",
+                "1.25",
+                "1.5"
+            ))
+                changes.RebuildPending = true;
+
+            if (DrawModernFloatMeter(
+                "Ground margin",
+                ref _config.GroundMargin,
+                0f,
+                600f,
+                1f,
+                "0",
+                "0",
+                "150",
+                "300",
+                "450",
+                "600"
+            ))
+                changes.RebuildPending = true;
+
+            GUILayout.EndVertical();
+
+            GUILayout.EndHorizontal();
+
+            EndModernSubblock();
+        }
+
+
+        private void DrawModernFooter()
+        {
+            GUILayout.BeginVertical(_hudFooterStyle);
+
+            GUILayout.BeginHorizontal();
+
+            if (GUILayout.Button(_controlPanelRebuildPending ? "Appliquer / reconstruire *" : "Appliquer / reconstruire", GUILayout.Height(28f)))
             {
                 var hadPendingChanges = _controlPanelRebuildPending;
                 _controlPanelRebuildPending = false;
@@ -350,7 +1346,7 @@ namespace CityTimelineMod.Rendering
                 RequestOverlayRebuild("HUD apply", true);
             }
 
-            if (GUILayout.Button("Fermer"))
+            if (GUILayout.Button("Fermer", GUILayout.Height(28f)))
             {
                 _config.ShowOverlayHud = false;
                 _controlPanelLogOnce = false;
@@ -359,11 +1355,9 @@ namespace CityTimelineMod.Rendering
 
             GUILayout.EndHorizontal();
 
-            GUILayout.Space(4f);
-
             GUILayout.BeginHorizontal();
 
-            if (GUILayout.Button("Sauvegarder visuels"))
+            if (GUILayout.Button("Sauvegarder visuels", GUILayout.Height(28f)))
             {
                 _config.SaveVisualSettingsToConfig();
                 _visualSettingsDirty = false;
@@ -371,30 +1365,45 @@ namespace CityTimelineMod.Rendering
                 Log.Info("GroundOverlay HUD panel: visual settings saved from HUD.");
             }
 
-            if (GUILayout.Button("Recharger visuels"))
+            if (GUILayout.Button("Recharger visuels", GUILayout.Height(28f)))
             {
                 _config.LoadVisualSettingsFromConfig();
                 SyncVisibilityStateFromConfig();
-                _currentDisplayPresetLabel = "Config";
+                SyncModernLayerStateFromConfig();
                 _visualSettingsDirty = false;
                 _visualSettingsStatusMessage = "Visuels rechargés depuis config.json.";
                 _controlPanelRebuildPending = false;
-Log.Info("GroundOverlay HUD panel: visual settings reloaded from config.");
-ApplyOverlayRebuildSafetyGuard("HUD reload visual settings");
-RequestOverlayRebuild("HUD reload visual settings", true);
+
+                Log.Info("GroundOverlay HUD panel: visual settings reloaded from config.");
+
+                ApplyOverlayRebuildSafetyGuard("HUD reload visual settings");
+                RequestOverlayRebuild("HUD reload visual settings", true);
             }
 
             GUILayout.EndHorizontal();
 
-            GUILayout.Space(4f);
             if (_controlPanelRebuildPending)
+            {
+                var previousColor = GUI.contentColor;
+                GUI.contentColor = HudTextMuted;
                 GUILayout.Label("Changement en attente : cliquer Appliquer / reconstruire.");
-            GUILayout.Label("Live HUD — sauvegarde visuelle optionnelle.");
+                GUI.contentColor = previousColor;
+            }
 
-            if (visibilityChanged)
+            GUILayout.EndVertical();
+        }
+
+
+        private void ApplyModernHudChanges(ModernHudChangeState changes)
+        {
+            if (changes.RebuildPending)
+                _controlPanelRebuildPending = true;
+
+            if (changes.VisibilityChanged)
             {
                 SyncVisibilityStateFromConfig();
                 MarkVisualSettingsDirty("Couches modifiées — non sauvegardées.");
+
                 Log.Info(
                     "GroundOverlay HUD panel: visibility changed " +
                     "zoning=" + _config.RenderZoning +
@@ -404,18 +1413,16 @@ RequestOverlayRebuild("HUD reload visual settings", true);
                     ", waterAreas=" + _config.RenderWaterAreas +
                     ", bounds=" + _config.RenderMapBounds
                 );
+
                 ApplyCurrentOverlayVisibilityToMaterials();
             }
-            else if (alphaChanged)
+            else if (changes.AlphaChanged)
             {
                 MarkVisualSettingsDirty("Transparence modifiée — non sauvegardée.");
                 ApplyCurrentOverlayVisibilityToMaterials();
             }
-
-            GUILayout.EndScrollView();
-
-            GUI.DragWindow(new Rect(0f, 0f, 10000f, 24f));
         }
+
 
         private void DrawBundleSelector()
         {
@@ -545,6 +1552,7 @@ RequestOverlayRebuild("HUD reload visual settings", true);
             _pendingBundleReloadId = null;
 
             Log.Info("GroundOverlay HUD bundle selector: executing reload id=" + bundleId);
+
             CityTimelineMod.GeoBundleBootstrap.ReloadActiveBundle(bundleId);
         }
 
@@ -558,7 +1566,7 @@ RequestOverlayRebuild("HUD reload visual settings", true);
             return string.IsNullOrWhiteSpace(value) ? "(empty)" : value;
         }
 
-                private bool ApplyOverlayRebuildSafetyGuard(string reason)
+        private bool ApplyOverlayRebuildSafetyGuard(string reason)
         {
             Log.Info("GroundOverlay HUD safety guard disabled: DEV FULL overlay mode. reason=" + SafeLogValue(reason));
             return false;
@@ -622,130 +1630,13 @@ RequestOverlayRebuild("HUD reload visual settings", true);
             GUILayout.Label("Ronds-points : " + stats.Roundabouts);
         }
 
-        private void DrawRuntimeRoadImportSection()
-        {
-            if (_config == null)
-                return;
-
-            GUILayout.Space(8f);
-            GUILayout.Label("Import routes CS2");
-            GUILayout.Label(RuntimeRoadSpawner.GetCacheStatusText());
-            GUILayout.Label("Garde-fou runtimeRoadImportEnabled : " + _config.RuntimeRoadImportEnabled);
-            GUILayout.Label("runOnce : " + _config.RuntimeRoadImportRunOnce);
-            GUILayout.Label("Pipeline : " + SafeHudValue(_config.RuntimeRoadImportPipelineMode));
-
-            DrawLayerToggle("Autoriser import runtime", ref _config.RuntimeRoadImportEnabled);
-            DrawLayerToggle("Refuser un second import identique", ref _config.RuntimeRoadImportRunOnce);
-            DrawLayerToggle("Afficher progression runtime HUD", ref _config.RuntimeRoadImportShowProgressInHud);
-            DrawLayerToggle("Logs sélection import verbose", ref _config.RuntimeRoadImportVerboseSelectionLogs);
-
-            DrawIntSlider("Max segments import (0 = illimité)", ref _config.RuntimeRoadImportMaxSegments, 0, 1000000);
-            DrawIntSlider("Batch import runtime", ref _config.RuntimeRoadImportBatchSize, 1, 4096);
-
-            GUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Pipeline confirmed-fast-flush"))
-            {
-                _config.RuntimeRoadImportPipelineMode = "confirmed-fast-flush";
-                MarkVisualSettingsDirty("Pipeline import runtime = confirmed-fast-flush.");
-            }
-
-            if (GUILayout.Button("Pipeline batch-safe"))
-            {
-                _config.RuntimeRoadImportPipelineMode = "batch-safe";
-                MarkVisualSettingsDirty("Pipeline import runtime = batch-safe.");
-            }
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Pipeline legacy-fast-flush"))
-            {
-                _config.RuntimeRoadImportPipelineMode = "legacy-fast-flush";
-                MarkVisualSettingsDirty("Pipeline import runtime = legacy-fast-flush.");
-            }
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.Label("Batch : 64 qualité / 128-256 compromis / 512+ rapide.");
-            GUILayout.Label("confirmed-fast-flush = chunks bornés ; legacy-fast-flush = transaction massive expérimentale.");
-            GUILayout.Label("Mode import : " + SafeHudValue(_config.RuntimeRoadImportSelectionMode));
-            GUILayout.Label("Source : " + SafeHudValue(_config.RuntimeRoadImportSourceFilter));
-            GUILayout.Label("Highway : " + SafeHudValue(_config.RuntimeRoadImportHighwayFilter));
-            GUILayout.Label("Stage : " + SafeHudValue(_config.RuntimeRoadImportStageFilter));
-            GUILayout.Label("Distance bucket : " + _config.RuntimeRoadImportDistanceBucketMeters.ToString("0"));
-            GUILayout.Label("0 = illimité / tous les segments éligibles du bundle.");
-
-            if (_config.RuntimeRoadImportShowProgressInHud)
-            {
-                GUILayout.Space(4f);
-                GUILayout.Label(RuntimeRoadSpawner.GetRuntimeImportHudText());
-            }
-
-            GUILayout.Space(4f);
-            GUILayout.Label("Filtres rapides import runtime");
-
-            GUILayout.BeginHorizontal();
-            DrawRuntimeImportFilterButton("Toutes routes", "roads", "all", "all");
-            DrawRuntimeImportFilterButton("Primary", "roads", "primary", "all");
-            DrawRuntimeImportFilterButton("Secondary", "roads", "secondary", "all");
-            DrawRuntimeImportFilterButton("Tertiary", "roads", "tertiary", "all");
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            DrawRuntimeImportFilterButton("Primary+Secondary", "roads", "primary,secondary", "all");
-            DrawRuntimeImportFilterButton("Backbone", "roads", "primary,secondary,trunk,motorway", "backbone");
-            DrawRuntimeImportFilterButton("Urbain", "roads", "primary,secondary,tertiary,residential", "urban");
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            DrawRuntimeImportFilterButton("Residential", "roads", "residential", "all");
-            DrawRuntimeImportFilterButton("Service", "roads", "service", "all");
-            DrawRuntimeImportFilterButton("Chemins voir cache", "paths", "footway,cycleway,path", "all");
-            GUILayout.EndHorizontal();
-
-            var previousGuiEnabled = GUI.enabled;
-            GUI.enabled = previousGuiEnabled && _config.RuntimeRoadImportEnabled;
-
-            if (GUILayout.Button("Importer routes runtime"))
-                RuntimeRoadSpawner.ImportCachedRoadLinesNow();
-
-            GUI.enabled = previousGuiEnabled;
-
-            if (!_config.RuntimeRoadImportEnabled)
-                GUILayout.Label("Import bloque : runtimeRoadImportEnabled=false.");
-
-            GUI.enabled = false;
-            GUILayout.Button("Undo import routes runtime (désactivé — non sûr)");
-            GUI.enabled = previousGuiEnabled;
-            GUILayout.Label("Undo désactivé : suppression directe des entités réseau non sûre.");
-
-            if (GUILayout.Button("Diagnostic contenu GeoJSON routes"))
-                RuntimeRoadSpawner.DumpCachedRoadContentDiagnostics(30);
-
-            if (GUILayout.Button("Diagnostic prefabs vanilla routes"))
-                RuntimeRoadSpawner.DumpVanillaRoadPrefabDiagnostics(200);
-
-            if (GUILayout.Button("Diagnostic noms exacts prefabs routes"))
-                RuntimeRoadSpawner.DumpExactRoadPrefabNameDiagnostics(200);
-
-            if (GUILayout.Button("Diagnostic mapping import routes"))
-                RuntimeRoadSpawner.DumpCachedRoadImportMappingDiagnostics(50);
-
-            if (GUILayout.Button("Diagnostic routes importées"))
-                RuntimeRoadSpawner.DumpImportedRoadDiagnostics(20);
-
-            if (GUILayout.Button("Diagnostic routes vanilla placées"))
-                RuntimeRoadSpawner.DumpNearbyVanillaRoadDiagnostics(30, 10000f);
-        }
-
         private void DrawExhaustiveRenderSection()
         {
             GUILayout.Space(12f);
             GUILayout.Label("Rendu exhaustif");
 
             var changed = false;
+
             changed |= DrawLayerToggle("Rendu exhaustif global", ref _config.RenderEverything);
             changed |= DrawLayerToggle("Toutes routes", ref _config.RenderAllRoadSegments);
             changed |= DrawLayerToggle("Tous chemins", ref _config.RenderAllPathSegments);
@@ -768,6 +1659,7 @@ RequestOverlayRebuild("HUD reload visual settings", true);
             GUILayout.Label("Rendu chemins : " + ResolveRoadRenderMode(_config.PathRenderMode));
 
             var changed = false;
+
             changed |= DrawLayerToggle("Chunking spatial routes", ref _config.EnableRoadSpatialChunking);
             changed |= DrawLayerToggle("Rebuild progressif", ref _config.EnableProgressiveOverlayRebuild);
             changed |= DrawLayerToggle("Largeur selon voies", ref _config.UseLaneWidthScaling);
@@ -823,29 +1715,6 @@ RequestOverlayRebuild("HUD reload visual settings", true);
             GUILayout.EndHorizontal();
         }
 
-        private void DrawRuntimeImportFilterButton(string label, string source, string highway, string stage)
-        {
-            var active =
-                string.Equals(_config.RuntimeRoadImportSourceFilter, source, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(_config.RuntimeRoadImportHighwayFilter, highway, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(_config.RuntimeRoadImportStageFilter, stage, StringComparison.OrdinalIgnoreCase);
-
-            var buttonLabel = active ? "[" + label + "]" : label;
-
-            if (!GUILayout.Button(buttonLabel))
-                return;
-
-            _config.RuntimeRoadImportSourceFilter = source;
-            _config.RuntimeRoadImportHighwayFilter = highway;
-            _config.RuntimeRoadImportStageFilter = stage;
-
-            Log.Info(
-                "HUD runtime import filter changed: source=" + SafeLogValue(source) +
-                ", highway=" + SafeLogValue(highway) +
-                ", stage=" + SafeLogValue(stage)
-            );
-        }
-
         private void DrawRoadSemanticFilterButton(string label, string mode)
         {
             var active = string.Equals(_config.RoadSemanticFilterMode, mode, StringComparison.OrdinalIgnoreCase);
@@ -862,7 +1731,6 @@ RequestOverlayRebuild("HUD reload visual settings", true);
         private void DrawVisualSettingsStatus()
         {
             GUILayout.Space(6f);
-            GUILayout.Label("Preset live : " + _currentDisplayPresetLabel);
 
             var status = _visualSettingsDirty
                 ? "Modifié non sauvegardé"
@@ -902,186 +1770,8 @@ RequestOverlayRebuild("HUD reload visual settings", true);
             }
         }
 
-        private void DrawDisplayPresetButtons()
-        {
-            GUILayout.Label("Presets affichage");
-
-            GUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Debug complet"))
-                ApplyDisplayPreset("debug");
-
-            if (GUILayout.Button("Lisible"))
-                ApplyDisplayPreset("readable");
-
-            if (GUILayout.Button("Routes"))
-                ApplyDisplayPreset("roads");
-
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-
-            if (GUILayout.Button("Eau"))
-                ApplyDisplayPreset("water");
-
-            if (GUILayout.Button("Zoning"))
-                ApplyDisplayPreset("zoning");
-
-            if (GUILayout.Button("Bounds"))
-                ApplyDisplayPreset("bounds");
-
-            GUILayout.EndHorizontal();
-        }
-
-        private void SetWaterRenderFlags(bool visible)
-        {
-            if (_config == null)
-                return;
-
-            _config.RenderWaterLines = visible;
-            _config.RenderWaterAreas = visible;
-            _config.RenderWaterAreaOutlines = visible;
-            _config.RenderWaterAreaFillMeshes = visible;
-        }
-
-        private void ApplyDisplayPreset(string preset)
-        {
-            if (_config == null)
-                return;
-
-            var normalized = string.IsNullOrWhiteSpace(preset)
-                ? string.Empty
-                : preset.Trim().ToLowerInvariant();
-
-            switch (normalized)
-            {
-                case "debug":
-                    _config.RenderZoning = true;
-                    _config.RenderRoads = true;
-                    _config.RenderPaths = true;
-                    SetWaterRenderFlags(true);
-                    _config.RenderMapBounds = true;
-
-                    _config.ZoningAlpha = 0.25f;
-                    _config.RoadAlpha = 0.75f;
-                    _config.PathAlpha = 0.55f;
-                    _config.WaterLineAlpha = 0.75f;
-                    _config.WaterAreaOutlineAlpha = 0.75f;
-                    _config.WaterAreaFillAlpha = 0.25f;
-                    _config.MapBoundsAlpha = 0.95f;
-                    break;
-
-                case "readable":
-                    _config.RenderZoning = true;
-                    _config.RenderRoads = true;
-                    _config.RenderPaths = true;
-                    SetWaterRenderFlags(true);
-                    _config.RenderMapBounds = true;
-
-                    _config.ZoningAlpha = 0.05f;
-                    _config.RoadAlpha = 0.20f;
-                    _config.PathAlpha = 0.35f;
-                    _config.WaterLineAlpha = 0.20f;
-                    _config.WaterAreaOutlineAlpha = 0.20f;
-                    _config.WaterAreaFillAlpha = 0.05f;
-                    _config.MapBoundsAlpha = 0.85f;
-                    break;
-
-                case "roads":
-                    _config.RenderZoning = false;
-                    _config.RenderRoads = true;
-                    _config.RenderPaths = true;
-                    SetWaterRenderFlags(false);
-                    _config.RenderMapBounds = true;
-
-                    _config.RoadAlpha = 0.75f;
-                    _config.PathAlpha = 0.55f;
-                    _config.MapBoundsAlpha = 0.60f;
-                    break;
-
-                case "water":
-                    _config.RenderZoning = false;
-                    _config.RenderRoads = false;
-                    _config.RenderPaths = false;
-                    SetWaterRenderFlags(true);
-                    _config.RenderMapBounds = true;
-
-                    _config.WaterLineAlpha = 0.80f;
-                    _config.WaterAreaOutlineAlpha = 0.80f;
-                    _config.WaterAreaFillAlpha = 0.22f;
-                    _config.MapBoundsAlpha = 0.60f;
-                    break;
-
-                case "zoning":
-                    _config.RenderZoning = true;
-                    _config.RenderRoads = false;
-                    _config.RenderPaths = false;
-                    SetWaterRenderFlags(false);
-                    _config.RenderMapBounds = true;
-
-                    _config.ZoningAlpha = 0.18f;
-                    _config.MapBoundsAlpha = 0.60f;
-                    break;
-
-                case "bounds":
-                    _config.RenderZoning = false;
-                    _config.RenderRoads = false;
-                    _config.RenderPaths = false;
-                    SetWaterRenderFlags(false);
-                    _config.RenderMapBounds = true;
-
-                    _config.MapBoundsAlpha = 0.95f;
-                    break;
-
-                default:
-                    Log.Info("GroundOverlay HUD panel: unknown display preset=" + preset);
-                    return;
-            }
-
-            SyncVisibilityStateFromConfig();
-            _controlPanelRebuildPending = false;
-            _currentDisplayPresetLabel = ResolveDisplayPresetLabel(normalized);
-            _visualSettingsDirty = true;
-            _visualSettingsStatusMessage = "Preset appliqué — non sauvegardé.";
-
-            Log.Info(
-                "GroundOverlay HUD panel: display preset applied=" + normalized +
-                ", zoning=" + _config.RenderZoning +
-                ", roads=" + _config.RenderRoads +
-                ", paths=" + _config.RenderPaths +
-                ", waterLines=" + _config.RenderWaterLines +
-                ", waterAreas=" + _config.RenderWaterAreas +
-                ", bounds=" + _config.RenderMapBounds
-            );
-
-            ApplyOverlayRebuildSafetyGuard("HUD display preset: " + normalized);
-            RequestOverlayRebuild("HUD display preset: " + normalized, true);
-        }
-
-        private static string ResolveDisplayPresetLabel(string preset)
-        {
-            switch (preset)
-            {
-                case "debug":
-                    return "Debug complet";
-                case "readable":
-                    return "Lisible";
-                case "roads":
-                    return "Routes";
-                case "water":
-                    return "Eau";
-                case "zoning":
-                    return "Zoning";
-                case "bounds":
-                    return "Bounds";
-                default:
-                    return "Custom";
-            }
-        }
-
         private void MarkVisualSettingsDirty(string message)
         {
-            _currentDisplayPresetLabel = "Custom";
             _visualSettingsDirty = true;
             _visualSettingsStatusMessage = string.IsNullOrWhiteSpace(message)
                 ? "Modifié non sauvegardé"
@@ -1091,6 +1781,7 @@ RequestOverlayRebuild("HUD reload visual settings", true);
         private static bool DrawLayerToggle(string label, ref bool value)
         {
             var next = GUILayout.Toggle(value, label);
+
             if (next == value)
                 return false;
 

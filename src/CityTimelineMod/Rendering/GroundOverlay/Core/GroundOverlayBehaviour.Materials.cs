@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CityTimelineMod.Rendering.Materials;
 using UnityEngine;
 
@@ -5,6 +6,12 @@ namespace CityTimelineMod.Rendering
 {
     internal sealed partial class GroundOverlayBehaviour
     {
+        private readonly List<Material> _zoningResidentialFamilyMaterials = new List<Material>();
+        private readonly List<Material> _zoningCommercialFamilyMaterials = new List<Material>();
+        private readonly List<Material> _zoningIndustrialFamilyMaterials = new List<Material>();
+        private readonly List<Material> _zoningOfficeFamilyMaterials = new List<Material>();
+        private readonly List<Material> _zoningParkingFamilyMaterials = new List<Material>();
+        private readonly List<Material> _zoningFallbackFamilyMaterials = new List<Material>();
         private OverlayRenderMaterials CreateOverlayRenderMaterials()
         {
             var materials = new OverlayRenderMaterials();
@@ -68,6 +75,21 @@ namespace CityTimelineMod.Rendering
 
             _pathMaterials.Add(materials.Path);
 
+            _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialLow);
+            _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialMedium);
+            _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialHigh);
+
+            _zoningCommercialFamilyMaterials.Add(materials.ZoningCommercialLow);
+            _zoningCommercialFamilyMaterials.Add(materials.ZoningRetailDetail);
+
+            _zoningIndustrialFamilyMaterials.Add(materials.ZoningIndustrial);
+            _zoningOfficeFamilyMaterials.Add(materials.ZoningOffice);
+
+            _zoningParkingFamilyMaterials.Add(materials.ZoningSurface);
+            _zoningParkingFamilyMaterials.Add(materials.ZoningRamp);
+
+            _zoningFallbackFamilyMaterials.Add(materials.ZoningFallback);
+
             _zoningMaterials.Add(materials.ZoningResidentialLow);
             _zoningMaterials.Add(materials.ZoningResidentialMedium);
             _zoningMaterials.Add(materials.ZoningResidentialHigh);
@@ -82,6 +104,7 @@ namespace CityTimelineMod.Rendering
             return materials;
         }
 
+
         private void ClearOverlayMaterialRegistries()
         {
             _zoningMaterials.Clear();
@@ -92,14 +115,134 @@ namespace CityTimelineMod.Rendering
             _waterAreaFillMaterials.Clear();
             _mapBoundsMaterials.Clear();
             _roadLabelMeshes.Clear();
+
+            _zoningResidentialFamilyMaterials.Clear();
+            _zoningCommercialFamilyMaterials.Clear();
+            _zoningIndustrialFamilyMaterials.Clear();
+            _zoningOfficeFamilyMaterials.Clear();
+            _zoningParkingFamilyMaterials.Clear();
+            _zoningFallbackFamilyMaterials.Clear();
         }
+
 
         private void ApplyCurrentOverlayVisibilityToMaterials()
         {
-            OverlayVisibilityApplier.ApplyZoningVisibility(_zoningMaterials, _zoningVisible, _config.ZoningAlpha);
-            OverlayVisibilityApplier.ApplyRoadVisibility(_roadMaterials, _pathMaterials, _config.RenderRoads, _config.RenderPaths, _config.RoadAlpha, _config.PathAlpha);
-            OverlayVisibilityApplier.ApplyWaterVisibility(_waterLineMaterials, _waterAreaOutlineMaterials, _waterAreaFillMaterials, _waterVisible, _config.WaterLineAlpha, _config.WaterAreaOutlineAlpha, _config.WaterAreaFillAlpha);
-            OverlayVisibilityApplier.ApplyMapBoundsVisibility(_mapBoundsMaterials, _config.RenderMapBounds, _config.MapBoundsAlpha);
+            ApplyZoningFamilyVisibilityToMaterials();
+
+            OverlayVisibilityApplier.ApplyRoadVisibility(
+                _roadMaterials,
+                _pathMaterials,
+                _config.RenderRoads,
+                _config.RenderPaths,
+                _config.RoadAlpha,
+                _config.PathAlpha
+            );
+
+            OverlayVisibilityApplier.ApplyWaterVisibility(
+                _waterLineMaterials,
+                _waterAreaOutlineMaterials,
+                _waterAreaFillMaterials,
+                _waterVisible,
+                _config.WaterLineAlpha,
+                _config.WaterAreaOutlineAlpha,
+                _config.WaterAreaFillAlpha
+            );
+
+            OverlayVisibilityApplier.ApplyMapBoundsVisibility(
+                _mapBoundsMaterials,
+                _config.RenderMapBounds,
+                _config.MapBoundsAlpha
+            );
         }
+
+        private void ApplyZoningFamilyVisibilityToMaterials()
+        {
+            if (_config == null)
+                return;
+
+            var zoningMasterVisible = _config.RenderZoning && _zoningVisible;
+
+            ApplyMaterialGroupAlpha(
+                _zoningResidentialFamilyMaterials,
+                zoningMasterVisible && ResolveModernLayerVisibleForMaterials("zoning.residential", _config.ZoningResidentialVisible),
+                ResolveModernLayerAlphaForMaterials("zoning.residential", _config.ZoningResidentialAlpha)
+            );
+
+            ApplyMaterialGroupAlpha(
+                _zoningCommercialFamilyMaterials,
+                zoningMasterVisible && ResolveModernLayerVisibleForMaterials("zoning.commercial", _config.ZoningCommercialVisible),
+                ResolveModernLayerAlphaForMaterials("zoning.commercial", _config.ZoningCommercialAlpha)
+            );
+
+            ApplyMaterialGroupAlpha(
+                _zoningIndustrialFamilyMaterials,
+                zoningMasterVisible && ResolveModernLayerVisibleForMaterials("zoning.industrial", _config.ZoningIndustrialVisible),
+                ResolveModernLayerAlphaForMaterials("zoning.industrial", _config.ZoningIndustrialAlpha)
+            );
+
+            ApplyMaterialGroupAlpha(
+                _zoningOfficeFamilyMaterials,
+                zoningMasterVisible && ResolveModernLayerVisibleForMaterials("zoning.office", _config.ZoningOfficeVisible),
+                ResolveModernLayerAlphaForMaterials("zoning.office", _config.ZoningOfficeAlpha)
+            );
+
+            ApplyMaterialGroupAlpha(
+                _zoningParkingFamilyMaterials,
+                zoningMasterVisible && ResolveModernLayerVisibleForMaterials("parking", _config.ParkingVisible),
+                ResolveModernLayerAlphaForMaterials("parking", _config.ParkingAlpha)
+            );
+
+            ApplyMaterialGroupAlpha(
+                _zoningFallbackFamilyMaterials,
+                zoningMasterVisible,
+                _config.ZoningAlpha
+            );
+        }
+
+
+        private bool ResolveModernLayerVisibleForMaterials(string layerId, bool fallback)
+        {
+            bool value;
+
+            if (_modernHudLayerVisible != null && _modernHudLayerVisible.TryGetValue(layerId, out value))
+                return value;
+
+            return fallback;
+        }
+
+        private float ResolveModernLayerAlphaForMaterials(string layerId, float fallback)
+        {
+            float value;
+
+            if (_modernHudLayerOpacity != null && _modernHudLayerOpacity.TryGetValue(layerId, out value))
+                return Mathf.Clamp01(value);
+
+            return Mathf.Clamp01(fallback);
+        }
+
+        private static void ApplyMaterialGroupAlpha(List<Material> materials, bool visible, float alpha)
+        {
+            if (materials == null)
+                return;
+
+            var targetAlpha = visible ? Mathf.Clamp01(alpha) : 0f;
+
+            for (var i = 0; i < materials.Count; i++)
+            {
+                var material = materials[i];
+
+                if (material == null)
+                    continue;
+
+                var color = material.color;
+
+                if (Mathf.Abs(color.a - targetAlpha) < 0.0001f)
+                    continue;
+
+                color.a = targetAlpha;
+                material.color = color;
+            }
+        }
+
     }
 }

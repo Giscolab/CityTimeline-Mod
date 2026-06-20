@@ -70,6 +70,7 @@ namespace CityTimelineMod.Rendering
             _zoningVisible = _config.RenderZoning;
             _roadsVisible = _config.RenderRoads || _config.RenderPaths;
             _waterVisible = _config.RenderWaterLines || _config.RenderWaterAreas;
+            SyncModernLayerStateFromConfig();
         }
 
         private void HandleOverlayVisibilityInput()

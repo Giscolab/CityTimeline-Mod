@@ -124,6 +124,38 @@ internal bool RenderZoning = true;
                 internal float WaterLineYOffset = 0.35f;
                 internal float WaterAreaOutlineYOffset = 0.30f;
                 internal float ZoningAlpha = 0.28f;
+
+                internal bool ZoningResidentialVisible = true;
+                internal bool ZoningCommercialVisible = true;
+                internal bool ZoningIndustrialVisible = true;
+                internal bool ZoningOfficeVisible = true;
+                internal bool ParkingVisible = true;
+
+                internal float ZoningResidentialAlpha = 0.28f;
+                internal float ZoningCommercialAlpha = 0.28f;
+                internal float ZoningIndustrialAlpha = 0.28f;
+                internal float ZoningOfficeAlpha = 0.28f;
+                internal float ParkingAlpha = 0.28f;
+
+                internal bool ServicesWaterVisible = true;
+                internal bool ServicesElectricityVisible = true;
+                internal bool ServicesEducationVisible = true;
+                internal bool ServicesFireVisible = true;
+                internal bool ServicesHealthVisible = true;
+                internal bool ServicesParksVisible = true;
+                internal bool ServicesWasteVisible = true;
+                internal bool ServicesTransportVisible = true;
+                internal bool ServicesCommunicationVisible = true;
+
+                internal float ServicesWaterAlpha = 1f;
+                internal float ServicesElectricityAlpha = 1f;
+                internal float ServicesEducationAlpha = 1f;
+                internal float ServicesFireAlpha = 1f;
+                internal float ServicesHealthAlpha = 1f;
+                internal float ServicesParksAlpha = 1f;
+                internal float ServicesWasteAlpha = 1f;
+                internal float ServicesTransportAlpha = 1f;
+                internal float ServicesCommunicationAlpha = 1f;
                 internal float WaterAreaFillAlpha = 0.35f;
                 internal float RoadAlpha = 0.85f;
                 internal float PathAlpha = 0.35f;
@@ -244,8 +276,7 @@ internal bool RenderZoning = true;
         internal int RuntimeRoadImportBatchSize = 256;
         internal string RuntimeRoadImportPipelineMode = "confirmed-fast-flush";
         // confirmed-fast-flush = chunks rapides bornés, appliqués et confirmés avant le chunk suivant.
-        // legacy-fast-flush = ancienne transaction massive unique, conservée pour diagnostic uniquement.
-        // batch-safe = petits commits stricts, plus lents mais utiles pour isoler les erreurs.
+// batch-safe = petits commits stricts, plus lents mais utiles pour isoler les erreurs.
 
         internal bool UseLineRenderer = false;
         internal float LineWidth = 60f;
@@ -267,3 +298,5 @@ internal bool RenderZoning = true;
         // --- Nouveau helper ---
     }
 }
+
+
