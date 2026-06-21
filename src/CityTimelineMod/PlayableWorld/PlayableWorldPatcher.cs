@@ -16,44 +16,28 @@ namespace CityTimelineMod.PlayableWorld
             if (_installed)
                 return;
 
-            try
-            {
-                _harmony = new Harmony(HarmonyId);
+            _harmony = new Harmony(HarmonyId);
 
-                _harmony
-                    .CreateClassProcessor(
-                        typeof(CapturePlayableWorldBoundsPatch)
-                    )
-                    .Patch();
+            int patched = 0;
+            int failed = 0;
 
-                _harmony
-                    .CreateClassProcessor(
-                        typeof(NetToolSystemSnapControlPointsPatch)
-                    )
-                    .Patch();
+            PatchClass(typeof(CapturePlayableWorldBoundsPatch), ref patched, ref failed);
+            PatchClass(typeof(NetToolSystemSnapControlPointsPatch), ref patched, ref failed);
+            PatchClass(typeof(NetToolSnapJobPlayableBoundsPatch), ref patched, ref failed);
+            PatchClass(typeof(ObjectToolSnapJobPlayableBoundsPatch), ref patched, ref failed);
+            PatchClass(typeof(GenerateNodesPlayableBoundsPatch), ref patched, ref failed);
+            PatchClass(typeof(NetGeometryPlayableBoundsPatch), ref patched, ref failed);
+            PatchClass(typeof(ObjectWorldBoundsValidationPatch), ref patched, ref failed);
+            PatchClass(typeof(OutsideConnectionValidationPatch), ref patched, ref failed);
 
-                _harmony
-                    .CreateClassProcessor(
-                        typeof(GenerateNodesPlayableBoundsPatch)
-                    )
-                    .Patch();
+            _installed = patched > 0;
 
-                _installed = true;
-
-                Util.Log.Info(
-                    "[PlayableWorld] bounds, net-tool and " +
-                    "node-generation patches installed."
-                );
-            }
-            catch (Exception ex)
-            {
-                Util.Log.Error(
-                    "[PlayableWorld] installation failed: " +
-                    ex
-                );
-
-                throw;
-            }
+            Util.Log.Info(
+                "[PlayableWorld] patcher finished. patched=" +
+                patched +
+                ", failed=" +
+                failed
+            );
         }
 
         internal static void Uninstall()
@@ -69,8 +53,7 @@ namespace CityTimelineMod.PlayableWorld
                 PlayableWorldState.Reset();
 
                 Util.Log.Info(
-                    "[PlayableWorld] bounds, net-tool and " +
-                    "node-generation patches removed."
+                    "[PlayableWorld] patches removed."
                 );
             }
             catch (Exception ex)
@@ -84,6 +67,49 @@ namespace CityTimelineMod.PlayableWorld
             {
                 _installed = false;
                 _harmony = null;
+            }
+        }
+
+        private static void PatchClass(
+            Type patchType,
+            ref int patched,
+            ref int failed
+        )
+        {
+            if (patchType == null)
+            {
+                failed++;
+                Util.Log.Error(
+                    "[PlayableWorld] patch failed: null patch type"
+                );
+                return;
+            }
+
+            try
+            {
+                _harmony
+                    .CreateClassProcessor(patchType)
+                    .Patch();
+
+                patched++;
+
+                Util.Log.Info(
+                    "[PlayableWorld] patch installed: " +
+                    patchType.Name
+                );
+            }
+            catch (Exception ex)
+            {
+                failed++;
+
+                Util.Log.Error(
+                    "[PlayableWorld] patch failed: " +
+                    patchType.Name +
+                    " error=" +
+                    ex.GetType().Name +
+                    ": " +
+                    ex.Message
+                );
             }
         }
     }

@@ -90,38 +90,17 @@ namespace CityTimelineMod.PlayableWorld
         )
         {
             Bounds3 bounds =
-                TerrainUtils.GetBounds(ref terrainData);
-
-            if (!PlayableWorldState.Enabled)
-                return bounds;
-
-            if (!PlayableWorldState.Initialized)
-                return bounds;
-
-            float playableWidth =
-                PlayableWorldState.Max.x -
-                PlayableWorldState.Min.x;
-
-            float vanillaWidth =
-                bounds.max.x -
-                bounds.min.x;
-
-            if (playableWidth <= vanillaWidth + 1f)
-                return bounds;
-
-            bounds.min.x = PlayableWorldState.Min.x;
-            bounds.min.z = PlayableWorldState.Min.y;
-
-            bounds.max.x = PlayableWorldState.Max.x;
-            bounds.max.z = PlayableWorldState.Max.y;
+                PlayableWorldBoundsUtility.GetPlayableBounds(
+                    ref terrainData
+                );
 
             if (!_logged)
             {
                 _logged = true;
 
                 Util.Log.Info(
-                    "[PlayableWorld] GenerateNodes bounds expanded: " +
-                    "min=" +
+                    "[PlayableWorld] GenerateNodes uses " +
+                    "playable-world bounds. min=" +
                     bounds.min.xz +
                     ", max=" +
                     bounds.max.xz
