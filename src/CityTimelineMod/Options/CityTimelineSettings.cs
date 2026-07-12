@@ -90,7 +90,7 @@ private const string ModFolderName = "CityTimelineMod";
         private bool _runtimeRoadImportSkipParkingAisles = true;
         private bool _runtimeRoadImportSkipClearlyUnpaved = true;
 
-        private string _roadColorDefault = "gris";
+        private string _roadColorDefault = "grisClair";
         private string _roadColorMotorway = "rouge";
         private string _roadColorPrimary = "orange";
         private string _roadColorSecondary = "jaune";
@@ -98,19 +98,21 @@ private const string ModFolderName = "CityTimelineMod";
         private string _roadColorLink = "magenta";
         private string _pathColor = "cyan";
 
-        private string _waterLineColor = "cyan";
-        private string _waterAreaOutlineColor = "bleu";
-        private string _waterAreaFillColor = "bleuFonce";
+        private string _waterLineColor = "bleuClair";
+        private string _waterAreaOutlineColor = "bleuFonce";
+        private string _waterAreaFillColor = "bleu";
 
         private string _zoningResidentialLowColor = "vertClair";
         private string _zoningResidentialMediumColor = "vertMoyen";
         private string _zoningResidentialHighColor = "vertFonce";
-        private string _zoningCommercialLowColor = "jaune";
-        private string _zoningRetailColor = "violet";
-        private string _zoningIndustrialColor = "orange";
-        private string _zoningOfficeColor = "bleuFonce";
-        private string _zoningSurfaceColor = "bleuClair";
-        private string _zoningRampColor = "grisClair";
+        private string _zoningCommercialLowColor = "bleuCommercialClair";
+        private string _zoningCommercialHighColor = "bleuCommercial";
+        private string _zoningRetailColor = "bleuDetail";
+        private string _zoningIndustrialColor = "ambre";
+        private string _zoningOfficeColor = "violet";
+        private string _zoningSurfaceColor = "vertParkingClair";
+        private string _zoningRampColor = "vertParking";
+        private string _zoningMixedColor = "turquoise";
         private string _zoningFallbackColor = "blanc";
 
         private string _worldMapBoundsColor = "blancLimites";
@@ -499,6 +501,14 @@ private const string ModFolderName = "CityTimelineMod";
 
         [SettingsUITextInput]
         [SettingsUISection(SectionZoning, GroupZoning)]
+        public string ZoningCommercialHighColor
+        {
+            get => _zoningCommercialHighColor;
+            set => SetString(ref _zoningCommercialHighColor, value, "zoningCommercialHighColor");
+        }
+
+        [SettingsUITextInput]
+        [SettingsUISection(SectionZoning, GroupZoning)]
         public string ZoningRetailColor
         {
             get => _zoningRetailColor;
@@ -535,6 +545,14 @@ private const string ModFolderName = "CityTimelineMod";
         {
             get => _zoningRampColor;
             set => SetString(ref _zoningRampColor, value, "zoningRampColor");
+        }
+
+        [SettingsUITextInput]
+        [SettingsUISection(SectionZoning, GroupZoning)]
+        public string ZoningMixedColor
+        {
+            get => _zoningMixedColor;
+            set => SetString(ref _zoningMixedColor, value, "zoningMixedColor");
         }
 
         [SettingsUITextInput]
@@ -659,7 +677,7 @@ private const string ModFolderName = "CityTimelineMod";
             _runtimeRoadImportSkipParkingAisles = true;
             _runtimeRoadImportSkipClearlyUnpaved = true;
 
-            _roadColorDefault = "gris";
+            _roadColorDefault = "grisClair";
             _roadColorMotorway = "rouge";
             _roadColorPrimary = "orange";
             _roadColorSecondary = "jaune";
@@ -667,19 +685,21 @@ private const string ModFolderName = "CityTimelineMod";
             _roadColorLink = "magenta";
             _pathColor = "cyan";
 
-            _waterLineColor = "cyan";
-            _waterAreaOutlineColor = "bleu";
-            _waterAreaFillColor = "bleuFonce";
+            _waterLineColor = "bleuClair";
+            _waterAreaOutlineColor = "bleuFonce";
+            _waterAreaFillColor = "bleu";
 
             _zoningResidentialLowColor = "vertClair";
             _zoningResidentialMediumColor = "vertMoyen";
             _zoningResidentialHighColor = "vertFonce";
-            _zoningCommercialLowColor = "jaune";
-            _zoningRetailColor = "violet";
-            _zoningIndustrialColor = "orange";
-            _zoningOfficeColor = "bleuFonce";
-            _zoningSurfaceColor = "bleuClair";
-            _zoningRampColor = "grisClair";
+            _zoningCommercialLowColor = "bleuCommercialClair";
+            _zoningCommercialHighColor = "bleuCommercial";
+            _zoningRetailColor = "bleuDetail";
+            _zoningIndustrialColor = "ambre";
+            _zoningOfficeColor = "violet";
+            _zoningSurfaceColor = "vertParkingClair";
+            _zoningRampColor = "vertParking";
+            _zoningMixedColor = "turquoise";
             _zoningFallbackColor = "blanc";
 
             _worldMapBoundsColor = "blancLimites";
@@ -766,11 +786,13 @@ private const string ModFolderName = "CityTimelineMod";
                     _zoningResidentialMediumColor = GetString(root, "zoningResidentialMediumColor", _zoningResidentialMediumColor);
                     _zoningResidentialHighColor = GetString(root, "zoningResidentialHighColor", _zoningResidentialHighColor);
                     _zoningCommercialLowColor = GetString(root, "zoningCommercialLowColor", _zoningCommercialLowColor);
+                    _zoningCommercialHighColor = GetString(root, "zoningCommercialHighColor", _zoningCommercialHighColor);
                     _zoningRetailColor = GetString(root, "zoningRetailColor", _zoningRetailColor);
                     _zoningIndustrialColor = GetString(root, "zoningIndustrialColor", _zoningIndustrialColor);
                     _zoningOfficeColor = GetString(root, "zoningOfficeColor", _zoningOfficeColor);
                     _zoningSurfaceColor = GetString(root, "zoningSurfaceColor", _zoningSurfaceColor);
                     _zoningRampColor = GetString(root, "zoningRampColor", _zoningRampColor);
+                    _zoningMixedColor = GetString(root, "zoningMixedColor", _zoningMixedColor);
                     _zoningFallbackColor = GetString(root, "zoningFallbackColor", _zoningFallbackColor);
 
                     _worldMapBoundsColor = GetString(root, "worldMapBoundsColor", _worldMapBoundsColor);

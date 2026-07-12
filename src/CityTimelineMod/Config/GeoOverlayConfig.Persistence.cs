@@ -114,11 +114,13 @@ config.MapBoundsAlpha = GetFloat(root, "mapBoundsAlpha", config.MapBoundsAlpha);
                     config.ZoningResidentialMediumColor = GetString(root, "zoningResidentialMediumColor", config.ZoningResidentialMediumColor);
                     config.ZoningResidentialHighColor = GetString(root, "zoningResidentialHighColor", config.ZoningResidentialHighColor);
                     config.ZoningCommercialLowColor = GetString(root, "zoningCommercialLowColor", config.ZoningCommercialLowColor);
+                    config.ZoningCommercialHighColor = GetString(root, "zoningCommercialHighColor", config.ZoningCommercialHighColor);
                     config.ZoningRetailColor = GetString(root, "zoningRetailColor", config.ZoningRetailColor);
                     config.ZoningIndustrialColor = GetString(root, "zoningIndustrialColor", config.ZoningIndustrialColor);
                     config.ZoningOfficeColor = GetString(root, "zoningOfficeColor", config.ZoningOfficeColor);
                     config.ZoningSurfaceColor = GetString(root, "zoningSurfaceColor", config.ZoningSurfaceColor);
                     config.ZoningRampColor = GetString(root, "zoningRampColor", config.ZoningRampColor);
+                    config.ZoningMixedColor = GetString(root, "zoningMixedColor", config.ZoningMixedColor);
                     config.ZoningFallbackColor = GetString(root, "zoningFallbackColor", config.ZoningFallbackColor);
 
                     config.WorldMapBoundsColor = GetString(root, "worldMapBoundsColor", config.WorldMapBoundsColor);

@@ -37,11 +37,13 @@ namespace CityTimelineMod.Rendering
             materials.ZoningResidentialMedium = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialMediumColor, _config.ZoningAlpha));
             materials.ZoningResidentialHigh = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialHighColor, _config.ZoningAlpha));
             materials.ZoningCommercialLow = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningCommercialLowColor, _config.ZoningAlpha));
+            materials.ZoningCommercialHigh = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningCommercialHighColor, _config.ZoningAlpha));
             materials.ZoningRetailDetail = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningRetailColor, _config.ZoningAlpha));
             materials.ZoningIndustrial = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningIndustrialColor, _config.ZoningAlpha));
             materials.ZoningOffice = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningOfficeColor, _config.ZoningAlpha));
             materials.ZoningSurface = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningSurfaceColor, _config.ZoningAlpha));
             materials.ZoningRamp = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningRampColor, _config.ZoningAlpha));
+            materials.ZoningMixed = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningMixedColor, _config.ZoningAlpha));
             materials.ZoningFallback = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningFallbackColor, _config.ZoningAlpha));
 
             materials.DebugRed = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.DebugRedColor, 1f));
@@ -80,7 +82,9 @@ namespace CityTimelineMod.Rendering
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialHigh);
 
             _zoningCommercialFamilyMaterials.Add(materials.ZoningCommercialLow);
+            _zoningCommercialFamilyMaterials.Add(materials.ZoningCommercialHigh);
             _zoningCommercialFamilyMaterials.Add(materials.ZoningRetailDetail);
+            _zoningCommercialFamilyMaterials.Add(materials.ZoningMixed);
 
             _zoningIndustrialFamilyMaterials.Add(materials.ZoningIndustrial);
             _zoningOfficeFamilyMaterials.Add(materials.ZoningOffice);
@@ -94,7 +98,9 @@ namespace CityTimelineMod.Rendering
             _zoningMaterials.Add(materials.ZoningResidentialMedium);
             _zoningMaterials.Add(materials.ZoningResidentialHigh);
             _zoningMaterials.Add(materials.ZoningCommercialLow);
+            _zoningMaterials.Add(materials.ZoningCommercialHigh);
             _zoningMaterials.Add(materials.ZoningRetailDetail);
+            _zoningMaterials.Add(materials.ZoningMixed);
             _zoningMaterials.Add(materials.ZoningIndustrial);
             _zoningMaterials.Add(materials.ZoningOffice);
             _zoningMaterials.Add(materials.ZoningSurface);

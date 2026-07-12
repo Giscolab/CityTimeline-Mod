@@ -193,8 +193,11 @@ namespace CityTimelineMod.Options
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningResidentialHighColor)), "Couleur résidentiel haute densité" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningResidentialHighColor)), couleurs },
 
-                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningCommercialLowColor)), "Couleur commercial" },
+                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningCommercialLowColor)), "Couleur commercial basse densité" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningCommercialLowColor)), couleurs },
+
+                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningCommercialHighColor)), "Couleur commercial haute densité" },
+                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningCommercialHighColor)), couleurs },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningRetailColor)), "Couleur commerce de détail" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningRetailColor)), couleurs },
@@ -210,6 +213,9 @@ namespace CityTimelineMod.Options
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningRampColor)), "Couleur rampes" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningRampColor)), couleurs },
+
+                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningMixedColor)), "Couleur usage mixte" },
+                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningMixedColor)), couleurs },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ZoningFallbackColor)), "Couleur zonage inconnu" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ZoningFallbackColor)), couleurs }

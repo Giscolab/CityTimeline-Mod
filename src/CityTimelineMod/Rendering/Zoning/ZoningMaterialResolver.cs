@@ -19,11 +19,17 @@ namespace CityTimelineMod.Rendering.Zoning
                 return "residential_low";
             }
 
+            if (label.Contains("commercial haute"))
+                return "commercial_high";
+
             if (label.Contains("commercial basse"))
                 return "commercial_low";
 
             if (label.Contains("commerce de détail") || label.Contains("commerce de detail"))
                 return "retail_detail";
+
+            if (label.Contains("mixte"))
+                return "mixed";
 
             if (label.Contains("industrie"))
                 return "industrial";
@@ -67,6 +73,9 @@ namespace CityTimelineMod.Rendering.Zoning
                 case "ramp":
                     return "parking_ramp";
 
+                case "mixed":
+                    return "mixed";
+
                 default:
                     return "fallback";
             }
@@ -79,11 +88,13 @@ namespace CityTimelineMod.Rendering.Zoning
             Material residentialMediumMaterial,
             Material residentialHighMaterial,
             Material commercialLowMaterial,
+            Material commercialHighMaterial,
             Material retailDetailMaterial,
             Material industrialMaterial,
             Material officeMaterial,
             Material surfaceMaterial,
             Material rampMaterial,
+            Material mixedMaterial,
             Material fallbackMaterial
         )
         {
@@ -100,11 +111,17 @@ namespace CityTimelineMod.Rendering.Zoning
                 return residentialLowMaterial;
             }
 
+            if (label.Contains("commercial haute"))
+                return commercialHighMaterial;
+
             if (label.Contains("commercial basse"))
                 return commercialLowMaterial;
 
             if (label.Contains("commerce de détail") || label.Contains("commerce de detail"))
                 return retailDetailMaterial;
+
+            if (label.Contains("mixte"))
+                return mixedMaterial;
 
             if (label.Contains("industrie"))
                 return industrialMaterial;
@@ -147,6 +164,9 @@ namespace CityTimelineMod.Rendering.Zoning
 
                 case "ramp":
                     return rampMaterial;
+
+                case "mixed":
+                    return mixedMaterial;
 
                 default:
                     return fallbackMaterial;

@@ -199,12 +199,14 @@ namespace CityTimelineMod.Rendering
                 state.Materials.ZoningResidentialLow,
                 state.Materials.ZoningResidentialMedium,
                 state.Materials.ZoningResidentialHigh,
-                state.Materials.ZoningIndustrial,
                 state.Materials.ZoningCommercialLow,
+                state.Materials.ZoningCommercialHigh,
                 state.Materials.ZoningRetailDetail,
+                state.Materials.ZoningIndustrial,
                 state.Materials.ZoningOffice,
                 state.Materials.ZoningSurface,
                 state.Materials.ZoningRamp,
+                state.Materials.ZoningMixed,
                 state.Materials.ZoningFallback,
                 state.Stride
             );

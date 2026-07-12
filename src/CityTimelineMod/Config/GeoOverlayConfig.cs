@@ -85,11 +85,11 @@ internal bool RenderZoning = true;
                 internal float HeightMapBoundsAlpha = 0.85f;
                 internal float MapCenterAlpha = 0.85f;
 
-                internal string WaterLineColor = "cyan";
-                internal string WaterAreaOutlineColor = "bleu";
-                internal string WaterAreaFillColor = "bleuFonce";
+                internal string WaterLineColor = "bleuClair";
+                internal string WaterAreaOutlineColor = "bleuFonce";
+                internal string WaterAreaFillColor = "bleu";
 
-                internal string RoadColorDefault = "gris";
+                internal string RoadColorDefault = "grisClair";
                 internal string RoadColorMotorway = "rouge";
                 internal string RoadColorPrimary = "orange";
                 internal string RoadColorSecondary = "jaune";
@@ -100,12 +100,14 @@ internal bool RenderZoning = true;
                 internal string ZoningResidentialLowColor = "vertClair";
                 internal string ZoningResidentialMediumColor = "vertMoyen";
                 internal string ZoningResidentialHighColor = "vertFonce";
-                internal string ZoningCommercialLowColor = "jaune";
-                internal string ZoningRetailColor = "violet";
-                internal string ZoningIndustrialColor = "orange";
-                internal string ZoningOfficeColor = "bleuFonce";
-                internal string ZoningSurfaceColor = "bleuClair";
-                internal string ZoningRampColor = "grisClair";
+                internal string ZoningCommercialLowColor = "bleuCommercialClair";
+                internal string ZoningCommercialHighColor = "bleuCommercial";
+                internal string ZoningRetailColor = "bleuDetail";
+                internal string ZoningIndustrialColor = "ambre";
+                internal string ZoningOfficeColor = "violet";
+                internal string ZoningSurfaceColor = "vertParkingClair";
+                internal string ZoningRampColor = "vertParking";
+                internal string ZoningMixedColor = "turquoise";
                 internal string ZoningFallbackColor = "blanc";
 
                 internal string WorldMapBoundsColor = "blancLimites";

@@ -15,11 +15,13 @@ namespace CityTimelineMod.Rendering
             Material residentialMediumMaterial,
             Material residentialHighMaterial,
             Material commercialLowMaterial,
+            Material commercialHighMaterial,
             Material retailDetailMaterial,
             Material industrialMaterial,
             Material officeMaterial,
             Material surfaceMaterial,
             Material rampMaterial,
+            Material mixedMaterial,
             Material fallbackMaterial,
             int stride
         )
@@ -116,11 +118,13 @@ namespace CityTimelineMod.Rendering
                         residentialMediumMaterial,
                         residentialHighMaterial,
                         commercialLowMaterial,
+                        commercialHighMaterial,
                         retailDetailMaterial,
                         industrialMaterial,
                         officeMaterial,
                         surfaceMaterial,
                         rampMaterial,
+                        mixedMaterial,
                         fallbackMaterial
                     );
 
@@ -170,15 +174,17 @@ namespace CityTimelineMod.Rendering
         {
             LogVerboseOverlay(
                 "GroundOverlay: zoning material legend: " +
-                "residential_low=green, " +
-                "residential_medium=yellow_green, " +
-                "residential_high=yellow, " +
-                "commercial_low=blue_violet, " +
-                "retail_detail=magenta, " +
-                "industrial=orange, " +
-                "office=blue, " +
-                "parking_surface=gray, " +
-                "parking_ramp=dark_gray, " +
+                "residential_low=vertClair#7ab64d, " +
+                "residential_medium=vertMoyen#2d9d54, " +
+                "residential_high=vertFonce#0b6f3a, " +
+                "commercial_low=bleuCommercialClair#4aa3ff, " +
+                "commercial_high=bleuCommercial#1f57d6, " +
+                "retail_detail=bleuDetail#74c5ff, " +
+                "industrial=ambre#d6ad32, " +
+                "office=violet#a46bd5, " +
+                "parking_surface=vertParkingClair#b9ed70, " +
+                "parking_ramp=vertParking#5fe86e, " +
+                "mixed=turquoise#2ed6e5, " +
                 "fallback=white"
             );
         }

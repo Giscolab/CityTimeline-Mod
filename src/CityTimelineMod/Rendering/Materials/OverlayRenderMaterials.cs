@@ -24,11 +24,13 @@ namespace CityTimelineMod.Rendering.Materials
         internal Material ZoningResidentialMedium;
         internal Material ZoningResidentialHigh;
         internal Material ZoningCommercialLow;
+        internal Material ZoningCommercialHigh;
         internal Material ZoningRetailDetail;
         internal Material ZoningIndustrial;
         internal Material ZoningOffice;
         internal Material ZoningSurface;
         internal Material ZoningRamp;
+        internal Material ZoningMixed;
         internal Material ZoningFallback;
         internal Material DebugRed;
         internal Material DebugGreen;

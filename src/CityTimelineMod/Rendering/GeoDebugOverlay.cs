@@ -422,11 +422,13 @@ namespace CityTimelineMod.Rendering
             var zoningResidentialMediumMaterial = materials.ZoningResidentialMedium;
             var zoningResidentialHighMaterial = materials.ZoningResidentialHigh;
             var zoningCommercialLowMaterial = materials.ZoningCommercialLow;
+            var zoningCommercialHighMaterial = materials.ZoningCommercialHigh;
             var zoningRetailDetailMaterial = materials.ZoningRetailDetail;
             var zoningIndustrialMaterial = materials.ZoningIndustrial;
             var zoningOfficeMaterial = materials.ZoningOffice;
             var zoningSurfaceMaterial = materials.ZoningSurface;
             var zoningRampMaterial = materials.ZoningRamp;
+            var zoningMixedMaterial = materials.ZoningMixed;
             var zoningFallbackMaterial = materials.ZoningFallback;
 
             ApplyCurrentOverlayVisibilityToMaterials();
@@ -466,12 +468,14 @@ namespace CityTimelineMod.Rendering
                 zoningResidentialLowMaterial,
                 zoningResidentialMediumMaterial,
                 zoningResidentialHighMaterial,
-                zoningIndustrialMaterial,
                 zoningCommercialLowMaterial,
+                zoningCommercialHighMaterial,
                 zoningRetailDetailMaterial,
+                zoningIndustrialMaterial,
                 zoningOfficeMaterial,
                 zoningSurfaceMaterial,
                 zoningRampMaterial,
+                zoningMixedMaterial,
                 zoningFallbackMaterial,
                 stride
             );
