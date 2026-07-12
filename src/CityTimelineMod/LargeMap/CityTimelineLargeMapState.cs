@@ -8,7 +8,9 @@ namespace CityTimelineMod.LargeMap
 
         internal const float OriginalMapSizeMetersFloat = 14336f;
         internal const float MapSizeMetersFloat = 57344f;
+        internal const float HalfMapSizeMetersFloat = MapSizeMetersFloat * 0.5f;
 
-        internal static bool Enabled = false;
+        // Solution A : une seule heightmap principale de 57,344 km.
+        internal static bool Enabled = true;
     }
 }

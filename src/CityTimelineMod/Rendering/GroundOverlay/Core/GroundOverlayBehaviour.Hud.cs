@@ -752,6 +752,8 @@ namespace CityTimelineMod.Rendering
 
         private void DrawModernLayersTab(ref ModernHudChangeState changes)
         {
+            DrawModernLegendSection();
+
             GUILayout.BeginHorizontal();
 
             GUILayout.BeginVertical();
@@ -792,6 +794,8 @@ namespace CityTimelineMod.Rendering
                 if (SetModernLayerVisible(layerId, nextVisible))
                     changes.VisibilityChanged = true;
             }
+
+            DrawModernLayerSwatches(layerId);
 
             var previousEnabled = GUI.enabled;
             GUI.enabled = previousEnabled && nextVisible;

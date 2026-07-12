@@ -23,18 +23,18 @@ namespace CityTimelineMod.LargeMap
             ReplacementMap.Clear();
             MethodsToPatch.Clear();
 
-            Register<AirPollutionSystem>(4, 4);
-            Register<AvailabilityInfoToGridSystem>(4, 4);
-            Register<GroundPollutionSystem>(4, 4);
-            Register<GroundWaterSystem>(4, 4);
-            Register<LandValueSystem>(4, 4);
-            Register<NaturalResourceSystem>(4, 4);
-            Register<NoisePollutionSystem>(4, 4);
-            Register<PopulationToGridSystem>(4, 4);
-            Register<SoilWaterSystem>(4, 4);
-            Register<TerrainAttractivenessSystem>(4, 4);
-            Register<TrafficAmbienceSystem>(4, 4);
-            Register<ZoneAmbienceSystem>(4, 4);
+            Register<AirPollutionSystem>(4, 1);
+            Register<AvailabilityInfoToGridSystem>(4, 1);
+            Register<GroundPollutionSystem>(4, 1);
+            Register<GroundWaterSystem>(4, 1);
+            Register<LandValueSystem>(4, 1);
+            Register<NaturalResourceSystem>(4, 1);
+            Register<NoisePollutionSystem>(4, 1);
+            Register<PopulationToGridSystem>(4, 1);
+            Register<SoilWaterSystem>(4, 1);
+            Register<TerrainAttractivenessSystem>(4, 1);
+            Register<TrafficAmbienceSystem>(4, 1);
+            Register<ZoneAmbienceSystem>(4, 1);
             Register<TelecomCoverageSystem>(4, 1);
             Register<WindSystem>(4, 1);
 
@@ -79,6 +79,13 @@ namespace CityTimelineMod.LargeMap
                 ", failed=" +
                 failed
             );
+
+            if (failed != 0)
+            {
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap patch incomplete. failed=" + failed
+                );
+            }
         }
 
         private static void Register<TDerived>(int mapMultiplier, int textureMultiplier)

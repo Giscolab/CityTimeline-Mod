@@ -24,21 +24,40 @@ namespace CityTimelineMod.LargeMap
             {
                 _harmony = new Harmony(HarmonyId);
 
-                _harmony.CreateClassProcessor(typeof(LargeMapTerrainSystemPatches)).Patch();
+                _harmony
+                    .CreateClassProcessor(typeof(LargeMapTerrainSystemPatches))
+                    .Patch();
+
                 LargeMapCellMapSystemPatches.Apply(_harmony);
+                LargeMapUnifiedWorldPatches.Apply(_harmony);
 
                 _installed = true;
 
                 Util.Log.Info(
-                    "[LargeMap] installed. coreValue=" +
-                    CityTimelineLargeMapState.CoreValue +
+                    "[LargeMap] unified 57 km solution installed. " +
+                    "coreValue=" + CityTimelineLargeMapState.CoreValue +
                     ", mapSizeMeters=" +
                     CityTimelineLargeMapState.MapSizeMeters
                 );
             }
             catch (Exception ex)
             {
-                Util.Log.Error("[LargeMap] install failed: " + ex);
+                try
+                {
+                    if (_harmony != null)
+                        _harmony.UnpatchAll(HarmonyId);
+                }
+                catch
+                {
+                }
+
+                _harmony = null;
+                _installed = false;
+
+                Util.Log.Error(
+                    "[LargeMap] install failed; all LargeMap patches rolled back: " +
+                    ex
+                );
             }
         }
 

@@ -57,10 +57,11 @@ namespace CityTimelineMod
             {
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldErrorPrefabSystem>(SystemUpdatePhase.ToolUpdate);
             updateSystem.UpdateAt<CityTimelineMod.Diagnostics.LargeMapTerrainDiagnosticSystem>(SystemUpdatePhase.Modification1);
+                updateSystem.UpdateAt<CityTimelineMod.LargeMap.RailOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification2);
+                updateSystem.UpdateAt<CityTimelineMod.LargeMap.AirOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification2);
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldRoadProfileSystem>(SystemUpdatePhase.Modification1);
                 updateSystem.UpdateAt<CityTimelineMod.Roads.RuntimeRoadToolSystem>(SystemUpdatePhase.ToolUpdate);
                 updateSystem.UpdateAt<CityTimelineMod.Systems.RuntimeRoadToolDriverSystem>(SystemUpdatePhase.ToolUpdate);
-                updateSystem.UpdateAt<CityTimelineMod.Roads.VanillaNetCourseProbeSystem>(SystemUpdatePhase.ToolUpdate);
                 updateSystem.UpdateAt<CityTimelineMod.UI.CityTimelineUISystem>(SystemUpdatePhase.UIUpdate);
                 Log.Info("[CityTimelineMod] Runtime road and CoHTML UI systems registered.");
 
