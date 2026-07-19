@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
+using CityTimelineMod.Bundles;
 using CityTimelineMod.Config;
 using CityTimelineMod.Geometry;
 using CityTimelineMod.Importers;
@@ -60,22 +61,49 @@ namespace CityTimelineMod
                     return;
                 }
 
-                var legacyGeojsonRoot = Path.Combine(modDir, "data", "legacy-geojson");
-                EnsureBundledLegacyGeojson(legacyGeojsonRoot);
+                string geojsonRoot;
 
-                var geojsonRoot = legacyGeojsonRoot;
-
-                if (!string.IsNullOrWhiteSpace(config.PackPath))
+                if (config.UseBundleIndex)
                 {
-                    var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
-
-                    if (Directory.Exists(candidateGeojsonRoot))
+                    if (!config.BundleIndexResolutionSucceeded)
                     {
-                        geojsonRoot = candidateGeojsonRoot;
+                        Log.Error(
+                            "GeoBundleBootstrap: active indexed bundle was not installed: " +
+                            (string.IsNullOrWhiteSpace(config.BundleIndexResolutionError)
+                                ? "unknown bundle resolution error."
+                                : config.BundleIndexResolutionError)
+                        );
+                        return;
                     }
-                    else
+
+                    if (string.IsNullOrWhiteSpace(config.PackPath))
                     {
-                        Log.Error("GeoBundleBootstrap: packPath geojson folder not found, fallback to bundled legacy geojson. candidate=" + candidateGeojsonRoot);
+                        Log.Error("GeoBundleBootstrap: validated indexed bundle has no GeoJSON packPath.");
+                        return;
+                    }
+
+                    var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
+                    if (!Directory.Exists(candidateGeojsonRoot))
+                    {
+                        Log.Error("GeoBundleBootstrap: validated indexed GeoJSON folder disappeared: " + candidateGeojsonRoot);
+                        return;
+                    }
+
+                    geojsonRoot = candidateGeojsonRoot;
+                }
+                else
+                {
+                    var legacyGeojsonRoot = Path.Combine(modDir, "data", "legacy-geojson");
+                    EnsureBundledLegacyGeojson(legacyGeojsonRoot);
+                    geojsonRoot = legacyGeojsonRoot;
+
+                    if (!string.IsNullOrWhiteSpace(config.PackPath))
+                    {
+                        var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
+                        if (Directory.Exists(candidateGeojsonRoot))
+                            geojsonRoot = candidateGeojsonRoot;
+                        else
+                            Log.Error("GeoBundleBootstrap: legacy packPath not found; using bundled legacy GeoJSON. candidate=" + candidateGeojsonRoot);
                     }
                 }
 
@@ -382,7 +410,7 @@ namespace CityTimelineMod
                 return false;
             }
 
-            var configPath = Path.Combine(modDir, "config.json");
+            var configPath = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
 
             if (!File.Exists(configPath))
             {
@@ -393,11 +421,34 @@ namespace CityTimelineMod
             try
             {
                 var root = JObject.Parse(File.ReadAllText(configPath));
-                root["useBundleIndex"] = true;
-                root["activeBundleId"] = activeBundleId;
+                var configuredBundlesRoot = root["bundlesRoot"] != null
+                    ? root["bundlesRoot"].ToString()
+                    : "data/exports/bundles";
 
-                File.WriteAllText(configPath, root.ToString(Newtonsoft.Json.Formatting.Indented));
-                Log.Info("GeoBundleBootstrap: config activeBundleId saved=" + activeBundleId);
+                string canonicalId;
+                string pointerError;
+                if (!BundleResolver.TryUpdateActiveBundlePointer(
+                    configuredBundlesRoot,
+                    modDir,
+                    activeBundleId,
+                    out canonicalId,
+                    out pointerError))
+                {
+                    Log.Error("GeoBundleBootstrap: active bundle selection rejected. " + pointerError);
+                    return false;
+                }
+
+                root["useBundleIndex"] = true;
+                // Garde ce champ pour la compatibilite avec les anciens index. Le
+                // pointeur bundle_index.json mis a jour ci-dessus reste prioritaire.
+                root["activeBundleId"] = canonicalId;
+
+                File.WriteAllText(
+                    configPath,
+                    root.ToString(Newtonsoft.Json.Formatting.Indented),
+                    new System.Text.UTF8Encoding(false)
+                );
+                Log.Info("GeoBundleBootstrap: config activeBundleId saved=" + canonicalId);
                 return true;
             }
             catch (Exception ex)

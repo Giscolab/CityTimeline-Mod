@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text;
 using CityTimelineMod.Rendering;
+using CityTimelineMod.Config;
 using Colossal.IO.AssetDatabase;
 using Game.Input;
 using Game.Modding;
@@ -932,25 +933,8 @@ private const string ModFolderName = "CityTimelineMod";
 
         private static string ResolveRuntimeConfigPath()
         {
-            var localModsPath = Environment.GetEnvironmentVariable("CSII_LOCALMODSPATH", EnvironmentVariableTarget.User);
-
-            if (!string.IsNullOrWhiteSpace(localModsPath))
-                return Path.Combine(localModsPath, ModFolderName, "config.json");
-
-            var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
-            return Path.Combine(
-                userProfile,
-                "AppData",
-                "LocalLow",
-                "Colossal Order",
-                "Cities Skylines II",
-                "Mods",
-                ModFolderName,
-                "config.json"
-            );
+            return CityTimelineConfigStorage.ResolveWritableConfigPath();
         }
     }
 }
-
 

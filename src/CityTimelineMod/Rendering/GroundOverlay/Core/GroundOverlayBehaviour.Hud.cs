@@ -1402,19 +1402,25 @@ namespace CityTimelineMod.Rendering
 
             GUILayout.BeginHorizontal();
 
-            if (GUILayout.Button(_controlPanelRebuildPending ? "Appliquer / reconstruire *" : "Appliquer / reconstruire", GUILayout.Height(28f)))
-            {
-                var hadPendingChanges = _controlPanelRebuildPending;
-                _controlPanelRebuildPending = false;
+            var previousEnabled = GUI.enabled;
+            GUI.enabled = previousEnabled && _controlPanelRebuildPending;
 
-                if (hadPendingChanges)
-                    MarkVisualSettingsDirty("Réglages reconstruits — sauvegarde optionnelle.");
+            if (GUILayout.Button(
+                _controlPanelRebuildPending
+                    ? "Appliquer / reconstruire *"
+                    : "Couches déjà appliquées",
+                GUILayout.Height(28f)))
+            {
+                _controlPanelRebuildPending = false;
+                MarkVisualSettingsDirty("Réglages reconstruits — sauvegarde optionnelle.");
 
                 ApplyOverlayRebuildSafetyGuard("HUD apply");
 
                 Log.Info("GroundOverlay HUD panel: rebuild requested.");
                 RequestOverlayRebuild("HUD apply", true);
             }
+
+            GUI.enabled = previousEnabled;
 
             if (GUILayout.Button("Fermer", GUILayout.Height(28f)))
             {

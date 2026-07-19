@@ -29,17 +29,29 @@ namespace CityTimelineMod.Bundles
             if (config == null)
                 return result;
 
+            if (!config.UseBundleIndex)
+            {
+                Log.Info("BundleCatalog: bundle index disabled.");
+                return result;
+            }
+
             var bundlesRoot = config.ResolvedBundlesRoot;
+            if (string.IsNullOrWhiteSpace(bundlesRoot))
+            {
+                var modDir = string.IsNullOrWhiteSpace(config.ConfigPath)
+                    ? null
+                    : Path.GetDirectoryName(config.ConfigPath);
 
-if (string.IsNullOrWhiteSpace(bundlesRoot))
-{
-    bundlesRoot = config.BundlesRoot;
-}
-
-if (!string.IsNullOrWhiteSpace(bundlesRoot))
-{
-    bundlesRoot = Path.GetFullPath(bundlesRoot);
-}
+                try
+                {
+                    bundlesRoot = BundleResolver.ResolveBundlesRootPath(config.BundlesRoot, modDir);
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("BundleCatalog: invalid bundlesRoot. " + ex.Message);
+                    return result;
+                }
+            }
 
             if (string.IsNullOrWhiteSpace(bundlesRoot))
             {
@@ -82,6 +94,20 @@ if (!string.IsNullOrWhiteSpace(bundlesRoot))
 
                     if (string.IsNullOrWhiteSpace(id))
                         continue;
+
+                    string manifestPath;
+                    string bundleRoot;
+                    string validationError;
+                    if (!BundleResolver.TryValidateEntry(
+                        bundlesRoot,
+                        obj,
+                        out manifestPath,
+                        out bundleRoot,
+                        out validationError))
+                    {
+                        Log.Error("BundleCatalog: ignored invalid bundle " + id + ". " + validationError);
+                        continue;
+                    }
 
                     var entry = new BundleCatalogEntry();
                     entry.Id = id;

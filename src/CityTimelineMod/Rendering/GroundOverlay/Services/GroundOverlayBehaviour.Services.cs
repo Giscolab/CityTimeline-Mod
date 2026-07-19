@@ -56,6 +56,7 @@ namespace CityTimelineMod.Rendering
             if (value)
                 _config.RenderServices = true;
 
+            InvalidateBundleHudSnapshotJson();
             SyncModernLayerStateFromConfig();
             ApplyCurrentOverlayVisibilityToMaterials();
             ScheduleRailwaySettingsSave();
@@ -86,6 +87,7 @@ namespace CityTimelineMod.Rendering
                 default: return false;
             }
 
+            InvalidateBundleHudSnapshotJson();
             SyncModernLayerStateFromConfig();
             ApplyCurrentOverlayVisibilityToMaterials();
             ScheduleRailwaySettingsSave();

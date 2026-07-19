@@ -147,6 +147,17 @@ namespace CityTimelineMod.UI
             }
 
             _visibleBinding.Update(visible);
+
+            if (visible)
+            {
+                // Opening the panel performs one immediate refresh; periodic
+                // polling remains suspended whenever the panel is closed.
+                _lastRailwayBindingSignature = null;
+                SyncRailwayBindings();
+                SyncStatisticsBindings();
+                _nextRailwayBindingSyncTime = UnityEngine.Time.unscaledTime + 1f;
+            }
+
             Log.Info("CityTimelineMod CoHTML HUD visible=" + visible);
         }
 

@@ -51,6 +51,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- GeoJSON is strictly a visual/informational overlay. The former road
+         import, prefab resolution, snapping and spawning implementation is
+         intentionally excluded from the shipped assembly. -->
+    <Compile Remove="Roads\**\*.cs" />
+    <Compile Remove="Systems\RuntimeRoadToolDriverSystem.cs" />
+    <Compile Remove="LargeMap\AirOutsideConnectionRepairSystem.cs" />
+    <Compile Remove="LargeMap\RailOutsideConnectionRepairSystem.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <EmbeddedResource Include="$(ResourcesRoot)\defaults\config.json" Link="Resources\config.json" />
     <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\water_lines_clipped.geojson" Link="Resources\legacy-geojson\water_lines_clipped.geojson" />
     <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\water_areas_clipped.geojson" Link="Resources\legacy-geojson\water_areas_clipped.geojson" />

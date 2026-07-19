@@ -12,7 +12,7 @@ namespace CityTimelineMod.Config
         internal static GeoOverlayConfig Load(string modDir)
         {
             var config = new GeoOverlayConfig();
-            var path = Path.Combine(modDir, "config.json");
+            var path = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
             config.ConfigPath = path;
 
             if (!File.Exists(path))
@@ -427,7 +427,20 @@ else
                 if (!string.IsNullOrWhiteSpace(resolvedBundleManifestPath))
                 {
                     config.BundleManifestPath = resolvedBundleManifestPath;
+                    // Ne jamais reutiliser un packPath persiste provenant d'un autre
+                    // bundle. Le manifest valide selectionne ci-dessus est l'unique
+                    // source du payload actif.
+                    config.PackPath = null;
                     ApplyBundleManifest(config, modDir);
+                }
+                else if (config.UseBundleIndex)
+                {
+                    // En mode catalogue, une resolution invalide doit rester visible
+                    // comme telle. Conserver ces anciennes valeurs ferait charger en
+                    // silence un bundle legacy ou precedemment actif.
+                    config.BundleManifestPath = null;
+                    config.PackPath = null;
+                    config.ActiveBundleRoot = null;
                 }
 
                 Log.Info("GeoOverlayConfig: loaded " + path);

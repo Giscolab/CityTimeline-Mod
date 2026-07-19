@@ -20,9 +20,18 @@ namespace CityTimelineMod.Rendering
             if (_roadLines == null || _roadLines.Count == 0)
                 return new List<RoadRenderChunk>();
 
+            if ((isPath && !_config.RenderPaths) || (!isPath && !_config.RenderRoads))
+                return new List<RoadRenderChunk>();
+
             foreach (var roadLine in _roadLines)
             {
                 if (roadLine == null || roadLine.IsPath != isPath || roadLine.Points == null || roadLine.Points.Count < 2)
+                    continue;
+
+                // Filtering before spatial partitioning prevents thousands of
+                // empty chunks from being visited over many frames when a layer
+                // or semantic filter hides every line.
+                if (!ShouldRenderRoadLineForOverlay(roadLine))
                     continue;
 
                 var midpoint = ResolveRoadLineMidpointWorld(roadLine, originLon, originLat);
@@ -103,7 +112,7 @@ namespace CityTimelineMod.Rendering
             {
                 var roadLine = _roadLines[i];
 
-                if (roadLine != null && roadLine.IsPath == isPath && roadLine.Points != null && roadLine.Points.Count >= 2)
+                if (roadLine != null && roadLine.IsPath == isPath && ShouldRenderRoadLineForOverlay(roadLine))
                     count++;
             }
 

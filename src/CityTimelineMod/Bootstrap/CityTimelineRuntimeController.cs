@@ -4,6 +4,7 @@ using System.Text;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 using CityTimelineMod.Util;
+using CityTimelineMod.Config;
 
 namespace CityTimelineMod
 {
@@ -44,7 +45,7 @@ namespace CityTimelineMod
 
         private void Awake()
         {
-            _configPath = Path.Combine(ResolveModDirectory(), "config.json");
+            _configPath = CityTimelineConfigStorage.ResolveWritableConfigPath();
             LoadState();
         }
 
@@ -149,7 +150,7 @@ namespace CityTimelineMod
             try
             {
                 if (string.IsNullOrWhiteSpace(_configPath))
-                    _configPath = Path.Combine(ResolveModDirectory(), "config.json");
+                    _configPath = CityTimelineConfigStorage.ResolveWritableConfigPath();
 
                 if (!File.Exists(_configPath))
                 {
@@ -184,7 +185,7 @@ namespace CityTimelineMod
             try
             {
                 if (string.IsNullOrWhiteSpace(_configPath))
-                    _configPath = Path.Combine(ResolveModDirectory(), "config.json");
+                    _configPath = CityTimelineConfigStorage.ResolveWritableConfigPath();
 
                 JObject root;
 

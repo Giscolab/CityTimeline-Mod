@@ -237,6 +237,7 @@ namespace CityTimelineMod.LargeMap
 
         private static bool _unexpectedScaleLogged;
         private static bool _runtimeFailureLogged;
+        private static Game.Net.AirwaySystem _runtimeScaledInstance;
 
         [HarmonyPrepare]
         private static bool Prepare()
@@ -351,6 +352,13 @@ namespace CityTimelineMod.LargeMap
             if (!CityTimelineLargeMapState.Enabled)
                 return;
 
+            // AirwayMap and AirwayData are structs. Reflection boxes both on
+            // every call, so repeating this probe from AirwaySystem.OnUpdate
+            // creates continuous garbage and periodic GC hitches.  Scale (or
+            // validate) each concrete system instance once.
+            if (ReferenceEquals(_runtimeScaledInstance, __instance))
+                return;
+
             try
             {
                 object airwayDataBox =
@@ -402,6 +410,7 @@ namespace CityTimelineMod.LargeMap
                 if (helicopterAlreadyScaled &&
                     airplaneAlreadyScaled)
                 {
+                    _runtimeScaledInstance = __instance;
                     return;
                 }
 
@@ -468,6 +477,7 @@ namespace CityTimelineMod.LargeMap
                     airwayDataBox
                 );
 
+                _runtimeScaledInstance = __instance;
                 _unexpectedScaleLogged = false;
                 _runtimeFailureLogged = false;
 

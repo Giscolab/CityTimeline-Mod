@@ -11,17 +11,27 @@ namespace CityTimelineMod.Rendering
     internal sealed partial class GroundOverlayBehaviour
     {
         private BundleHudSnapshot _bundleHudSnapshot = new BundleHudSnapshot();
+        private string _bundleHudSnapshotJsonCache;
 
         private void InitializeBundleHudSnapshot(BundleHudSnapshot snapshot)
         {
             _bundleHudSnapshot = snapshot ?? new BundleHudSnapshot();
             ApplyRuntimeStatisticsFallbacks();
             ApplyLoadedServiceStatistics();
+            InvalidateBundleHudSnapshotJson();
         }
 
         internal string GetBundleHudSnapshotJson()
         {
+            if (_bundleHudSnapshotJsonCache != null)
+                return _bundleHudSnapshotJsonCache;
+
             var stats = _bundleHudSnapshot ?? new BundleHudSnapshot();
+            var objectStatsAvailable = IsObjectStatisticsAvailable(stats);
+            var zoningStatsAvailable = IsZoningStatisticsAvailable(stats);
+            var roadStatsAvailable = IsRoadStatisticsAvailable(stats);
+            var waterLineStatsAvailable = IsWaterLineStatisticsAvailable(stats);
+            var waterAreaStatsAvailable = IsWaterAreaStatisticsAvailable(stats);
             var root = new JObject
             {
                 ["available"] = stats.Available,
@@ -30,19 +40,31 @@ namespace CityTimelineMod.Rendering
                     : "Statistiques détaillées indisponibles pour ce bundle.",
                 ["bundleId"] = _config != null ? _config.ActiveBundleId ?? "" : "",
                 ["bundleName"] = ResolveBundleDisplayName(stats),
-                ["objects"] = stats.GetObjectCount()
+                ["objects"] = NullableHudCount(objectStatsAvailable, stats.GetObjectCount())
             };
 
-            root["zoning"] = BuildZoningHudJson(stats);
-            root["roads"] = BuildRoadHudJson(stats);
+            root["zoning"] = BuildZoningHudJson(stats, zoningStatsAvailable);
+            root["roads"] = BuildRoadHudJson(stats, roadStatsAvailable);
             root["water"] = new JObject
             {
-                ["lines"] = stats.GetLayerCount("water_lines_clipped"),
-                ["areas"] = stats.GetLayerCount("water_areas_clipped")
+                ["lines"] = NullableHudCount(
+                    waterLineStatsAvailable,
+                    stats.GetLayerCount("water_lines_clipped")
+                ),
+                ["areas"] = NullableHudCount(
+                    waterAreaStatsAvailable,
+                    stats.GetLayerCount("water_areas_clipped")
+                )
             };
             root["services"] = BuildServiceHudJson(stats);
             root["railway"] = BuildRailwayHudJson();
-            return root.ToString(Newtonsoft.Json.Formatting.None);
+            _bundleHudSnapshotJsonCache = root.ToString(Newtonsoft.Json.Formatting.None);
+            return _bundleHudSnapshotJsonCache;
+        }
+
+        private void InvalidateBundleHudSnapshotJson()
+        {
+            _bundleHudSnapshotJsonCache = null;
         }
 
         private string ResolveBundleDisplayName(BundleHudSnapshot stats)
@@ -54,30 +76,69 @@ namespace CityTimelineMod.Rendering
             return _config != null ? _config.ActiveBundleId ?? "" : "";
         }
 
-        private static JObject BuildZoningHudJson(BundleHudSnapshot stats)
+        private static JObject BuildZoningHudJson(BundleHudSnapshot stats, bool available)
         {
             var result = new JObject();
             for (var i = 0; i < BundleHudSnapshot.ZoningKeys.Length; i++)
             {
                 var key = BundleHudSnapshot.ZoningKeys[i];
-                result[key] = stats.GetZoningCount(key);
+                result[key] = NullableHudCount(available, stats.GetZoningCount(key));
             }
             return result;
         }
 
-        private static JObject BuildRoadHudJson(BundleHudSnapshot stats)
+        private static JObject BuildRoadHudJson(BundleHudSnapshot stats, bool available)
         {
             return new JObject
             {
-                ["highway"] = stats.GetRoadCategoryCount("highway"),
-                ["main"] = stats.GetRoadCategoryCount("large_road"),
-                ["secondary"] = stats.GetRoadCategoryCount("medium_road"),
-                ["tertiary"] = stats.GetRoadCategoryCount("small_road"),
-                ["ramp"] = stats.GetRoadCategoryCount("ramp"),
-                ["unclassified"] = stats.GetRoadCategoryCount("gravel_road"),
-                ["paths"] = stats.GetRoadCategoryCount("pathway"),
-                ["total"] = stats.GetLayerCount("roads")
+                ["highway"] = NullableHudCount(available, stats.GetRoadCategoryCount("highway")),
+                ["main"] = NullableHudCount(available, stats.GetRoadCategoryCount("large_road")),
+                ["secondary"] = NullableHudCount(available, stats.GetRoadCategoryCount("medium_road")),
+                ["tertiary"] = NullableHudCount(available, stats.GetRoadCategoryCount("small_road")),
+                ["ramp"] = NullableHudCount(available, stats.GetRoadCategoryCount("ramp")),
+                ["unclassified"] = NullableHudCount(available, stats.GetRoadCategoryCount("gravel_road")),
+                ["paths"] = NullableHudCount(available, stats.GetRoadCategoryCount("pathway")),
+                ["total"] = NullableHudCount(available, stats.GetLayerCount("roads"))
             };
+        }
+
+        private bool IsObjectStatisticsAvailable(BundleHudSnapshot stats)
+        {
+            return IsSourceAvailable(stats, "layerIndex") ||
+                IsZoningStatisticsAvailable(stats) ||
+                IsRoadStatisticsAvailable(stats) ||
+                IsWaterLineStatisticsAvailable(stats) ||
+                IsWaterAreaStatisticsAvailable(stats);
+        }
+
+        private bool IsZoningStatisticsAvailable(BundleHudSnapshot stats)
+        {
+            return IsSourceAvailable(stats, "zoningPolygons") ||
+                (_zoningPolygons != null && _zoningPolygons.Count > 0);
+        }
+
+        private bool IsRoadStatisticsAvailable(BundleHudSnapshot stats)
+        {
+            return IsSourceAvailable(stats, "roadsIndex") ||
+                (_roadLines != null && _roadLines.Count > 0);
+        }
+
+        private bool IsWaterLineStatisticsAvailable(BundleHudSnapshot stats)
+        {
+            return IsSourceAvailable(stats, "layerIndex") ||
+                (_waterLines != null && _waterLines.Count > 0);
+        }
+
+        private bool IsWaterAreaStatisticsAvailable(BundleHudSnapshot stats)
+        {
+            return IsSourceAvailable(stats, "layerIndex") ||
+                (_waterAreaOutlines != null && _waterAreaOutlines.Count > 0);
+        }
+
+        private static bool IsSourceAvailable(BundleHudSnapshot stats, string key)
+        {
+            var source = stats != null ? stats.GetSource(key) : null;
+            return source != null && source.Available;
         }
 
         private JArray BuildServiceHudJson(BundleHudSnapshot stats)
@@ -200,7 +261,8 @@ namespace CityTimelineMod.Rendering
                 return;
 
             var runtimeUsed = false;
-            if (!_bundleHudSnapshot.GetSource("zoningPolygons").Available && _zoningPolygons != null)
+            if (!IsSourceAvailable(_bundleHudSnapshot, "zoningPolygons") &&
+                _zoningPolygons != null && _zoningPolygons.Count > 0)
             {
                 for (var i = 0; i < BundleHudSnapshot.ZoningKeys.Length; i++)
                     _bundleHudSnapshot.ZoningCounts[BundleHudSnapshot.ZoningKeys[i]] = 0;
@@ -219,7 +281,8 @@ namespace CityTimelineMod.Rendering
                 runtimeUsed = true;
             }
 
-            if (!_bundleHudSnapshot.GetSource("roadsIndex").Available && _roadLines != null)
+            if (!IsSourceAvailable(_bundleHudSnapshot, "roadsIndex") &&
+                _roadLines != null && _roadLines.Count > 0)
             {
                 for (var i = 0; i < BundleHudSnapshot.RoadCategoryKeys.Length; i++)
                     _bundleHudSnapshot.RoadCategoryCounts[BundleHudSnapshot.RoadCategoryKeys[i]] = 0;
@@ -235,7 +298,13 @@ namespace CityTimelineMod.Rendering
             }
 
             var roadStats = _roadSemanticStats;
-            if (!_bundleHudSnapshot.GetSource("layerIndex").Available)
+            var hasRuntimeLayers =
+                (roadStats != null && (roadStats.Roads > 0 || roadStats.Paths > 0)) ||
+                (_waterLines != null && _waterLines.Count > 0) ||
+                (_waterAreaOutlines != null && _waterAreaOutlines.Count > 0) ||
+                (_railwayLines != null && _railwayLines.Count > 0);
+
+            if (!IsSourceAvailable(_bundleHudSnapshot, "layerIndex") && hasRuntimeLayers)
             {
                 _bundleHudSnapshot.LayerCounts["roads"] = roadStats != null ? roadStats.Roads : 0;
                 _bundleHudSnapshot.LayerCounts["paths"] = roadStats != null ? roadStats.Paths : 0;

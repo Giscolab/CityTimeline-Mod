@@ -76,6 +76,9 @@ function renderMetricRows(
 export function StatisticsPanel({ stats }: StatisticsPanelProps) {
   const bundleLabel = stats.bundleName || stats.bundleId || "Bundle actif";
   const state = stats.available ? "connecté" : "indisponible";
+  const availableServiceFamilies = stats.services.filter(
+    (family) => family.available && family.total !== null,
+  );
 
   return (
     <div className="ctm-pane ctm-statistics-pane">
@@ -89,6 +92,9 @@ export function StatisticsPanel({ stats }: StatisticsPanelProps) {
           <Readout>{bundleLabel}</Readout>
           <Readout>
             Objets OSM exploitables · <strong>{formatCount(stats.objects)}</strong>
+          </Readout>
+          <Readout>
+            0 = source chargée sans objet correspondant · — = donnée absente du bundle
           </Readout>
         </div>
       </Section>
@@ -121,14 +127,14 @@ export function StatisticsPanel({ stats }: StatisticsPanelProps) {
       <Foldout
         num="S3"
         title="Services"
-        state={`${stats.services.length} familles`}
+        state={`${availableServiceFamilies.length}/${stats.services.length} familles connectées`}
         defaultOpen
       >
-        {stats.services.length === 0 ? (
+        {availableServiceFamilies.length === 0 ? (
           <Readout>Aucune donnée de services disponible dans ce bundle.</Readout>
         ) : (
           <div className="ctm-service-stats-list">
-            {stats.services.map((family) => (
+            {availableServiceFamilies.map((family) => (
               <section className="ctm-service-stat-family" key={family.key}>
                 <header className="ctm-service-family-heading">
                   <span>{family.label}</span>

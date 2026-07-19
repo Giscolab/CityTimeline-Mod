@@ -250,6 +250,7 @@ namespace CityTimelineMod.Rendering
 
         private void ApplyCurrentOverlayVisibilityToMaterials()
         {
+            InvalidateBundleHudSnapshotJson();
             ApplyZoningFamilyVisibilityToMaterials();
 
             OverlayVisibilityApplier.ApplyRoadVisibility(

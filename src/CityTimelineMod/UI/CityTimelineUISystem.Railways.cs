@@ -1,6 +1,7 @@
 using Colossal.UI.Binding;
 using CityTimelineMod.Rendering;
 using CityTimelineMod.Rendering.Railways;
+using System.Globalization;
 using UnityEngine;
 
 namespace CityTimelineMod.UI
@@ -37,6 +38,7 @@ namespace CityTimelineMod.UI
         private TriggerBinding<bool> _setRailwayTunnelsVisibleBinding;
 
         private float _nextRailwayBindingSyncTime;
+        private string _lastRailwayBindingSignature;
 
         private void CreateRailwayBindings()
         {
@@ -139,10 +141,16 @@ namespace CityTimelineMod.UI
         {
             base.OnUpdate();
 
+            // Keep CoHTML completely idle while the panel is closed.  The old
+            // 4 Hz poll rebuilt statistics JSON and queried overlay progress
+            // throughout gameplay even though no UI could consume it.
+            if (_visibleBinding == null || !_visibleBinding.value)
+                return;
+
             if (UnityEngine.Time.unscaledTime < _nextRailwayBindingSyncTime)
                 return;
 
-            _nextRailwayBindingSyncTime = UnityEngine.Time.unscaledTime + 0.25f;
+            _nextRailwayBindingSyncTime = UnityEngine.Time.unscaledTime + 1f;
             SyncRailwayBindings();
             SyncStatisticsBindings();
         }
@@ -155,6 +163,12 @@ namespace CityTimelineMod.UI
                 state = RailwayHudSnapshot.Unavailable(
                     "Aucune donnée ferroviaire disponible dans ce bundle."
                 );
+
+            var signature = BuildRailwayBindingSignature(state);
+            if (string.Equals(signature, _lastRailwayBindingSignature, System.StringComparison.Ordinal))
+                return;
+
+            _lastRailwayBindingSignature = signature;
 
             UpdateBinding(_railwayAvailableBinding, state.Available);
             UpdateBinding(_railwayVisibleBinding, state.Visible);
@@ -174,6 +188,31 @@ namespace CityTimelineMod.UI
             UpdateBinding(_railwayTunnelCountBinding, state.TunnelCount);
             UpdateBinding(_railwayTotalCountBinding, state.TotalCount);
             UpdateBinding(_railwayStatusBinding, state.Status ?? "");
+        }
+
+        private static string BuildRailwayBindingSignature(RailwayHudSnapshot state)
+        {
+            return string.Join("|", new[]
+            {
+                state.Available ? "1" : "0",
+                state.Visible ? "1" : "0",
+                state.Opacity.ToString("R", CultureInfo.InvariantCulture),
+                state.Thickness.ToString("R", CultureInfo.InvariantCulture),
+                state.TrainVisible ? "1" : "0",
+                state.TramVisible ? "1" : "0",
+                state.LightRailVisible ? "1" : "0",
+                state.SubwayVisible ? "1" : "0",
+                state.ServiceVisible ? "1" : "0",
+                state.TunnelsVisible ? "1" : "0",
+                state.TrainCount.ToString(CultureInfo.InvariantCulture),
+                state.TramCount.ToString(CultureInfo.InvariantCulture),
+                state.LightRailCount.ToString(CultureInfo.InvariantCulture),
+                state.SubwayCount.ToString(CultureInfo.InvariantCulture),
+                state.ServiceCount.ToString(CultureInfo.InvariantCulture),
+                state.TunnelCount.ToString(CultureInfo.InvariantCulture),
+                state.TotalCount.ToString(CultureInfo.InvariantCulture),
+                state.Status ?? ""
+            });
         }
 
         private static void UpdateBinding(ValueBinding<bool> binding, bool value)

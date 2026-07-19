@@ -56,9 +56,12 @@ namespace CityTimelineMod
             try
             {
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldErrorPrefabSystem>(SystemUpdatePhase.ToolUpdate);
-            updateSystem.UpdateAt<CityTimelineMod.Diagnostics.LargeMapTerrainDiagnosticSystem>(SystemUpdatePhase.Modification1);
-                updateSystem.UpdateAt<CityTimelineMod.LargeMap.RailOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification2);
-                updateSystem.UpdateAt<CityTimelineMod.LargeMap.AirOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification2);
+                updateSystem.UpdateAt<CityTimelineMod.Diagnostics.LargeMapTerrainDiagnosticSystem>(SystemUpdatePhase.Modification1);
+
+                // GeoJSON is a visual/informational overlay only.  Do not schedule
+                // the legacy outside-connection repair systems: both force
+                // Dependency.Complete() and scan/modify the game network every
+                // 30 simulation frames, which creates a visible periodic hitch.
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldRoadProfileSystem>(SystemUpdatePhase.Modification1);
                 updateSystem.UpdateAt<CityTimelineMod.UI.CityTimelineUISystem>(SystemUpdatePhase.UIUpdate);
                 Log.Info("[CityTimelineMod] CoHTML UI system registered; GeoJSON remains visual-only.");

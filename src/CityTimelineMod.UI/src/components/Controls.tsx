@@ -38,8 +38,14 @@ export function Foldout(props: {
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(Boolean(props.defaultOpen));
+
   return (
-    <details className="card foldout section_sop" open={props.defaultOpen}>
+    <details
+      className="card foldout section_sop"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary className="ctm-section-header header_l0j first_l25">
         <div className="ctm-section-header-inner header_hMN">
           <span className="ctm-foldout-arrow" aria-hidden="true" />

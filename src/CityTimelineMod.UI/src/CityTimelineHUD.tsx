@@ -22,7 +22,6 @@ import {
 import { RailwayPanel } from "./components/RailwayPanel";
 import { ServicesPanel } from "./components/ServicesPanel";
 import { StatisticsPanel } from "./components/StatisticsPanel";
-import { ZoningPanel } from "./components/ZoningPanel";
 import {
   formatCount,
   getMetric,
@@ -143,11 +142,6 @@ export function CityTimelineHUDButton() {
 export function CityTimelineHUDHost() {
   const visible = useValue(cohtmlHudVisible$);
 
-  console.info(
-    "[CityTimelineMod UI] CityTimelineHUDHost rendering; visible=",
-    visible,
-  );
-
   if (!visible) {
     return null;
   }
@@ -168,10 +162,6 @@ function CityTimelineHUD({
 }: {
   onClose: () => void;
 }) {
-  console.info(
-    "[CityTimelineMod UI] CityTimelineHUD rendering",
-  );
-
   const [activeTab, setActiveTab] =
     useState<TabId>("p1");
   const stats = useBundleStats();
@@ -533,11 +523,9 @@ function DisplayRenderPane({ stats }: { stats: BundleStatsSnapshot }) {
           suffix="%"
         />
 
-        <GroupTitle>
-          Zoning
-        </GroupTitle>
-
-        <ZoningPanel />
+        <Readout>
+          Catégories zoning issues directement du GeoJSON — aucun prefab ni placement automatique.
+        </Readout>
       </Foldout>
 
       <RailwayPanel />
