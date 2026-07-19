@@ -28,7 +28,6 @@ module.exports = {
   externalsType: "window",
   externals: {
     react: "React",
-    "react-dom": "ReactDOM",
     "cs2/modding": "cs2/modding",
     "cs2/api": "cs2/api",
     "cs2/bindings": "cs2/bindings",

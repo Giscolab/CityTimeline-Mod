@@ -1,4 +1,3 @@
-import React from "react";
 import { ModRegistrar } from "cs2/modding";
 import {
   CityTimelineHUDButton,

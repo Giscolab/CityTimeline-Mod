@@ -1,4 +1,4 @@
-import React, { ReactNode, useState } from "react";
+import { ReactNode, useState } from "react";
 
 type ButtonVariant = "default" | "primary" | "danger" | "diag";
 

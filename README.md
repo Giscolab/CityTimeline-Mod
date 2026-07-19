@@ -23,7 +23,7 @@ docs                     documentation complémentaire
 - Cities: Skylines II installé.
 - Toolchain de modding CS2 initialisée.
 - `dotnet` disponible.
-- Node.js 18+ et npm disponibles.
+- Node.js 20.9+ et npm disponibles.
 - Variable utilisateur `CSII_TOOLPATH` configurée par l’outil de modding.
 
 ## Installation locale
