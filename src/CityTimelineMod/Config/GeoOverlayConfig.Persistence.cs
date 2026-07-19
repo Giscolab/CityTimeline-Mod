@@ -55,6 +55,7 @@ config.RenderWaterAreas = GetBool(root, "renderWaterAreas", config.RenderWaterAr
 config.RenderRoads = GetBool(root, "renderRoads", config.RenderRoads);
 config.RoadGeometrySource = GetString(root, "roadGeometrySource", config.RoadGeometrySource);
 config.RenderPaths = GetBool(root, "renderPaths", config.RenderPaths);
+config.LoadRailwaySettings(root);
 config.RoadHighwayFilter = GetString(root, "roadHighwayFilter", config.RoadHighwayFilter);
 config.PathHighwayFilter = GetString(root, "pathHighwayFilter", config.PathHighwayFilter);
 config.OverlayProfile = GetString(root, "overlayProfile", config.OverlayProfile);
@@ -386,6 +387,7 @@ if (config.RibbonYOffset < 0f)
 config.RoadChunkSizeMeters = Mathf.Clamp(config.RoadChunkSizeMeters, 128f, 4096f);
 config.RoadChunksPerFrame = Mathf.Clamp(config.RoadChunksPerFrame, 1, 64);
 config.PathChunksPerFrame = Mathf.Clamp(config.PathChunksPerFrame, 1, 64);
+config.ClampRailwaySettings();
 
 config.RoadRenderMode = NormalizeRoadRenderMode(config.RoadRenderMode);
 config.PathRenderMode = NormalizeRoadRenderMode(config.PathRenderMode);
@@ -857,6 +859,7 @@ Log.Info(
 
             config.RenderRoads = true;
             config.RenderPaths = false;
+            config.RenderRailways = false;
             config.RenderWaterLines = false;
             config.RenderWaterAreas = false;
             config.RenderWaterAreaOutlines = false;
@@ -871,6 +874,7 @@ Log.Info(
 
             config.RenderRoadDirectionArrows = false;
             config.RenderRoadLabels = false;
+            config.RenderAllRailwaySegments = false;
             config.RoadArrowMaxCount = Math.Min(Math.Max(config.RoadArrowMaxCount, 0), 5000);
             config.RoadLabelMaxCount = Math.Min(Math.Max(config.RoadLabelMaxCount, 0), 300);
 
@@ -1086,6 +1090,7 @@ Log.Info(
 
                 root["renderRoads"] = RenderRoads;
                 root["renderPaths"] = RenderPaths;
+                WriteRailwaySettings(root);
                 root["renderZoning"] = RenderZoning;
                 root["renderMapBounds"] = RenderMapBounds;
                 root["renderWorldMapBounds"] = RenderWorldMapBounds;
@@ -1229,6 +1234,7 @@ Log.Info(
 
                 RenderRoads = GetBool(root, "renderRoads", RenderRoads);
                 RenderPaths = GetBool(root, "renderPaths", RenderPaths);
+                LoadRailwaySettings(root);
                 RenderZoning = GetBool(root, "renderZoning", RenderZoning);
                 RenderMapBounds = GetBool(root, "renderMapBounds", RenderMapBounds);
                 VerboseOverlayLogs = GetBool(root, "verboseOverlayLogs", VerboseOverlayLogs);

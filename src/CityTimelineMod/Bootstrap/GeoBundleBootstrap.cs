@@ -6,6 +6,7 @@ using CityTimelineMod.Config;
 using CityTimelineMod.Geometry;
 using CityTimelineMod.Importers;
 using CityTimelineMod.Rendering;
+using CityTimelineMod.Rendering.Railways;
 using CityTimelineMod.Util;
 
 namespace CityTimelineMod
@@ -81,6 +82,7 @@ namespace CityTimelineMod
                 var roadsMajor = Path.Combine(geojsonRoot, "roads_major_clipped.geojson");
                 var roadsDriveable = Path.Combine(geojsonRoot, "roads_driveable_clipped.geojson");
                 var paths = Path.Combine(geojsonRoot, "paths.geojson");
+                var railways = Path.Combine(geojsonRoot, "railways.geojson");
                 var zoning = Path.Combine(geojsonRoot, "zoning_polygons.geojson");
 
                 Log.Info("GeoBundleBootstrap started.");
@@ -92,6 +94,7 @@ namespace CityTimelineMod
                 Log.Info("roadsMajor=" + roadsMajor);
                 Log.Info("roadsDriveable=" + roadsDriveable);
                 Log.Info("paths=" + paths);
+                Log.Info("railways=" + railways);
                 Log.Info("roadGeometrySource=" + config.RoadGeometrySource + ", renderPaths=" + config.RenderPaths);
                 Log.Info("zoning=" + zoning);
 
@@ -138,6 +141,33 @@ namespace CityTimelineMod
 
                 MarkRoadLinesAsPath(pathGeometries);
 
+                var railwayGeometries = new List<GeoRailwayLine>();
+                var railwayAvailable = false;
+                var railwayStatus = "Aucune donnée ferroviaire disponible dans ce bundle.";
+
+                if (File.Exists(railways))
+                {
+                    try
+                    {
+                        railwayGeometries = RailwayGeoJsonLoader.Load(railways);
+                        railwayAvailable = railwayGeometries.Count > 0;
+                        railwayStatus = railwayAvailable
+                            ? railwayGeometries.Count + " voie(s) ferroviaire(s) chargée(s)."
+                            : "Aucune donnée ferroviaire disponible dans ce bundle.";
+                    }
+                    catch (Exception ex)
+                    {
+                        // railways.geojson is optional and must never prevent the bundle from loading.
+                        railwayGeometries.Clear();
+                        railwayStatus = "Données ferroviaires indisponibles ou illisibles. Le bundle reste utilisable.";
+                        Log.Error("GeoBundleBootstrap: optional railway overlay failed to load. " + ex);
+                    }
+                }
+                else
+                {
+                    Log.Info("GeoBundleBootstrap: optional railways.geojson not found; bundle continues without railway overlay.");
+                }
+
                 var zoningPolygons = File.Exists(zoning)
                     ? GeoJson.LoadZoningPolygons(zoning)
                     : new List<GeoZoningPolygon>();
@@ -159,6 +189,7 @@ namespace CityTimelineMod
                 Log.Info("Loaded area outlines: " + areaOutlines.Count);
                 Log.Info("Loaded roads geometries source=" + config.RoadGeometrySource + ": " + roadGeometries.Count);
                 Log.Info("Loaded path geometries: " + pathGeometries.Count);
+                Log.Info("Loaded railway geometries: " + railwayGeometries.Count + ", available=" + railwayAvailable);
 
                 var cacheBoundsSource = new List<List<GeoPoint>>();
                 cacheBoundsSource.AddRange(lineGeometries);
@@ -263,7 +294,16 @@ namespace CityTimelineMod
                 Log.Info("Total zoning polygons loaded: " + zoningPolygons.Count);
                 LogZoningSummary(zoningPolygons);
 
-                GeoDebugOverlay.Install(renderWaterLineGeometries, renderWaterAreaOutlines, renderRoadGeometries, zoningPolygons, config);
+                GeoDebugOverlay.Install(
+                    renderWaterLineGeometries,
+                    renderWaterAreaOutlines,
+                    renderRoadGeometries,
+                    zoningPolygons,
+                    railwayGeometries,
+                    railwayAvailable,
+                    railwayStatus,
+                    config
+                );
             }
             catch (Exception ex)
             {

@@ -40,6 +40,7 @@ namespace CityTimelineMod.Config
             RoadChunkSizeMeters = Mathf.Clamp(RoadChunkSizeMeters, 128f, 4096f);
             RoadChunksPerFrame = Mathf.Clamp(RoadChunksPerFrame, 1, 64);
             PathChunksPerFrame = Mathf.Clamp(PathChunksPerFrame, 1, 64);
+            ClampRailwaySettings();
             RoadRenderMode = NormalizeRoadRenderMode(RoadRenderMode);
             PathRenderMode = NormalizeRoadRenderMode(PathRenderMode);
             ZoningResidentialAlpha = Clamp01(ZoningResidentialAlpha);

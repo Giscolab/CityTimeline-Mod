@@ -20,6 +20,16 @@ namespace CityTimelineMod.Rendering.Materials
         internal Material RoadRoundabout;
         internal Material RoadArrow;
         internal Material RoadLabel;
+        internal Material RailwayTrain;
+        internal Material RailwayTrainTunnel;
+        internal Material RailwayTram;
+        internal Material RailwayTramTunnel;
+        internal Material RailwayLightRail;
+        internal Material RailwayLightRailTunnel;
+        internal Material RailwaySubway;
+        internal Material RailwaySubwayTunnel;
+        internal Material RailwayService;
+        internal Material RailwayServiceTunnel;
         internal Material ZoningResidentialLow;
         internal Material ZoningResidentialMedium;
         internal Material ZoningResidentialHigh;

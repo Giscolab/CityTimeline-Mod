@@ -9,6 +9,7 @@ using CityTimelineMod.Rendering.Bounds;
 using CityTimelineMod.Rendering.Core;
 using CityTimelineMod.Rendering.Materials;
 using CityTimelineMod.Rendering.Roads;
+using CityTimelineMod.Rendering.Railways;
 using CityTimelineMod.Rendering.Water;
 using CityTimelineMod.Rendering.Zoning;
 using CityTimelineMod.Terrain;
@@ -63,6 +64,29 @@ namespace CityTimelineMod.Rendering
             GeoOverlayConfig config
         )
         {
+            Install(
+                waterLines,
+                waterAreaOutlines,
+                roadLines,
+                zoningPolygons,
+                new List<GeoRailwayLine>(),
+                false,
+                "Aucune donnée ferroviaire disponible dans ce bundle.",
+                config
+            );
+        }
+
+        internal static void Install(
+            List<List<GeoPoint>> waterLines,
+            List<List<GeoPoint>> waterAreaOutlines,
+            List<GeoRoadLine> roadLines,
+            List<GeoZoningPolygon> zoningPolygons,
+            List<GeoRailwayLine> railwayLines,
+            bool railwayAvailable,
+            string railwayStatus,
+            GeoOverlayConfig config
+        )
+        {
             var existing = GameObject.Find(RootName);
             if (existing != null)
                 UnityEngine.Object.Destroy(existing);
@@ -71,7 +95,16 @@ namespace CityTimelineMod.Rendering
             UnityEngine.Object.DontDestroyOnLoad(root);
 
             var overlay = root.AddComponent<GroundOverlayBehaviour>();
-            overlay.Setup(waterLines, waterAreaOutlines, roadLines, zoningPolygons, config);
+            overlay.Setup(
+                waterLines,
+                waterAreaOutlines,
+                roadLines,
+                zoningPolygons,
+                railwayLines,
+                railwayAvailable,
+                railwayStatus,
+                config
+            );
 
             Log.Info("GroundOverlay: installed HARD visible segment overlay.");
         }
@@ -87,6 +120,32 @@ namespace CityTimelineMod.Rendering
                 return;
 
             overlay.ApplyRuntimeConfigChange(configKey);
+        }
+
+        internal static RailwayHudSnapshot GetRailwayHudSnapshot()
+        {
+            var existing = GameObject.Find(RootName);
+            if (existing == null)
+                return RailwayHudSnapshot.Unavailable("Overlay ferroviaire non initialisé.");
+
+            var overlay = existing.GetComponent<GroundOverlayBehaviour>();
+            return overlay != null
+                ? overlay.GetRailwayHudSnapshot()
+                : RailwayHudSnapshot.Unavailable("Overlay ferroviaire non initialisé.");
+        }
+
+        internal static bool SetRailwayBoolean(string key, bool value)
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null && overlay.SetRailwayBoolean(key, value);
+        }
+
+        internal static bool SetRailwayFloat(string key, float value)
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null && overlay.SetRailwayFloat(key, value);
         }
         internal static List<GeoRoadLine> ConvertRoadLines(List<List<GeoPoint>> lines)
         {
@@ -212,11 +271,35 @@ namespace CityTimelineMod.Rendering
             GeoOverlayConfig config
         )
         {
+            Setup(
+                waterLines,
+                waterAreaOutlines,
+                roadLines,
+                zoningPolygons,
+                new List<GeoRailwayLine>(),
+                false,
+                "Aucune donnée ferroviaire disponible dans ce bundle.",
+                config
+            );
+        }
+
+        internal void Setup(
+            List<List<GeoPoint>> waterLines,
+            List<List<GeoPoint>> waterAreaOutlines,
+            List<GeoRoadLine> roadLines,
+            List<GeoZoningPolygon> zoningPolygons,
+            List<GeoRailwayLine> railwayLines,
+            bool railwayAvailable,
+            string railwayStatus,
+            GeoOverlayConfig config
+        )
+        {
             _waterLines = waterLines ?? new List<List<GeoPoint>>();
             _waterAreaOutlines = waterAreaOutlines ?? new List<List<GeoPoint>>();
             _roadLines = roadLines ?? new List<GeoRoadLine>();
             _zoningPolygons = zoningPolygons ?? new List<GeoZoningPolygon>();
             _config = config;
+            InitializeRailwayOverlay(railwayLines, railwayAvailable, railwayStatus);
 
             // Important :
             // on garde les bounds de l'eau comme référence,
@@ -224,6 +307,20 @@ namespace CityTimelineMod.Rendering
             var boundsSource = new List<List<GeoPoint>>();
             boundsSource.AddRange(_waterLines);
             boundsSource.AddRange(_waterAreaOutlines);
+
+            // Preserve water as the calibrated reference whenever it exists.
+            // A dry bundle still needs a valid center for its independent railway layer.
+            if (boundsSource.Count == 0 && _railwayLines != null)
+            {
+                for (var i = 0; i < _railwayLines.Count; i++)
+                {
+                    var railwayLine = _railwayLines[i];
+
+                    if (railwayLine != null && railwayLine.Points != null && railwayLine.Points.Count > 0)
+                        boundsSource.Add(railwayLine.Points);
+                }
+            }
+
             _bounds = GeoBoundsCalculator.CalculateBounds(boundsSource);
             RecomputeRoadSemanticStats();
         }
@@ -273,6 +370,7 @@ namespace CityTimelineMod.Rendering
             HandlePendingBundleReload();
             UpdateProgressiveOverlayRebuild();
             UpdatePendingOverlayRebuildRequests();
+            UpdatePendingRailwaySettingsSave();
             UpdateRoadLabelBillboards();
             UpdateOverlayHud();
         }
@@ -300,8 +398,7 @@ namespace CityTimelineMod.Rendering
             ClearOverlayMaterialRegistries();
             if (_waterLines == null || _waterLines.Count == 0)
             {
-                Log.Info("GroundOverlay: no water geometry.");
-                return;
+                Log.Info("GroundOverlay: no water line geometry; continuing with independent overlay layers.");
             }
 
             var originLon = _config.UseGeoJsonCenter ? _bounds.CenterLon : _config.OriginLon;
@@ -496,6 +593,8 @@ namespace CityTimelineMod.Rendering
                 ref hasEndpoints
             );
 
+            var railwayCounters = RenderRailwayGroup(materials, stride, originLon, originLat);
+
             var createdRoadLines = 0;
             var createdPathLines = 0;
             var createdPathSegments = 0;
@@ -552,6 +651,8 @@ namespace CityTimelineMod.Rendering
             LogVerboseOverlay(
                 "GroundOverlay: created water lines=" + createdWaterLines +
                 ", water batched segments=" + createdWaterSegments +
+                ", railway lines=" + railwayCounters.CreatedLines +
+                ", railway batched segments=" + railwayCounters.CreatedSegments +
                 ", road lines=" + createdRoadLines +
                 ", path lines=" + createdPathLines +
                 ", road/path batched segments=" + createdRoadAndPathSegments +

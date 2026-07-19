@@ -6,6 +6,7 @@ namespace CityTimelineMod.Rendering.Core
         Clearing,
         Zoning,
         Water,
+        RailwayChunks,
         RoadChunks,
         PathChunks,
         Arrows,

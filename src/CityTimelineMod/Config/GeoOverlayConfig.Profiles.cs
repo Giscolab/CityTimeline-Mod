@@ -23,6 +23,7 @@ namespace CityTimelineMod.Config
                 config.RenderRoads = true;
                 config.RoadGeometrySource = "major";
                 config.RenderPaths = false;
+                config.RenderRailways = false;
                 config.RenderZoning = false;
                 return;
             }
@@ -34,6 +35,7 @@ namespace CityTimelineMod.Config
                 config.RenderRoads = true;
                 config.RoadGeometrySource = "driveable";
                 config.RenderPaths = true;
+                config.RenderRailways = false;
                 config.RenderZoning = false;
                 return;
             }
@@ -44,6 +46,7 @@ namespace CityTimelineMod.Config
                 config.RenderWaterAreas = false;
                 config.RenderRoads = false;
                 config.RenderPaths = false;
+                config.RenderRailways = false;
                 config.RenderZoning = true;
                 return;
             }
@@ -54,6 +57,7 @@ namespace CityTimelineMod.Config
                 config.RenderWaterAreas = true;
                 config.RenderRoads = false;
                 config.RenderPaths = false;
+                config.RenderRailways = false;
                 config.RenderZoning = false;
                 return;
             }
@@ -66,6 +70,7 @@ namespace CityTimelineMod.Config
                 config.RoadGeometrySource = "driveable";
                 config.RenderPaths = true;
                 config.RenderZoning = true;
+                config.RenderRailways = true;
                 return;
             }
 
@@ -76,6 +81,7 @@ namespace CityTimelineMod.Config
                 config.RenderRoads = false;
                 config.RenderPaths = false;
                 config.RenderZoning = false;
+                config.RenderRailways = false;
                 return;
             }
 

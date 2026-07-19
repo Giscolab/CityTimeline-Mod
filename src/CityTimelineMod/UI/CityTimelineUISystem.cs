@@ -60,6 +60,7 @@ namespace CityTimelineMod.UI
             AddBinding(_toggleBinding);
             AddBinding(_setVisibleBinding);
             AddBinding(_closeBinding);
+            CreateRailwayBindings();
 
             if (!InputManager.instance.TryFindAction(
                 Mod.Settings.KeyBindingToggleCohtmlHud,

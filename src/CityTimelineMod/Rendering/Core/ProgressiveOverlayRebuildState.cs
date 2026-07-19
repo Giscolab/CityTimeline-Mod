@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using CityTimelineMod.Rendering.Materials;
+using CityTimelineMod.Rendering.Railways;
 using CityTimelineMod.Rendering.Roads;
 
 namespace CityTimelineMod.Rendering.Core
@@ -15,8 +16,11 @@ namespace CityTimelineMod.Rendering.Core
         internal double OriginLat;
         internal int Stride;
         internal readonly RoadRenderCounters RoadCounters = new RoadRenderCounters();
+        internal readonly RailwayRenderCounters RailwayCounters = new RailwayRenderCounters();
+        internal List<RailwayRenderChunk> RailwayChunks = new List<RailwayRenderChunk>();
         internal List<RoadRenderChunk> RoadChunks = new List<RoadRenderChunk>();
         internal List<RoadRenderChunk> PathChunks = new List<RoadRenderChunk>();
+        internal int RailwayChunkIndex;
         internal int RoadChunkIndex;
         internal int PathChunkIndex;
         internal int CreatedWaterSegments;

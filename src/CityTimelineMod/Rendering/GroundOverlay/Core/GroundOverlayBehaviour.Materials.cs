@@ -12,6 +12,9 @@ namespace CityTimelineMod.Rendering
         private readonly List<Material> _zoningOfficeFamilyMaterials = new List<Material>();
         private readonly List<Material> _zoningParkingFamilyMaterials = new List<Material>();
         private readonly List<Material> _zoningFallbackFamilyMaterials = new List<Material>();
+        private readonly Dictionary<string, List<Material>> _railwayMaterialGroups =
+            new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+
         private OverlayRenderMaterials CreateOverlayRenderMaterials()
         {
             var materials = new OverlayRenderMaterials();
@@ -32,6 +35,18 @@ namespace CityTimelineMod.Rendering
             materials.RoadRoundabout = OverlayMaterialFactory.Create(new Color(1f, 0.35f, 0.15f, _config.RoadAlpha));
             materials.RoadArrow = OverlayMaterialFactory.Create(new Color(1f, 1f, 1f, _config.RoadAlpha));
             materials.RoadLabel = OverlayMaterialFactory.Create(new Color(1f, 1f, 1f, _config.RoadAlpha));
+
+            // Palette shared with cs2-realmap-generator/visualizer/js/railway-controller.js.
+            materials.RailwayTrain = CreateRailwayMaterial(0xf8, 0xfa, 0xfc, 1f);
+            materials.RailwayTrainTunnel = CreateRailwayMaterial(0xf8, 0xfa, 0xfc, 0.48f);
+            materials.RailwayTram = CreateRailwayMaterial(0xf5, 0x9e, 0x0b, 1f);
+            materials.RailwayTramTunnel = CreateRailwayMaterial(0xf5, 0x9e, 0x0b, 0.48f);
+            materials.RailwayLightRail = CreateRailwayMaterial(0x22, 0xd3, 0xee, 1f);
+            materials.RailwayLightRailTunnel = CreateRailwayMaterial(0x22, 0xd3, 0xee, 0.48f);
+            materials.RailwaySubway = CreateRailwayMaterial(0xa7, 0x8b, 0xfa, 1f);
+            materials.RailwaySubwayTunnel = CreateRailwayMaterial(0xa7, 0x8b, 0xfa, 0.48f);
+            materials.RailwayService = CreateRailwayMaterial(0x94, 0xa3, 0xb8, 1f);
+            materials.RailwayServiceTunnel = CreateRailwayMaterial(0x94, 0xa3, 0xb8, 0.48f);
 
             materials.ZoningResidentialLow = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialLowColor, _config.ZoningAlpha));
             materials.ZoningResidentialMedium = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialMediumColor, _config.ZoningAlpha));
@@ -77,6 +92,17 @@ namespace CityTimelineMod.Rendering
 
             _pathMaterials.Add(materials.Path);
 
+            RegisterRailwayMaterial("train.surface", materials.RailwayTrain);
+            RegisterRailwayMaterial("train.tunnel", materials.RailwayTrainTunnel);
+            RegisterRailwayMaterial("tram.surface", materials.RailwayTram);
+            RegisterRailwayMaterial("tram.tunnel", materials.RailwayTramTunnel);
+            RegisterRailwayMaterial("light_rail.surface", materials.RailwayLightRail);
+            RegisterRailwayMaterial("light_rail.tunnel", materials.RailwayLightRailTunnel);
+            RegisterRailwayMaterial("subway.surface", materials.RailwaySubway);
+            RegisterRailwayMaterial("subway.tunnel", materials.RailwaySubwayTunnel);
+            RegisterRailwayMaterial("service.surface", materials.RailwayService);
+            RegisterRailwayMaterial("service.tunnel", materials.RailwayServiceTunnel);
+
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialLow);
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialMedium);
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialHigh);
@@ -121,6 +147,7 @@ namespace CityTimelineMod.Rendering
             _waterAreaFillMaterials.Clear();
             _mapBoundsMaterials.Clear();
             _roadLabelMeshes.Clear();
+            _railwayMaterialGroups.Clear();
 
             _zoningResidentialFamilyMaterials.Clear();
             _zoningCommercialFamilyMaterials.Clear();
@@ -154,11 +181,70 @@ namespace CityTimelineMod.Rendering
                 _config.WaterAreaFillAlpha
             );
 
+            ApplyRailwayVisibilityToMaterials();
+
             OverlayVisibilityApplier.ApplyMapBoundsVisibility(
                 _mapBoundsMaterials,
                 _config.RenderMapBounds,
                 _config.MapBoundsAlpha
             );
+        }
+
+        private Material CreateRailwayMaterial(byte red, byte green, byte blue, float opacityScale)
+        {
+            var alpha = Mathf.Clamp01(_config.RailwayOpacity * opacityScale);
+            return OverlayMaterialFactory.Create(new Color32(red, green, blue, (byte)Mathf.RoundToInt(alpha * 255f)));
+        }
+
+        private void RegisterRailwayMaterial(string key, Material material)
+        {
+            if (material == null || string.IsNullOrWhiteSpace(key))
+                return;
+
+            List<Material> group;
+            if (!_railwayMaterialGroups.TryGetValue(key, out group))
+            {
+                group = new List<Material>();
+                _railwayMaterialGroups[key] = group;
+            }
+
+            group.Add(material);
+        }
+
+        private void ApplyRailwayVisibilityToMaterials()
+        {
+            if (_config == null)
+                return;
+
+            ApplyRailwayCategoryVisibility("train", _config.RailwayTrainVisible);
+            ApplyRailwayCategoryVisibility("tram", _config.RailwayTramVisible);
+            ApplyRailwayCategoryVisibility("light_rail", _config.RailwayLightRailVisible);
+            ApplyRailwayCategoryVisibility("subway", _config.RailwaySubwayVisible);
+            ApplyRailwayCategoryVisibility("service", _config.RailwayServiceVisible);
+        }
+
+        private void ApplyRailwayCategoryVisibility(string category, bool categoryVisible)
+        {
+            var surfaceVisible = _config.RenderRailways && categoryVisible;
+            var tunnelVisible = surfaceVisible && _config.RailwayTunnelsVisible;
+            List<Material> surface;
+            List<Material> tunnel;
+
+            if (_railwayMaterialGroups.TryGetValue(category + ".surface", out surface))
+            {
+                OverlayVisibilityApplier.SetMaterialsAlpha(
+                    surface,
+                    surfaceVisible ? _config.RailwayOpacity : 0f
+                );
+            }
+
+            if (_railwayMaterialGroups.TryGetValue(category + ".tunnel", out tunnel))
+            {
+                OverlayVisibilityApplier.SetMaterialsAlpha(
+                    tunnel,
+                    tunnelVisible ? _config.RailwayOpacity * 0.48f : 0f
+                );
+            }
         }
 
         private void ApplyZoningFamilyVisibilityToMaterials()

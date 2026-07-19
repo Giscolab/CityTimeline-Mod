@@ -21,6 +21,7 @@ import {
 } from "./components/Controls";
 
 import { ImportRoutesPane } from "./components/RoadCatalog";
+import { RailwayPanel } from "./components/RailwayPanel";
 import { ZoningPanel } from "./components/ZoningPanel";
 
 type TabId = "p1" | "p2" | "p3" | "p4" | "p5";
@@ -47,13 +48,13 @@ const tabs: Array<{
   },
   {
     id: "p4",
-    label: "Affichage & rendu",
-    count: "07–09",
+    label: "Couches & rendu",
+    count: "07–10",
   },
   {
     id: "p5",
     label: "Calage avancé",
-    count: "10",
+    count: "11",
   },
 ];
 
@@ -557,8 +558,10 @@ function DisplayRenderPane() {
         <ZoningPanel />
       </Foldout>
 
+      <RailwayPanel />
+
       <Foldout
-        num="08"
+        num="09"
         title="Performance overlay"
         state="foldout"
         note="À ouvrir seulement pour vérifier le coût du rendu."
@@ -602,7 +605,7 @@ function DisplayRenderPane() {
       </Foldout>
 
       <Foldout
-        num="09"
+        num="10"
         title="Rendu avancé routes / filtres"
         state="foldout"
         note="Filtres visuels locaux pour préparer la cartographie des bindings."
@@ -668,7 +671,7 @@ function CalibrationPane() {
   return (
     <div className="ctm-pane">
       <Foldout
-        num="10"
+        num="11"
         title="Calage avancé"
         state="foldout · verrouillé"
         note="Doit rester verrouillé par défaut."
@@ -748,7 +751,7 @@ function Footer({
     <div className="footer">
       <div className="footer-head">
         <span className="num">
-          11
+          12
         </span>
 
         <h2>

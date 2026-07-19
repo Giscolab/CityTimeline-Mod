@@ -20,6 +20,8 @@ namespace CityTimelineMod.Rendering
                 case "waterAreaFillAlpha":
                 case "zoningAlpha":
                 case "mapBoundsAlpha":
+                case "renderRailways":
+                case "railwayOpacity":
                 case "verboseOverlayLogs":
                 case "showOverlayHud":
                 case "modEnabled":

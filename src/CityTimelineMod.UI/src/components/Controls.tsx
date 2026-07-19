@@ -94,13 +94,18 @@ export function HudButton(props: {
 export function ToggleField(props: {
   id: string;
   children: ReactNode;
+  checked?: boolean;
   defaultChecked?: boolean;
   disabled?: boolean;
   type?: "checkbox" | "radio";
   name?: string;
   onChange?: (checked: boolean) => void;
 }) {
-  const [checked, setChecked] = useState(Boolean(props.defaultChecked));
+  const [uncontrolledChecked, setUncontrolledChecked] = useState(
+    Boolean(props.defaultChecked),
+  );
+  const isControlled = props.checked !== undefined;
+  const checked = isControlled ? Boolean(props.checked) : uncontrolledChecked;
   const disabled = Boolean(props.disabled);
   return (
     <label
@@ -115,8 +120,13 @@ export function ToggleField(props: {
         checked={checked}
         disabled={disabled}
         onChange={(event) => {
-          setChecked(event.currentTarget.checked);
-          props.onChange?.(event.currentTarget.checked);
+          const nextChecked = event.currentTarget.checked;
+
+          if (!isControlled) {
+            setUncontrolledChecked(nextChecked);
+          }
+
+          props.onChange?.(nextChecked);
         }}
       />
       <span className="toggle-label label_VSW label_T__">{props.children}</span>
@@ -131,11 +141,19 @@ export function SliderField(props: {
   label: string;
   min: number;
   max: number;
-  defaultValue: number;
+  value?: number;
+  defaultValue?: number;
+  step?: number;
   disabled?: boolean;
   suffix?: string;
+  onChange?: (value: number) => void;
 }) {
-  const [value, setValue] = useState(props.defaultValue);
+  const [uncontrolledValue, setUncontrolledValue] = useState(
+    props.defaultValue ?? props.min,
+  );
+  const isControlled = props.value !== undefined;
+  const value = isControlled ? Number(props.value) : uncontrolledValue;
+
   return (
     <div className={cx("field field_amr field_cjf slider", props.disabled && "is-disabled")}>
       <div className="field-label label_VSW label_T__">
@@ -146,9 +164,18 @@ export function SliderField(props: {
           type="range"
           min={props.min}
           max={props.max}
+          step={props.step}
           value={value}
           disabled={props.disabled}
-          onChange={(event) => setValue(Number(event.currentTarget.value))}
+          onChange={(event) => {
+            const nextValue = Number(event.currentTarget.value);
+
+            if (!isControlled) {
+              setUncontrolledValue(nextValue);
+            }
+
+            props.onChange?.(nextValue);
+          }}
         />
       </div>
     </div>

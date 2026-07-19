@@ -1,11 +1,59 @@
 using System;
 using CityTimelineMod.Rendering.Core;
+using CityTimelineMod.Rendering.Railways;
 using UnityEngine;
 
 namespace CityTimelineMod.Rendering.Batching
 {
     internal static class OverlayMeshFlusher
     {
+        internal static int FlushRailwayBatch(
+            Transform parent,
+            string batchKey,
+            RailwayMeshBatch batch,
+            Action<string> logVerbose
+        )
+        {
+            if (batch == null || batch.Vertices.Count < 3 || batch.Triangles.Count < 3)
+                return 0;
+
+            var name = "railway_batch_" + OverlayObjectNameUtil.SanitizeObjectName(batchKey) + "_" + batch.ChunkIndex;
+            var obj = new GameObject(name);
+            obj.transform.SetParent(parent, true);
+
+            var mesh = new Mesh();
+            mesh.name = name + "_mesh";
+            // A single long tunnel segment can expand into thousands of dash quads.
+            // Force 32-bit indices so the mesh remains valid beyond 65,535 vertices.
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.vertices = batch.Vertices.ToArray();
+            mesh.triangles = batch.Triangles.ToArray();
+            mesh.RecalculateBounds();
+            mesh.RecalculateNormals();
+
+            var filter = obj.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+
+            var renderer = obj.AddComponent<MeshRenderer>();
+            renderer.material = batch.Material;
+
+            if (logVerbose != null)
+            {
+                logVerbose(
+                    "GroundOverlay: railway batch created: " + name +
+                    ", primitives=" + batch.PrimitiveCount +
+                    ", vertices=" + batch.Vertices.Count +
+                    ", triangles=" + (batch.Triangles.Count / 3)
+                );
+            }
+
+            batch.ChunkIndex++;
+            batch.PrimitiveCount = 0;
+            batch.Vertices.Clear();
+            batch.Triangles.Clear();
+            return 1;
+        }
+
         internal static int FlushRoadBatch(
             Transform parent,
             string batchKey,
