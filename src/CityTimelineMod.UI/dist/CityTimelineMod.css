@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Overpass";
-  src: url("./assets/fonts/overpass.ttf") format("truetype");
+  src: url(coui://ui-mods/fonts/overpass.ttf) format("truetype");
   font-weight: 100 900;
   font-style: normal;
 }
@@ -1167,41 +1167,42 @@ td {
 }
 
 .service-education {
-  --service-color: #38bdf8;
+  --service-color: #4da3ff;
 }
 
 .service-fire {
-  --service-color: #ef4444;
+  --service-color: #ff5a52;
 }
 
 .service-medical {
-  --service-color: #f472b6;
+  --service-color: #ff73a8;
 }
 
 .service-parks {
-  --service-color: #4ade80;
+  --service-color: #65d66e;
 }
 
 .service-electricity {
-  --service-color: #facc15;
+  --service-color: #ffd84d;
 }
 
 .service-waste {
-  --service-color: #fb923c;
+  --service-color: #ad967a;
 }
 
 .service-transport {
-  --service-color: #a78bfa;
+  --service-color: #b887ff;
 }
 
 .service-water {
-  --service-color: #22d3ee;
+  --service-color: #38c8ff;
 }
 
 .service-communications {
-  --service-color: #2dd4bf;
+  --service-color: #ff9f43;
 }
 
 .ctm-service-family[class*="service-"] {
   border-left-color: var(--service-color, var(--hud-accent-dim));
 }
+
