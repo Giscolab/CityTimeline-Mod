@@ -10,5 +10,20 @@ namespace CityTimelineMod.Rendering.Railways
         internal int SkippedByFilter;
         internal int SkippedByLimit;
         internal int SkippedInvalid;
+
+        internal RailwayRenderCounters Copy()
+        {
+            return new RailwayRenderCounters
+            {
+                SourceLines = SourceLines,
+                EligibleLines = EligibleLines,
+                CreatedLines = CreatedLines,
+                CreatedSegments = CreatedSegments,
+                CreatedMeshObjects = CreatedMeshObjects,
+                SkippedByFilter = SkippedByFilter,
+                SkippedByLimit = SkippedByLimit,
+                SkippedInvalid = SkippedInvalid
+            };
+        }
     }
 }

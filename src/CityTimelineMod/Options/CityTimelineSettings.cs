@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Text;
-using CityTimelineMod.Roads;
 using CityTimelineMod.Rendering;
 using Colossal.IO.AssetDatabase;
 using Game.Input;
@@ -81,7 +80,7 @@ private const string ModFolderName = "CityTimelineMod";
         private string _roadGeometrySource = "driveable";
         private int _minimumRoadDebugTier = 0;
         private bool _runtimeRoadImportEnabled = false;
-        private bool _runtimeRoadImportRunOnce = true;
+        private bool _runtimeRoadImportRunOnce = false;
         private int _runtimeRoadImportMaxSegments = 0;
         private int _runtimeRoadImportBatchSize = 256;
         private string _runtimeRoadImportSelectionMode = "staged-cell-priority";
@@ -221,22 +220,22 @@ private const string ModFolderName = "CityTimelineMod";
             set => SetInt(ref _minimumRoadDebugTier, value, "minimumRoadDebugTier");
         }
 
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public bool RuntimeRoadImportEnabled
         {
-            get => _runtimeRoadImportEnabled;
-            set => SetBool(ref _runtimeRoadImportEnabled, value, "runtimeRoadImportEnabled");
+            get => false;
+            set => _runtimeRoadImportEnabled = false;
         }
 
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public bool RuntimeRoadImportRunOnce
         {
-            get => _runtimeRoadImportRunOnce;
-            set => SetBool(ref _runtimeRoadImportRunOnce, value, "runtimeRoadImportRunOnce");
+            get => false;
+            set => _runtimeRoadImportRunOnce = false;
         }
 
         [SettingsUISlider(min = 0f, max = 500000f, step = 100f)]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public int RuntimeRoadImportMaxSegments
         {
             get => _runtimeRoadImportMaxSegments;
@@ -244,7 +243,7 @@ private const string ModFolderName = "CityTimelineMod";
         }
 
         [SettingsUISlider(min = 1f, max = 4096f, step = 1f)]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public int RuntimeRoadImportBatchSize
         {
             get => _runtimeRoadImportBatchSize;
@@ -252,7 +251,7 @@ private const string ModFolderName = "CityTimelineMod";
         }
 
         [SettingsUITextInput]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public string RuntimeRoadImportSelectionMode
         {
             get => _runtimeRoadImportSelectionMode;
@@ -260,7 +259,7 @@ private const string ModFolderName = "CityTimelineMod";
         }
 
         [SettingsUISlider(min = 50f, max = 5000f, step = 50f)]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public float RuntimeRoadImportDistanceBucketMeters
         {
             get => _runtimeRoadImportDistanceBucketMeters;
@@ -268,21 +267,21 @@ private const string ModFolderName = "CityTimelineMod";
         }
 
         [SettingsUISlider(min = 0f, max = 3f, step = 0.05f)]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public float RuntimeRoadImportPriorityWeight
         {
             get => _runtimeRoadImportPriorityWeight;
             set => SetFloat(ref _runtimeRoadImportPriorityWeight, value, "runtimeRoadImportPriorityWeight");
         }
 
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public bool RuntimeRoadImportSkipParkingAisles
         {
             get => _runtimeRoadImportSkipParkingAisles;
             set => SetBool(ref _runtimeRoadImportSkipParkingAisles, value, "runtimeRoadImportSkipParkingAisles");
         }
 
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public bool RuntimeRoadImportSkipClearlyUnpaved
         {
             get => _runtimeRoadImportSkipClearlyUnpaved;
@@ -290,17 +289,17 @@ private const string ModFolderName = "CityTimelineMod";
         }
 
         [SettingsUIButton]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public bool ImportRuntimeRoadsNow
         {
-            set => RuntimeRoadSpawner.ImportCachedRoadLinesNow();
+            set { }
         }
 
         [SettingsUIButton]
-        [SettingsUISection(SectionNetwork, GroupRoutes)]
+        [SettingsUIHidden]
         public bool UndoRuntimeRoadImport
         {
-            set => UnityEngine.Debug.Log("[CityTimelineMod] UndoRuntimeRoadImport disabled in V1: destructive deletion of CS2 network entities is unsafe.");
+            set { }
         }
 
         [SettingsUIButton]
@@ -668,7 +667,7 @@ private const string ModFolderName = "CityTimelineMod";
             _roadGeometrySource = "driveable";
             _minimumRoadDebugTier = 0;
             _runtimeRoadImportEnabled = false;
-            _runtimeRoadImportRunOnce = true;
+            _runtimeRoadImportRunOnce = false;
             _runtimeRoadImportMaxSegments = 0;
             _runtimeRoadImportBatchSize = 256;
             _runtimeRoadImportSelectionMode = "staged-cell-priority";
@@ -953,6 +952,5 @@ private const string ModFolderName = "CityTimelineMod";
         }
     }
 }
-
 
 

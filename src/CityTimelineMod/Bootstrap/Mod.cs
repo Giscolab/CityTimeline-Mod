@@ -60,10 +60,8 @@ namespace CityTimelineMod
                 updateSystem.UpdateAt<CityTimelineMod.LargeMap.RailOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification2);
                 updateSystem.UpdateAt<CityTimelineMod.LargeMap.AirOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification2);
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldRoadProfileSystem>(SystemUpdatePhase.Modification1);
-                updateSystem.UpdateAt<CityTimelineMod.Roads.RuntimeRoadToolSystem>(SystemUpdatePhase.ToolUpdate);
-                updateSystem.UpdateAt<CityTimelineMod.Systems.RuntimeRoadToolDriverSystem>(SystemUpdatePhase.ToolUpdate);
                 updateSystem.UpdateAt<CityTimelineMod.UI.CityTimelineUISystem>(SystemUpdatePhase.UIUpdate);
-                Log.Info("[CityTimelineMod] Runtime road and CoHTML UI systems registered.");
+                Log.Info("[CityTimelineMod] CoHTML UI system registered; GeoJSON remains visual-only.");
 
                 foreach (SystemUpdatePhase phase in Enum.GetValues(typeof(SystemUpdatePhase)))
                 {
@@ -72,7 +70,7 @@ namespace CityTimelineMod
             }
             catch (Exception ex)
             {
-                Debug.LogError("[CityTimelineMod] RuntimeRoadToolSystem registration error: " + ex);
+                Debug.LogError("[CityTimelineMod] UI system registration error: " + ex);
                 Log.Error(ex);
             }
 

@@ -7,6 +7,8 @@ using CityTimelineMod.Geometry;
 using CityTimelineMod.Importers;
 using CityTimelineMod.Rendering;
 using CityTimelineMod.Rendering.Railways;
+using CityTimelineMod.Rendering.Services;
+using CityTimelineMod.Rendering.Statistics;
 using CityTimelineMod.Util;
 
 namespace CityTimelineMod
@@ -172,6 +174,32 @@ namespace CityTimelineMod
                     ? GeoJson.LoadZoningPolygons(zoning)
                     : new List<GeoZoningPolygon>();
 
+                var geoJsonPackRoot = BundleHudStatsLoader.ResolveGeoJsonPackRoot(geojsonRoot);
+                var serviceLoadResult = ServiceGeoJsonLoader.LoadPack(geoJsonPackRoot);
+                var bundleHudSnapshot = BundleHudStatsLoader.Load(geoJsonPackRoot);
+
+                Log.Info(
+                    "Loaded service points: " + serviceLoadResult.Points.Count +
+                    ", loaded families=" + serviceLoadResult.LoadedFamilyCount +
+                    ", missing families=" + serviceLoadResult.MissingFamilyCount +
+                    ", failed families=" + serviceLoadResult.FailedFamilyCount
+                );
+
+                foreach (var serviceFamily in serviceLoadResult.Families)
+                {
+                    if (serviceFamily == null || serviceFamily.Definition == null)
+                        continue;
+
+                    Log.Info(
+                        "Service family " + serviceFamily.Definition.Key +
+                        ": available=" + serviceFamily.Available +
+                        ", points=" + serviceFamily.Points.Count +
+                        ", sourceFeatures=" + serviceFamily.SourceFeatureCount +
+                        ", skipped=" + serviceFamily.SkippedFeatureCount +
+                        (string.IsNullOrWhiteSpace(serviceFamily.Error) ? "" : ", status=" + serviceFamily.Error)
+                    );
+                }
+
                 Log.Info(
                     "Loaded OK. Water line features: " + lineStats.FeatureCount +
                     ", line geometries: " + lineStats.LineGeometryCount +
@@ -190,36 +218,6 @@ namespace CityTimelineMod
                 Log.Info("Loaded roads geometries source=" + config.RoadGeometrySource + ": " + roadGeometries.Count);
                 Log.Info("Loaded path geometries: " + pathGeometries.Count);
                 Log.Info("Loaded railway geometries: " + railwayGeometries.Count + ", available=" + railwayAvailable);
-
-                var cacheBoundsSource = new List<List<GeoPoint>>();
-                cacheBoundsSource.AddRange(lineGeometries);
-                cacheBoundsSource.AddRange(areaOutlines);
-
-                var cacheBounds = GeoBoundsCalculator.CalculateBounds(cacheBoundsSource);
-                var cacheOriginLon = config.UseGeoJsonCenter ? cacheBounds.CenterLon : config.OriginLon;
-                var cacheOriginLat = config.UseGeoJsonCenter ? cacheBounds.CenterLat : config.OriginLat;
-                var runtimeImportGeometries = new List<GeoRoadLine>();
-                runtimeImportGeometries.AddRange(roadGeometries);
-                runtimeImportGeometries.AddRange(pathGeometries);
-
-                Log.Info(
-                    "Cached runtime import geometries: roads=" + roadGeometries.Count +
-                    ", paths=" + pathGeometries.Count +
-                    ", total=" + runtimeImportGeometries.Count
-                );
-
-                var roadSourceKey =
-                    (config.ActiveBundleId ?? "") + "|" +
-                    (config.RoadGeometrySource ?? "") + "|" +
-                    Path.GetFileName(selectedRoads) + "|paths=" + Path.GetFileName(paths);
-
-                CityTimelineMod.Roads.RuntimeRoadSpawner.SetCachedRoadLines(
-                    runtimeImportGeometries,
-                    config,
-                    cacheOriginLon,
-                    cacheOriginLat,
-                    roadSourceKey
-                );
 
                 var renderWaterLineGeometries = new List<List<GeoPoint>>();
                 var renderWaterAreaOutlines = new List<List<GeoPoint>>();
@@ -299,6 +297,9 @@ namespace CityTimelineMod
                     renderWaterAreaOutlines,
                     renderRoadGeometries,
                     zoningPolygons,
+                    serviceLoadResult.Points,
+                    serviceLoadResult,
+                    bundleHudSnapshot,
                     railwayGeometries,
                     railwayAvailable,
                     railwayStatus,

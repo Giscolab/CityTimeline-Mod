@@ -147,7 +147,24 @@ namespace CityTimelineMod.Rendering
                 children.Add(transform.GetChild(i).gameObject);
 
             foreach (var child in children)
+            {
+                // Meshes created by OverlayMeshFlusher are native Unity objects;
+                // destroying only the GameObject does not release them promptly.
+                // Built-in primitive meshes (for example "Cube") are shared and
+                // deliberately excluded by the generated "_mesh" suffix.
+                var filters = child.GetComponentsInChildren<MeshFilter>(true);
+                foreach (var filter in filters)
+                {
+                    var mesh = filter != null ? filter.sharedMesh : null;
+                    if (mesh == null || string.IsNullOrEmpty(mesh.name) || !mesh.name.EndsWith("_mesh"))
+                        continue;
+
+                    filter.sharedMesh = null;
+                    UnityEngine.Object.Destroy(mesh);
+                }
+
                 UnityEngine.Object.Destroy(child);
+            }
 
             Log.Info("GroundOverlay calibration: cleared children=" + children.Count);
         }

@@ -18,6 +18,7 @@ namespace CityTimelineMod.Rendering
 
         private List<GeoRailwayLine> _railwayLines = new List<GeoRailwayLine>();
         private RailwaySemanticStats _railwayStats = new RailwaySemanticStats();
+        private RailwayRenderCounters _lastRailwayRenderCounters = new RailwayRenderCounters();
         private bool _railwayAvailable;
         private string _railwayStatus = NoRailwayDataMessage;
         private bool _railwaySettingsSavePending;
@@ -31,6 +32,7 @@ namespace CityTimelineMod.Rendering
         {
             _railwayLines = lines ?? new List<GeoRailwayLine>();
             _railwayStats = RailwaySemanticStats.FromLines(_railwayLines);
+            _lastRailwayRenderCounters = new RailwayRenderCounters();
             _railwayAvailable = available && _railwayStats.Total > 0;
             _railwayStatus = string.IsNullOrWhiteSpace(status)
                 ? (_railwayAvailable ? _railwayStats.Total + " voie(s) ferroviaire(s)." : NoRailwayDataMessage)
@@ -453,6 +455,7 @@ namespace CityTimelineMod.Rendering
             for (var i = 0; i < chunks.Count; i++)
                 RenderRailwayChunk(chunks[i], materials, stride, counters, originLon, originLat);
 
+            _lastRailwayRenderCounters = counters.Copy();
             LogRailwayRenderCounters(counters, chunks.Count);
             return counters;
         }

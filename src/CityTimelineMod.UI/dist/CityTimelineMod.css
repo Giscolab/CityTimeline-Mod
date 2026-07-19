@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Overpass";
-  src: url(coui://ui-mods/fonts/overpass.ttf) format("truetype");
+  src: url("./assets/fonts/overpass.ttf") format("truetype");
   font-weight: 100 900;
   font-style: normal;
 }
@@ -1041,3 +1041,167 @@ td {
   font-size: 12rem;
 }
 
+.ctm-statistics-summary {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  margin-right: -8rem;
+}
+
+.ctm-statistics-summary .readout {
+  flex: 1 1 520rem;
+  margin-right: 8rem;
+}
+
+.ctm-statistics-summary strong,
+.ctm-service-family-heading strong {
+  color: var(--hud-accent);
+  font-family: var(--hud-mono);
+}
+
+.ctm-stats-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.ctm-stats-table th {
+  border-bottom-width: 1rem;
+  border-bottom-style: solid;
+  border-bottom-color: var(--hud-line-soft);
+  padding: 6rem 2rem;
+  color: var(--hud-muted);
+  font-weight: 500;
+  text-align: left;
+}
+
+.ctm-stats-table .count-cell {
+  width: 130rem;
+  white-space: nowrap;
+}
+
+.ctm-stats-table-compact th,
+.ctm-stats-table-compact td {
+  padding-top: 4rem;
+  padding-bottom: 4rem;
+  font-size: 12rem;
+}
+
+.ctm-service-stats-list,
+.ctm-service-family-grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  margin-right: -8rem;
+  margin-bottom: -8rem;
+}
+
+.ctm-service-stat-family,
+.ctm-service-family {
+  width: 545rem;
+  margin-right: 8rem;
+  margin-bottom: 8rem;
+  padding: 9rem;
+  border-width: 1rem;
+  border-style: solid;
+  border-color: var(--hud-line-soft);
+  border-left-width: 3rem;
+  border-left-color: var(--hud-accent-dim);
+  border-radius: 5rem;
+  background-color: rgba(0, 0, 0, 0.18);
+}
+
+.ctm-service-family-heading {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 24rem;
+  margin-bottom: 7rem;
+  color: var(--hud-text);
+  font-size: 13rem;
+  font-weight: 700;
+}
+
+.ctm-service-family-heading > span:first-of-type,
+.ctm-service-family-title {
+  flex: 1 1 auto;
+}
+
+.ctm-service-family-state {
+  flex: 0 0 auto !important;
+  margin-left: 8rem;
+  margin-right: 10rem;
+  color: var(--hud-faint);
+  font-family: var(--hud-mono);
+  font-size: 10rem;
+  font-weight: 700;
+}
+
+.ctm-service-family-state.is-connected {
+  color: #70d7b2;
+}
+
+.ctm-service-swatch {
+  width: 11rem;
+  height: 11rem;
+  flex: 0 0 11rem !important;
+  margin-right: 8rem;
+  border-radius: 50%;
+  background-color: var(--service-color, var(--hud-accent));
+  box-shadow: 0 0 7rem var(--service-color, var(--hud-accent));
+}
+
+.ctm-service-family .toggle,
+.ctm-service-family .slider {
+  margin-bottom: 7rem;
+}
+
+.ctm-services-message {
+  padding: 10rem;
+  border-width: 1rem;
+  border-style: solid;
+  border-color: var(--hud-line-soft);
+  border-radius: 5rem;
+  color: var(--hud-muted);
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+.service-education {
+  --service-color: #38bdf8;
+}
+
+.service-fire {
+  --service-color: #ef4444;
+}
+
+.service-medical {
+  --service-color: #f472b6;
+}
+
+.service-parks {
+  --service-color: #4ade80;
+}
+
+.service-electricity {
+  --service-color: #facc15;
+}
+
+.service-waste {
+  --service-color: #fb923c;
+}
+
+.service-transport {
+  --service-color: #a78bfa;
+}
+
+.service-water {
+  --service-color: #22d3ee;
+}
+
+.service-communications {
+  --service-color: #2dd4bf;
+}
+
+.ctm-service-family[class*="service-"] {
+  border-left-color: var(--service-color, var(--hud-accent-dim));
+}

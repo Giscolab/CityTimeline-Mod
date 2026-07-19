@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using CityTimelineMod.Bundles;
+using CityTimelineMod.Rendering.Railways;
 using CityTimelineMod.Rendering.Roads;
+using CityTimelineMod.Rendering.Statistics;
 using CityTimelineMod.Util;
 using UnityEngine;
 
@@ -680,6 +682,8 @@ namespace CityTimelineMod.Rendering
                 GUILayout.Label(
                     "Overlay : " +
                     state.Phase +
+                    " | services " + state.ServiceChunkIndex + "/" + state.ServiceChunks.Count +
+                    " | rail " + state.RailwayChunkIndex + "/" + state.RailwayChunks.Count +
                     " | routes " + state.RoadChunkIndex + "/" + state.RoadChunks.Count +
                     " | chemins " + state.PathChunkIndex + "/" + state.PathChunks.Count
                 );
@@ -826,15 +830,15 @@ namespace CityTimelineMod.Rendering
             _modernHudLayerVisible["parking"] = _config.ParkingVisible;
             _modernHudLayerVisible["roads.paths"] = _config.RenderRoads && _config.RenderPaths;
             _modernHudLayerVisible["water"] = _config.RenderWaterLines && _config.RenderWaterAreas;
-            _modernHudLayerVisible["services.water"] = _config.ServicesWaterVisible;
-            _modernHudLayerVisible["services.electricity"] = _config.ServicesElectricityVisible;
-            _modernHudLayerVisible["services.education"] = _config.ServicesEducationVisible;
-            _modernHudLayerVisible["services.fire"] = _config.ServicesFireVisible;
-            _modernHudLayerVisible["services.health"] = _config.ServicesHealthVisible;
-            _modernHudLayerVisible["services.parks"] = _config.ServicesParksVisible;
-            _modernHudLayerVisible["services.waste"] = _config.ServicesWasteVisible;
-            _modernHudLayerVisible["services.transport"] = _config.ServicesTransportVisible;
-            _modernHudLayerVisible["services.communication"] = _config.ServicesCommunicationVisible;
+            _modernHudLayerVisible["services.water"] = GetServiceFamilyVisible("water");
+            _modernHudLayerVisible["services.electricity"] = GetServiceFamilyVisible("electricity");
+            _modernHudLayerVisible["services.education"] = GetServiceFamilyVisible("education");
+            _modernHudLayerVisible["services.fire"] = GetServiceFamilyVisible("fire");
+            _modernHudLayerVisible["services.health"] = GetServiceFamilyVisible("medical");
+            _modernHudLayerVisible["services.parks"] = GetServiceFamilyVisible("parks");
+            _modernHudLayerVisible["services.waste"] = GetServiceFamilyVisible("waste");
+            _modernHudLayerVisible["services.transport"] = GetServiceFamilyVisible("transport");
+            _modernHudLayerVisible["services.communication"] = GetServiceFamilyVisible("communications");
 
             _modernHudLayerOpacity["zoning.residential"] = Mathf.Clamp01(_config.ZoningResidentialAlpha);
             _modernHudLayerOpacity["zoning.commercial"] = Mathf.Clamp01(_config.ZoningCommercialAlpha);
@@ -872,15 +876,15 @@ namespace CityTimelineMod.Rendering
                 case "roads.paths": return _config.RenderRoads && _config.RenderPaths;
                 case "water": return _config.RenderWaterLines && _config.RenderWaterAreas;
                 case "map.bounds": return _config.RenderMapBounds;
-                case "services.water": return _config.ServicesWaterVisible;
-                case "services.electricity": return _config.ServicesElectricityVisible;
-                case "services.education": return _config.ServicesEducationVisible;
-                case "services.fire": return _config.ServicesFireVisible;
-                case "services.health": return _config.ServicesHealthVisible;
-                case "services.parks": return _config.ServicesParksVisible;
-                case "services.waste": return _config.ServicesWasteVisible;
-                case "services.transport": return _config.ServicesTransportVisible;
-                case "services.communication": return _config.ServicesCommunicationVisible;
+                case "services.water": return GetServiceFamilyVisible("water");
+                case "services.electricity": return GetServiceFamilyVisible("electricity");
+                case "services.education": return GetServiceFamilyVisible("education");
+                case "services.fire": return GetServiceFamilyVisible("fire");
+                case "services.health": return GetServiceFamilyVisible("medical");
+                case "services.parks": return GetServiceFamilyVisible("parks");
+                case "services.waste": return GetServiceFamilyVisible("waste");
+                case "services.transport": return GetServiceFamilyVisible("transport");
+                case "services.communication": return GetServiceFamilyVisible("communications");
             }
 
             bool storedValue;
@@ -930,15 +934,15 @@ namespace CityTimelineMod.Rendering
                     _config.RenderMapBounds = value;
                     return true;
 
-                case "services.water": _config.ServicesWaterVisible = value; return true;
-                case "services.electricity": _config.ServicesElectricityVisible = value; return true;
-                case "services.education": _config.ServicesEducationVisible = value; return true;
-                case "services.fire": _config.ServicesFireVisible = value; return true;
-                case "services.health": _config.ServicesHealthVisible = value; return true;
-                case "services.parks": _config.ServicesParksVisible = value; return true;
-                case "services.waste": _config.ServicesWasteVisible = value; return true;
-                case "services.transport": _config.ServicesTransportVisible = value; return true;
-                case "services.communication": _config.ServicesCommunicationVisible = value; return true;
+                case "services.water": return SetServiceBoolean("water", value);
+                case "services.electricity": return SetServiceBoolean("electricity", value);
+                case "services.education": return SetServiceBoolean("education", value);
+                case "services.fire": return SetServiceBoolean("fire", value);
+                case "services.health": return SetServiceBoolean("medical", value);
+                case "services.parks": return SetServiceBoolean("parks", value);
+                case "services.waste": return SetServiceBoolean("waste", value);
+                case "services.transport": return SetServiceBoolean("transport", value);
+                case "services.communication": return SetServiceBoolean("communications", value);
             }
 
             return false;
@@ -1039,66 +1043,76 @@ namespace CityTimelineMod.Rendering
 
         private void DrawModernStatsTab()
         {
-            var stats = _roadSemanticStats ?? new RoadSemanticStats();
-            var zero = "0";
+            var stats = _bundleHudSnapshot ?? new BundleHudSnapshot();
+            var railway = _railwayStats ?? new RailwaySemanticStats();
 
             GUILayout.BeginHorizontal();
 
             GUILayout.BeginVertical();
 
+            BeginModernSubblock("Bundle Realmap");
+            DrawModernStatRow("Objets OSM exploitables :", FormatBundleHudCount("layerIndex", stats.GetObjectCount()));
+            DrawModernStatRow("Zonages :", FormatBundleHudCount("zoningPolygons", stats.GetTotalZoning()));
+            DrawModernStatRow("Services :", FormatServiceHudTotal(stats));
+            DrawModernStatRow("Voies ferrées :", FormatBundleHudCount("railway", railway.Total));
+            EndModernSubblock();
+
             BeginModernSubblock("Bâtiments résidentiels");
-            DrawModernStatRow("Résidentiel haute densité :", zero);
-            DrawModernStatRow("Résidentiel moyenne densité :", zero);
-            DrawModernStatRow("Résidentiel basse densité :", zero);
+            DrawModernStatRow("Résidentiel haute densité :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("residential_high")));
+            DrawModernStatRow("Résidentiel moyenne densité :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("residential_medium")));
+            DrawModernStatRow("Résidentiel basse densité :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("residential_low")));
             EndModernSubblock();
 
             BeginModernSubblock("Commercial");
-            DrawModernStatRow("Commercial haute densité :", zero);
-            DrawModernStatRow("Commercial basse densité :", zero);
-            DrawModernStatRow("Commerce de détail :", zero);
+            DrawModernStatRow("Commercial haute densité :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("commercial_high")));
+            DrawModernStatRow("Commercial basse densité :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("commercial_low")));
+            DrawModernStatRow("Commerce de détail :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("retail")));
+            DrawModernStatRow("Usage mixte :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("mixed")));
             EndModernSubblock();
 
             BeginModernSubblock("Industrie");
-            DrawModernStatRow("Industrie :", zero);
+            DrawModernStatRow("Industrie :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("industrial")));
             EndModernSubblock();
 
             BeginModernSubblock("Bureaux");
-            DrawModernStatRow("Bureaux :", zero);
+            DrawModernStatRow("Bureaux :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("office")));
             EndModernSubblock();
 
             BeginModernSubblock("Parkings");
-            DrawModernStatRow("Parking en ouvrage :", zero);
-            DrawModernStatRow("Parking de surface :", zero);
+            DrawModernStatRow("Parking en ouvrage :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("parking_structure")));
+            DrawModernStatRow("Parking de surface :", FormatBundleHudCount("zoningPolygons", stats.GetZoningCount("parking_surface")));
             EndModernSubblock();
 
             BeginModernSubblock("Routes et chemins");
-            DrawModernStatRow("Autoroute :", zero);
-            DrawModernStatRow("Axe principal :", zero);
-            DrawModernStatRow("Route secondaire :", zero);
-            DrawModernStatRow("Route tertiaire / résidentielle :", zero);
-            DrawModernStatRow("Bretelle / liaison :", zero);
-            DrawModernStatRow("Routes chargées :", stats.Roads.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            DrawModernStatRow("Chemin / piéton :", stats.Paths.ToString(System.Globalization.CultureInfo.InvariantCulture));
-            DrawModernStatRow("Total routes + chemins :", stats.Total.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            DrawModernStatRow("Autoroute :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("highway")));
+            DrawModernStatRow("Axe principal :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("large_road")));
+            DrawModernStatRow("Route secondaire :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("medium_road")));
+            DrawModernStatRow("Route tertiaire / résidentielle :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("small_road")));
+            DrawModernStatRow("Bretelle / liaison :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("ramp")));
+            DrawModernStatRow("Route non classée :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("gravel_road")));
+            DrawModernStatRow("Routes :", FormatBundleHudCount("layerIndex", stats.GetLayerCount("roads")));
+            DrawModernStatRow("Chemin / piéton :", FormatBundleHudCount("roadsIndex", stats.GetRoadCategoryCount("pathway")));
             EndModernSubblock();
 
             BeginModernSubblock("Hydrographie");
-            DrawModernStatRow("Cours d'eau / rivières :", zero);
-            DrawModernStatRow("Plans d'eau / surfaces :", zero);
+            DrawModernStatRow("Cours d'eau / rivières :", FormatBundleHudCount("layerIndex", stats.GetLayerCount("water_lines_clipped")));
+            DrawModernStatRow("Plans d'eau / surfaces :", FormatBundleHudCount("layerIndex", stats.GetLayerCount("water_areas_clipped")));
             EndModernSubblock();
 
             BeginModernSubblock("Eau et égouts");
-            DrawModernStatRow("Pompage :", zero);
-            DrawModernStatRow("Traitement de l'eau :", zero);
-            DrawModernStatRow("Égouts :", zero);
-            DrawModernStatRow("Traitement des eaux usées :", zero);
+            DrawModernStatRow("Pompage :", FormatBundleHudCount("service:water", stats.GetServiceSubcategoryCount("water", "pumping")));
+            DrawModernStatRow("Traitement de l'eau :", FormatBundleHudCount("service:water", stats.GetServiceSubcategoryCount("water", "water_treatment")));
+            DrawModernStatRow("Égouts :", FormatBundleHudCount("service:water", stats.GetServiceSubcategoryCount("water", "sewage")));
+            DrawModernStatRow("Traitement des eaux usées :", FormatBundleHudCount("service:water", stats.GetServiceSubcategoryCount("water", "wastewater")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:water", stats.GetServiceFamilyCount("water")));
             EndModernSubblock();
 
             BeginModernSubblock("Électricité");
-            DrawModernStatRow("Production électrique :", zero);
-            DrawModernStatRow("Transformation :", zero);
-            DrawModernStatRow("Stockage :", zero);
-            DrawModernStatRow("Réseau électrique :", zero);
+            DrawModernStatRow("Production électrique :", FormatBundleHudCount("service:electricity", stats.GetServiceSubcategoryCount("electricity", "generation")));
+            DrawModernStatRow("Transformation :", FormatBundleHudCount("service:electricity", stats.GetServiceSubcategoryCount("electricity", "transformation")));
+            DrawModernStatRow("Stockage :", FormatBundleHudCount("service:electricity", stats.GetServiceSubcategoryCount("electricity", "storage")));
+            DrawModernStatRow("Réseau électrique :", FormatBundleHudCount("service:electricity", stats.GetServiceSubcategoryCount("electricity", "grid")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:electricity", stats.GetServiceFamilyCount("electricity")));
             EndModernSubblock();
 
             GUILayout.EndVertical();
@@ -1106,55 +1120,72 @@ namespace CityTimelineMod.Rendering
             GUILayout.BeginVertical();
 
             BeginModernSubblock("Éducation et recherche");
-            DrawModernStatRow("École primaire :", zero);
-            DrawModernStatRow("Collège / lycée :", zero);
-            DrawModernStatRow("Université :", zero);
-            DrawModernStatRow("Recherche :", zero);
+            DrawModernStatRow("École primaire :", FormatBundleHudCount("service:education", stats.GetServiceSubcategoryCount("education", "primary")));
+            DrawModernStatRow("Collège / lycée :", FormatBundleHudCount("service:education", stats.GetServiceSubcategoryCount("education", "secondary")));
+            DrawModernStatRow("Université :", FormatBundleHudCount("service:education", stats.GetServiceSubcategoryCount("education", "university")));
+            DrawModernStatRow("Recherche :", FormatBundleHudCount("service:education", stats.GetServiceSubcategoryCount("education", "research")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:education", stats.GetServiceFamilyCount("education")));
             EndModernSubblock();
 
             BeginModernSubblock("Sapeurs-pompiers");
-            DrawModernStatRow("Caserne locale :", zero);
-            DrawModernStatRow("Grande caserne :", zero);
-            DrawModernStatRow("Surveillance / secours spécialisés :", zero);
+            DrawModernStatRow("Caserne locale :", FormatBundleHudCount("service:fire", stats.GetServiceSubcategoryCount("fire", "local_station")));
+            DrawModernStatRow("Grande caserne :", FormatBundleHudCount("service:fire", stats.GetServiceSubcategoryCount("fire", "large_station")));
+            DrawModernStatRow("Surveillance / secours spécialisés :", FormatBundleHudCount("service:fire", stats.GetServiceSubcategoryCount("fire", "special_rescue")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:fire", stats.GetServiceFamilyCount("fire")));
             EndModernSubblock();
 
             BeginModernSubblock("Services médicaux et soins mortuaires");
-            DrawModernStatRow("Clinique :", zero);
-            DrawModernStatRow("Hôpital :", zero);
-            DrawModernStatRow("Crématorium :", zero);
-            DrawModernStatRow("Cimetière :", zero);
+            DrawModernStatRow("Clinique :", FormatBundleHudCount("service:medical", stats.GetServiceSubcategoryCount("medical", "clinic")));
+            DrawModernStatRow("Hôpital :", FormatBundleHudCount("service:medical", stats.GetServiceSubcategoryCount("medical", "hospital")));
+            DrawModernStatRow("Crématorium :", FormatBundleHudCount("service:medical", stats.GetServiceSubcategoryCount("medical", "crematorium")));
+            DrawModernStatRow("Cimetière :", FormatBundleHudCount("service:medical", stats.GetServiceSubcategoryCount("medical", "cemetery")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:medical", stats.GetServiceFamilyCount("medical")));
             EndModernSubblock();
 
             BeginModernSubblock("Parcs et loisirs");
-            DrawModernStatRow("Parc local :", zero);
-            DrawModernStatRow("Grand parc :", zero);
-            DrawModernStatRow("Sport :", zero);
-            DrawModernStatRow("Loisirs :", zero);
-            DrawModernStatRow("Tourisme :", zero);
+            DrawModernStatRow("Parc local :", FormatBundleHudCount("service:parks", stats.GetServiceSubcategoryCount("parks", "local_park")));
+            DrawModernStatRow("Grand parc :", FormatBundleHudCount("service:parks", stats.GetServiceSubcategoryCount("parks", "large_park")));
+            DrawModernStatRow("Sport :", FormatBundleHudCount("service:parks", stats.GetServiceSubcategoryCount("parks", "sport")));
+            DrawModernStatRow("Loisirs :", FormatBundleHudCount("service:parks", stats.GetServiceSubcategoryCount("parks", "leisure")));
+            DrawModernStatRow("Tourisme :", FormatBundleHudCount("service:parks", stats.GetServiceSubcategoryCount("parks", "tourism")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:parks", stats.GetServiceFamilyCount("parks")));
             EndModernSubblock();
 
             BeginModernSubblock("Gestion des déchets");
-            DrawModernStatRow("Collecte :", zero);
-            DrawModernStatRow("Recyclage :", zero);
-            DrawModernStatRow("Traitement :", zero);
-            DrawModernStatRow("Décharge / stockage :", zero);
+            DrawModernStatRow("Collecte :", FormatBundleHudCount("service:waste", stats.GetServiceSubcategoryCount("waste", "collection")));
+            DrawModernStatRow("Recyclage :", FormatBundleHudCount("service:waste", stats.GetServiceSubcategoryCount("waste", "recycling")));
+            DrawModernStatRow("Traitement :", FormatBundleHudCount("service:waste", stats.GetServiceSubcategoryCount("waste", "treatment")));
+            DrawModernStatRow("Décharge / stockage :", FormatBundleHudCount("service:waste", stats.GetServiceSubcategoryCount("waste", "landfill")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:waste", stats.GetServiceFamilyCount("waste")));
             EndModernSubblock();
 
             BeginModernSubblock("Transports");
-            DrawModernStatRow("Bus :", zero);
-            DrawModernStatRow("Tram :", zero);
-            DrawModernStatRow("Train :", zero);
-            DrawModernStatRow("Métro :", zero);
-            DrawModernStatRow("Taxi :", zero);
-            DrawModernStatRow("Aérien :", zero);
-            DrawModernStatRow("Maritime :", zero);
+            DrawModernStatRow("Bus :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "bus")));
+            DrawModernStatRow("Tram :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "tram")));
+            DrawModernStatRow("Train :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "train")));
+            DrawModernStatRow("Métro :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "metro")));
+            DrawModernStatRow("Taxi :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "taxi")));
+            DrawModernStatRow("Aérien :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "air")));
+            DrawModernStatRow("Maritime :", FormatBundleHudCount("service:transport", stats.GetServiceSubcategoryCount("transport", "maritime")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:transport", stats.GetServiceFamilyCount("transport")));
             EndModernSubblock();
 
             BeginModernSubblock("Communications");
-            DrawModernStatRow("Poste :", zero);
-            DrawModernStatRow("Télécommunications :", zero);
-            DrawModernStatRow("Serveurs / data center :", zero);
-            DrawModernStatRow("Radio / antennes :", zero);
+            DrawModernStatRow("Poste :", FormatBundleHudCount("service:communications", stats.GetServiceSubcategoryCount("communications", "post")));
+            DrawModernStatRow("Télécommunications :", FormatBundleHudCount("service:communications", stats.GetServiceSubcategoryCount("communications", "telecom")));
+            DrawModernStatRow("Serveurs / data center :", FormatBundleHudCount("service:communications", stats.GetServiceSubcategoryCount("communications", "datacenter")));
+            DrawModernStatRow("Radio / antennes :", FormatBundleHudCount("service:communications", stats.GetServiceSubcategoryCount("communications", "radio")));
+            DrawModernStatRow("Total :", FormatBundleHudCount("service:communications", stats.GetServiceFamilyCount("communications")));
+            EndModernSubblock();
+
+            BeginModernSubblock("Réseau ferroviaire");
+            DrawModernStatRow("Train :", FormatBundleHudCount("railway", railway.Train));
+            DrawModernStatRow("Tramway :", FormatBundleHudCount("railway", railway.Tram));
+            DrawModernStatRow("Métro léger :", FormatBundleHudCount("railway", railway.LightRail));
+            DrawModernStatRow("Métro :", FormatBundleHudCount("railway", railway.Subway));
+            DrawModernStatRow("Voies de service :", FormatBundleHudCount("railway", railway.Service));
+            DrawModernStatRow("Tunnels :", FormatBundleHudCount("railway", railway.Tunnels));
+            DrawModernStatRow("Total :", FormatBundleHudCount("railway", railway.Total));
             EndModernSubblock();
 
             GUILayout.EndVertical();
@@ -1205,6 +1236,41 @@ namespace CityTimelineMod.Rendering
 
             if (DrawIntSlider("Pas / pointStride", ref _config.PointStride, 1, 20))
                 _controlPanelRebuildPending = true;
+
+            GUILayout.Space(8f);
+            GUILayout.Label("Diagnostic services");
+            var serviceCounters = _progressiveRebuild != null && _progressiveRebuild.IsActive
+                ? _progressiveRebuild.ServiceCounters
+                : _lastServiceRenderCounters;
+            if (serviceCounters != null)
+            {
+                DrawModernKeyValue("Points source :", serviceCounters.SourcePoints.ToString());
+                DrawModernKeyValue("Points éligibles :", serviceCounters.EligiblePoints.ToString());
+                DrawModernKeyValue("Points rendus :", serviceCounters.CreatedPoints.ToString());
+                DrawModernKeyValue("Chunks / meshes :", serviceCounters.CreatedChunks + " / " + serviceCounters.CreatedMeshObjects);
+                DrawModernKeyValue("Hors carte :", serviceCounters.SkippedOutsideMap.ToString());
+                DrawModernKeyValue("Filtrés / invalides :", serviceCounters.SkippedByFilter + " / " + serviceCounters.SkippedInvalid);
+                DrawModernKeyValue(
+                    "Familles chargées / absentes / erreurs :",
+                    serviceCounters.LoadedFamilies + " / " + serviceCounters.MissingFamilies + " / " + serviceCounters.FailedFamilies
+                );
+            }
+
+            GUILayout.Space(8f);
+            GUILayout.Label("Diagnostic réseau ferroviaire");
+            var railwayCounters = _progressiveRebuild != null && _progressiveRebuild.IsActive
+                ? _progressiveRebuild.RailwayCounters
+                : _lastRailwayRenderCounters;
+            if (railwayCounters != null)
+            {
+                DrawModernKeyValue("Lignes source / éligibles :", railwayCounters.SourceLines + " / " + railwayCounters.EligibleLines);
+                DrawModernKeyValue("Lignes / segments rendus :", railwayCounters.CreatedLines + " / " + railwayCounters.CreatedSegments);
+                DrawModernKeyValue("Objets mesh :", railwayCounters.CreatedMeshObjects.ToString());
+                DrawModernKeyValue(
+                    "Filtrées / limite / invalides :",
+                    railwayCounters.SkippedByFilter + " / " + railwayCounters.SkippedByLimit + " / " + railwayCounters.SkippedInvalid
+                );
+            }
         }
 
 
@@ -1760,6 +1826,11 @@ namespace CityTimelineMod.Rendering
 
             if (state != null)
             {
+                GUILayout.Label("Chunks services : " + state.ServiceChunkIndex + " / " + state.ServiceChunks.Count);
+                GUILayout.Label("Points services : " + state.ServiceCounters.CreatedPoints);
+                GUILayout.Label("Services hors carte : " + state.ServiceCounters.SkippedOutsideMap);
+                GUILayout.Label("Chunks ferroviaires : " + state.RailwayChunkIndex + " / " + state.RailwayChunks.Count);
+                GUILayout.Label("Segments ferroviaires : " + state.RailwayCounters.CreatedSegments);
                 GUILayout.Label("Chunks routes : " + state.RoadChunkIndex + " / " + state.RoadChunks.Count);
                 GUILayout.Label("Chunks chemins : " + state.PathChunkIndex + " / " + state.PathChunks.Count);
                 GUILayout.Label("Segments routes : " + state.RoadCounters.CreatedRoadSegments);

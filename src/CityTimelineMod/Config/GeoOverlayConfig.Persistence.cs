@@ -56,6 +56,7 @@ config.RenderRoads = GetBool(root, "renderRoads", config.RenderRoads);
 config.RoadGeometrySource = GetString(root, "roadGeometrySource", config.RoadGeometrySource);
 config.RenderPaths = GetBool(root, "renderPaths", config.RenderPaths);
 config.LoadRailwaySettings(root);
+config.LoadServiceSettings(root);
 config.RoadHighwayFilter = GetString(root, "roadHighwayFilter", config.RoadHighwayFilter);
 config.PathHighwayFilter = GetString(root, "pathHighwayFilter", config.PathHighwayFilter);
 config.OverlayProfile = GetString(root, "overlayProfile", config.OverlayProfile);
@@ -65,15 +66,6 @@ config.ZoningCommercialVisible = GetBool(root, "zoningCommercialVisible", config
 config.ZoningIndustrialVisible = GetBool(root, "zoningIndustrialVisible", config.ZoningIndustrialVisible);
 config.ZoningOfficeVisible = GetBool(root, "zoningOfficeVisible", config.ZoningOfficeVisible);
 config.ParkingVisible = GetBool(root, "parkingVisible", config.ParkingVisible);
-config.ServicesWaterVisible = GetBool(root, "servicesWaterVisible", config.ServicesWaterVisible);
-config.ServicesElectricityVisible = GetBool(root, "servicesElectricityVisible", config.ServicesElectricityVisible);
-config.ServicesEducationVisible = GetBool(root, "servicesEducationVisible", config.ServicesEducationVisible);
-config.ServicesFireVisible = GetBool(root, "servicesFireVisible", config.ServicesFireVisible);
-config.ServicesHealthVisible = GetBool(root, "servicesHealthVisible", config.ServicesHealthVisible);
-config.ServicesParksVisible = GetBool(root, "servicesParksVisible", config.ServicesParksVisible);
-config.ServicesWasteVisible = GetBool(root, "servicesWasteVisible", config.ServicesWasteVisible);
-config.ServicesTransportVisible = GetBool(root, "servicesTransportVisible", config.ServicesTransportVisible);
-config.ServicesCommunicationVisible = GetBool(root, "servicesCommunicationVisible", config.ServicesCommunicationVisible);
 config.ShowOverlayHud = GetBool(root, "showOverlayHud", config.ShowOverlayHud);
 config.VerboseOverlayLogs = GetBool(root, "verboseOverlayLogs", config.VerboseOverlayLogs);
 config.RenderMapBounds = GetBool(root, "renderMapBounds", config.RenderMapBounds);
@@ -140,15 +132,6 @@ config.ZoningCommercialAlpha = GetFloat(root, "zoningCommercialAlpha", config.Zo
 config.ZoningIndustrialAlpha = GetFloat(root, "zoningIndustrialAlpha", config.ZoningIndustrialAlpha);
 config.ZoningOfficeAlpha = GetFloat(root, "zoningOfficeAlpha", config.ZoningOfficeAlpha);
 config.ParkingAlpha = GetFloat(root, "parkingAlpha", config.ParkingAlpha);
-config.ServicesWaterAlpha = GetFloat(root, "servicesWaterAlpha", config.ServicesWaterAlpha);
-config.ServicesElectricityAlpha = GetFloat(root, "servicesElectricityAlpha", config.ServicesElectricityAlpha);
-config.ServicesEducationAlpha = GetFloat(root, "servicesEducationAlpha", config.ServicesEducationAlpha);
-config.ServicesFireAlpha = GetFloat(root, "servicesFireAlpha", config.ServicesFireAlpha);
-config.ServicesHealthAlpha = GetFloat(root, "servicesHealthAlpha", config.ServicesHealthAlpha);
-config.ServicesParksAlpha = GetFloat(root, "servicesParksAlpha", config.ServicesParksAlpha);
-config.ServicesWasteAlpha = GetFloat(root, "servicesWasteAlpha", config.ServicesWasteAlpha);
-config.ServicesTransportAlpha = GetFloat(root, "servicesTransportAlpha", config.ServicesTransportAlpha);
-config.ServicesCommunicationAlpha = GetFloat(root, "servicesCommunicationAlpha", config.ServicesCommunicationAlpha);
 config.WaterAreaFillAlpha = GetFloat(root, "waterAreaFillAlpha", config.WaterAreaFillAlpha);
 config.RoadAlpha = GetFloat(root, "roadAlpha", config.RoadAlpha);
 config.PathAlpha = GetFloat(root, "pathAlpha", config.PathAlpha);
@@ -388,6 +371,7 @@ config.RoadChunkSizeMeters = Mathf.Clamp(config.RoadChunkSizeMeters, 128f, 4096f
 config.RoadChunksPerFrame = Mathf.Clamp(config.RoadChunksPerFrame, 1, 64);
 config.PathChunksPerFrame = Mathf.Clamp(config.PathChunksPerFrame, 1, 64);
 config.ClampRailwaySettings();
+config.SanitizeServiceSettings();
 
 config.RoadRenderMode = NormalizeRoadRenderMode(config.RoadRenderMode);
 config.PathRenderMode = NormalizeRoadRenderMode(config.PathRenderMode);
@@ -594,6 +578,11 @@ Log.Info(
         {
             if (config == null)
                 return;
+
+            // GeoJSON is a visual/informational overlay only. Persisted legacy
+            // settings must never reactivate the former network importer.
+            config.RuntimeRoadImportEnabled = false;
+            config.RuntimeRoadImportRunOnce = false;
 
             // 0 = illimité.
             if (config.RuntimeRoadImportMaxSegments < 0)
@@ -1091,6 +1080,8 @@ Log.Info(
                 root["renderRoads"] = RenderRoads;
                 root["renderPaths"] = RenderPaths;
                 WriteRailwaySettings(root);
+                SanitizeServiceSettings();
+                WriteServiceSettings(root);
                 root["renderZoning"] = RenderZoning;
                 root["renderMapBounds"] = RenderMapBounds;
                 root["renderWorldMapBounds"] = RenderWorldMapBounds;
@@ -1235,6 +1226,7 @@ Log.Info(
                 RenderRoads = GetBool(root, "renderRoads", RenderRoads);
                 RenderPaths = GetBool(root, "renderPaths", RenderPaths);
                 LoadRailwaySettings(root);
+                LoadServiceSettings(root);
                 RenderZoning = GetBool(root, "renderZoning", RenderZoning);
                 RenderMapBounds = GetBool(root, "renderMapBounds", RenderMapBounds);
                 VerboseOverlayLogs = GetBool(root, "verboseOverlayLogs", VerboseOverlayLogs);

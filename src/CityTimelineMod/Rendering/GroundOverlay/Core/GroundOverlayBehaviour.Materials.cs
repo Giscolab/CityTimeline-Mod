@@ -14,6 +14,9 @@ namespace CityTimelineMod.Rendering
         private readonly List<Material> _zoningFallbackFamilyMaterials = new List<Material>();
         private readonly Dictionary<string, List<Material>> _railwayMaterialGroups =
             new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<Material>> _serviceMaterialGroups =
+            new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+        private readonly List<Material> _ownedOverlayMaterials = new List<Material>();
 
         private OverlayRenderMaterials CreateOverlayRenderMaterials()
         {
@@ -47,6 +50,17 @@ namespace CityTimelineMod.Rendering
             materials.RailwaySubwayTunnel = CreateRailwayMaterial(0xa7, 0x8b, 0xfa, 0.48f);
             materials.RailwayService = CreateRailwayMaterial(0x94, 0xa3, 0xb8, 1f);
             materials.RailwayServiceTunnel = CreateRailwayMaterial(0x94, 0xa3, 0xb8, 0.48f);
+
+            // Service markers use stable family colors shared by both HUDs.
+            materials.ServiceWater = CreateServiceMaterial(0x38, 0xc8, 0xff, _config.ServicesWaterAlpha);
+            materials.ServiceElectricity = CreateServiceMaterial(0xff, 0xd8, 0x4d, _config.ServicesElectricityAlpha);
+            materials.ServiceEducation = CreateServiceMaterial(0x4d, 0xa3, 0xff, _config.ServicesEducationAlpha);
+            materials.ServiceFire = CreateServiceMaterial(0xff, 0x5a, 0x52, _config.ServicesFireAlpha);
+            materials.ServiceMedical = CreateServiceMaterial(0xff, 0x73, 0xa8, _config.ServicesHealthAlpha);
+            materials.ServiceParks = CreateServiceMaterial(0x65, 0xd6, 0x6e, _config.ServicesParksAlpha);
+            materials.ServiceWaste = CreateServiceMaterial(0xad, 0x96, 0x7a, _config.ServicesWasteAlpha);
+            materials.ServiceTransport = CreateServiceMaterial(0xb8, 0x87, 0xff, _config.ServicesTransportAlpha);
+            materials.ServiceCommunications = CreateServiceMaterial(0xff, 0x9f, 0x43, _config.ServicesCommunicationAlpha);
 
             materials.ZoningResidentialLow = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialLowColor, _config.ZoningAlpha));
             materials.ZoningResidentialMedium = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialMediumColor, _config.ZoningAlpha));
@@ -103,6 +117,16 @@ namespace CityTimelineMod.Rendering
             RegisterRailwayMaterial("service.surface", materials.RailwayService);
             RegisterRailwayMaterial("service.tunnel", materials.RailwayServiceTunnel);
 
+            RegisterServiceMaterial("water", materials.ServiceWater);
+            RegisterServiceMaterial("electricity", materials.ServiceElectricity);
+            RegisterServiceMaterial("education", materials.ServiceEducation);
+            RegisterServiceMaterial("fire", materials.ServiceFire);
+            RegisterServiceMaterial("medical", materials.ServiceMedical);
+            RegisterServiceMaterial("parks", materials.ServiceParks);
+            RegisterServiceMaterial("waste", materials.ServiceWaste);
+            RegisterServiceMaterial("transport", materials.ServiceTransport);
+            RegisterServiceMaterial("communications", materials.ServiceCommunications);
+
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialLow);
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialMedium);
             _zoningResidentialFamilyMaterials.Add(materials.ZoningResidentialHigh);
@@ -133,12 +157,77 @@ namespace CityTimelineMod.Rendering
             _zoningMaterials.Add(materials.ZoningRamp);
             _zoningMaterials.Add(materials.ZoningFallback);
 
+            _ownedOverlayMaterials.AddRange(new[]
+            {
+                materials.Cyan,
+                materials.WaterAreaBlue,
+                materials.WaterAreaFillBlue,
+                materials.FallbackRoad,
+                materials.RoadMotorway,
+                materials.RoadPrimary,
+                materials.RoadSecondary,
+                materials.RoadTertiary,
+                materials.RoadLink,
+                materials.Path,
+                materials.RoadOneWay,
+                materials.RoadBridge,
+                materials.RoadTunnel,
+                materials.RoadRoundabout,
+                materials.RoadArrow,
+                materials.RoadLabel,
+                materials.RailwayTrain,
+                materials.RailwayTrainTunnel,
+                materials.RailwayTram,
+                materials.RailwayTramTunnel,
+                materials.RailwayLightRail,
+                materials.RailwayLightRailTunnel,
+                materials.RailwaySubway,
+                materials.RailwaySubwayTunnel,
+                materials.RailwayService,
+                materials.RailwayServiceTunnel,
+                materials.ServiceWater,
+                materials.ServiceElectricity,
+                materials.ServiceEducation,
+                materials.ServiceFire,
+                materials.ServiceMedical,
+                materials.ServiceParks,
+                materials.ServiceWaste,
+                materials.ServiceTransport,
+                materials.ServiceCommunications,
+                materials.ZoningResidentialLow,
+                materials.ZoningResidentialMedium,
+                materials.ZoningResidentialHigh,
+                materials.ZoningCommercialLow,
+                materials.ZoningCommercialHigh,
+                materials.ZoningRetailDetail,
+                materials.ZoningIndustrial,
+                materials.ZoningOffice,
+                materials.ZoningSurface,
+                materials.ZoningRamp,
+                materials.ZoningMixed,
+                materials.ZoningFallback,
+                materials.DebugRed,
+                materials.DebugGreen,
+                materials.DebugYellow,
+                materials.DebugMagenta,
+                materials.WorldMapBounds,
+                materials.HeightMapBounds,
+                materials.MapCenter
+            });
+
             return materials;
         }
 
 
         private void ClearOverlayMaterialRegistries()
         {
+            foreach (var material in _ownedOverlayMaterials)
+            {
+                if (material != null)
+                    UnityEngine.Object.Destroy(material);
+            }
+
+            _ownedOverlayMaterials.Clear();
             _zoningMaterials.Clear();
             _roadMaterials.Clear();
             _pathMaterials.Clear();
@@ -148,6 +237,7 @@ namespace CityTimelineMod.Rendering
             _mapBoundsMaterials.Clear();
             _roadLabelMeshes.Clear();
             _railwayMaterialGroups.Clear();
+            _serviceMaterialGroups.Clear();
 
             _zoningResidentialFamilyMaterials.Clear();
             _zoningCommercialFamilyMaterials.Clear();
@@ -182,6 +272,7 @@ namespace CityTimelineMod.Rendering
             );
 
             ApplyRailwayVisibilityToMaterials();
+            ApplyServiceVisibilityToMaterials();
 
             OverlayVisibilityApplier.ApplyMapBoundsVisibility(
                 _mapBoundsMaterials,
@@ -194,6 +285,51 @@ namespace CityTimelineMod.Rendering
         {
             var alpha = Mathf.Clamp01(_config.RailwayOpacity * opacityScale);
             return OverlayMaterialFactory.Create(new Color32(red, green, blue, (byte)Mathf.RoundToInt(alpha * 255f)));
+        }
+
+        private static Material CreateServiceMaterial(byte red, byte green, byte blue, float alpha)
+        {
+            return OverlayMaterialFactory.Create(
+                new Color32(red, green, blue, (byte)Mathf.RoundToInt(Mathf.Clamp01(alpha) * 255f))
+            );
+        }
+
+        private void RegisterServiceMaterial(string family, Material material)
+        {
+            if (material == null || string.IsNullOrWhiteSpace(family))
+                return;
+
+            List<Material> group;
+            if (!_serviceMaterialGroups.TryGetValue(family, out group))
+            {
+                group = new List<Material>();
+                _serviceMaterialGroups[family] = group;
+            }
+
+            group.Add(material);
+        }
+
+        private void ApplyServiceVisibilityToMaterials()
+        {
+            if (_config == null)
+                return;
+
+            ApplyServiceFamilyVisibility("water", _config.ServicesWaterVisible, _config.ServicesWaterAlpha);
+            ApplyServiceFamilyVisibility("electricity", _config.ServicesElectricityVisible, _config.ServicesElectricityAlpha);
+            ApplyServiceFamilyVisibility("education", _config.ServicesEducationVisible, _config.ServicesEducationAlpha);
+            ApplyServiceFamilyVisibility("fire", _config.ServicesFireVisible, _config.ServicesFireAlpha);
+            ApplyServiceFamilyVisibility("medical", _config.ServicesHealthVisible, _config.ServicesHealthAlpha);
+            ApplyServiceFamilyVisibility("parks", _config.ServicesParksVisible, _config.ServicesParksAlpha);
+            ApplyServiceFamilyVisibility("waste", _config.ServicesWasteVisible, _config.ServicesWasteAlpha);
+            ApplyServiceFamilyVisibility("transport", _config.ServicesTransportVisible, _config.ServicesTransportAlpha);
+            ApplyServiceFamilyVisibility("communications", _config.ServicesCommunicationVisible, _config.ServicesCommunicationAlpha);
+        }
+
+        private void ApplyServiceFamilyVisibility(string family, bool visible, float alpha)
+        {
+            List<Material> materials;
+            if (_serviceMaterialGroups.TryGetValue(family, out materials))
+                ApplyMaterialGroupAlpha(materials, _config.RenderServices && visible, alpha);
         }
 
         private void RegisterRailwayMaterial(string key, Material material)

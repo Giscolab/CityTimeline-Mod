@@ -203,8 +203,15 @@ namespace CityTimelineMod.Rendering.Railways
                 double lon;
                 double lat;
 
-                if (!double.TryParse(coordinate[0].ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lon) ||
-                    !double.TryParse(coordinate[1].ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out lat))
+                try
+                {
+                    // Read numeric JSON tokens directly. JToken.ToString() uses the
+                    // current culture for floating-point values, which turns decimal
+                    // points into commas on French systems before an invariant parse.
+                    lon = coordinate[0].Value<double>();
+                    lat = coordinate[1].Value<double>();
+                }
+                catch (Exception)
                 {
                     continue;
                 }

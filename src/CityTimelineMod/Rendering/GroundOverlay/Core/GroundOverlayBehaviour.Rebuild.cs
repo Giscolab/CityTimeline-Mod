@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CityTimelineMod.Rendering.Bounds;
 using CityTimelineMod.Rendering.Core;
 using CityTimelineMod.Rendering.Roads;
+using CityTimelineMod.Rendering.Services;
 using CityTimelineMod.Util;
 using UnityEngine;
 
@@ -157,7 +158,10 @@ namespace CityTimelineMod.Rendering
                 ", renderRailways=" + _config.RenderRailways +
                 ", railwaySpatialChunking=" + _config.EnableRailwaySpatialChunking +
                 ", railwayChunkSizeMeters=" + _config.RailwayChunkSizeMeters +
-                ", railwayChunksPerFrame=" + _config.RailwayChunksPerFrame
+                ", railwayChunksPerFrame=" + _config.RailwayChunksPerFrame +
+                ", renderServices=" + _config.RenderServices +
+                ", serviceChunkSizeMeters=" + _config.ServiceChunkSizeMeters +
+                ", serviceChunksPerFrame=" + _config.ServiceChunksPerFrame
             );
 
             ClearOverlayChildren();
@@ -170,17 +174,6 @@ namespace CityTimelineMod.Rendering
 
             state.OriginLon = _config.UseGeoJsonCenter ? _bounds.CenterLon : _config.OriginLon;
             state.OriginLat = _config.UseGeoJsonCenter ? _bounds.CenterLat : _config.OriginLat;
-
-            var runtimeImportCenter = new Vector3(
-                _config.WorldOriginX,
-                ResolveY(new Vector3(_config.WorldOriginX, 0f, _config.WorldOriginZ)) + _config.GroundMargin,
-                _config.WorldOriginZ
-            );
-
-            CityTimelineMod.Roads.GeoRoadImportPlacement.CenterX = runtimeImportCenter.x;
-            CityTimelineMod.Roads.GeoRoadImportPlacement.CenterZ = runtimeImportCenter.z;
-            CityTimelineMod.Roads.GeoRoadImportPlacement.GroundY = runtimeImportCenter.y;
-            LogVerboseOverlay("GroundOverlay: runtime road import cache is managed by bundle load; overlay rebuild does not create CS2 roads.");
 
             state.Stride = Math.Max(1, _config.PointStride);
             state.Materials = CreateOverlayRenderMaterials();
@@ -228,9 +221,18 @@ namespace CityTimelineMod.Rendering
                 ref state.HasEndpoints
             );
 
+            CopyServiceLoadCounters(state.ServiceCounters);
+            state.ServiceChunks = BuildServiceRenderChunks(state.OriginLon, state.OriginLat, state.ServiceCounters);
             state.RailwayChunks = BuildRailwayRenderChunks(state.OriginLon, state.OriginLat);
             state.RoadChunks = BuildRoadRenderChunks(false, state.OriginLon, state.OriginLat);
             state.PathChunks = BuildRoadRenderChunks(true, state.OriginLon, state.OriginLat);
+
+            Log.Info(
+                "GroundOverlay: service chunking summary: chunks=" + state.ServiceChunks.Count +
+                ", sourcePoints=" + (_servicePoints != null ? _servicePoints.Count : 0) +
+                ", chunkSizeMeters=" + _config.ServiceChunkSizeMeters +
+                ", spatialChunking=" + _config.EnableServiceSpatialChunking
+            );
 
             Log.Info(
                 "GroundOverlay: railway chunking summary: chunks=" + state.RailwayChunks.Count +
@@ -260,11 +262,13 @@ namespace CityTimelineMod.Rendering
             if (state.RoadChunks.Count == 0 && state.PathChunks.Count == 0)
                 LogRoadRenderCounters(state.RoadCounters);
 
-            state.Phase = state.RailwayChunks.Count > 0
-                ? OverlayRebuildPhase.RailwayChunks
-                : (state.RoadChunks.Count > 0
-                    ? OverlayRebuildPhase.RoadChunks
-                    : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows));
+            state.Phase = state.ServiceChunks.Count > 0
+                ? OverlayRebuildPhase.ServiceChunks
+                : (state.RailwayChunks.Count > 0
+                    ? OverlayRebuildPhase.RailwayChunks
+                    : (state.RoadChunks.Count > 0
+                        ? OverlayRebuildPhase.RoadChunks
+                        : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows)));
 
             LogProgressiveOverlayProgress(true);
         }
@@ -289,12 +293,32 @@ namespace CityTimelineMod.Rendering
 
             try
             {
+                if (state.Phase == OverlayRebuildPhase.ServiceChunks)
+                {
+                    BuildProgressiveServiceChunks(state, Mathf.Clamp(_config.ServiceChunksPerFrame, 1, 64));
+
+                    if (state.ServiceChunkIndex >= state.ServiceChunks.Count)
+                    {
+                        _lastServiceRenderCounters = state.ServiceCounters.Copy();
+                        LogServiceRenderCounters(state.ServiceCounters, state.ServiceChunks.Count);
+                        state.Phase = state.RailwayChunks.Count > 0
+                            ? OverlayRebuildPhase.RailwayChunks
+                            : (state.RoadChunks.Count > 0
+                                ? OverlayRebuildPhase.RoadChunks
+                                : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows));
+                        LogProgressiveOverlayProgress(true);
+                    }
+
+                    return;
+                }
+
                 if (state.Phase == OverlayRebuildPhase.RailwayChunks)
                 {
                     BuildProgressiveRailwayChunks(state, Mathf.Clamp(_config.RailwayChunksPerFrame, 1, 64));
 
                     if (state.RailwayChunkIndex >= state.RailwayChunks.Count)
                     {
+                        _lastRailwayRenderCounters = state.RailwayCounters.Copy();
                         LogRailwayRenderCounters(state.RailwayCounters, state.RailwayChunks.Count);
                         state.Phase = state.RoadChunks.Count > 0
                             ? OverlayRebuildPhase.RoadChunks
@@ -402,6 +426,24 @@ namespace CityTimelineMod.Rendering
             LogProgressiveOverlayProgress(false);
         }
 
+        private void BuildProgressiveServiceChunks(ProgressiveOverlayRebuildState state, int chunksPerFrame)
+        {
+            var builtThisFrame = 0;
+
+            while (builtThisFrame < chunksPerFrame && state.ServiceChunkIndex < state.ServiceChunks.Count)
+            {
+                RenderServiceChunk(
+                    state.ServiceChunks[state.ServiceChunkIndex],
+                    state.Materials,
+                    state.ServiceCounters
+                );
+                state.ServiceChunkIndex++;
+                builtThisFrame++;
+            }
+
+            LogProgressiveOverlayProgress(false);
+        }
+
         private void LogProgressiveOverlayProgress(bool force)
         {
             var state = _progressiveRebuild;
@@ -410,9 +452,11 @@ namespace CityTimelineMod.Rendering
                 return;
 
             var elapsedMs = state.Stopwatch != null ? state.Stopwatch.ElapsedMilliseconds : 0L;
-            var currentIndex = state.Phase == OverlayRebuildPhase.RailwayChunks
-                ? state.RailwayChunkIndex
-                : (state.Phase == OverlayRebuildPhase.PathChunks ? state.PathChunkIndex : state.RoadChunkIndex);
+            var currentIndex = state.Phase == OverlayRebuildPhase.ServiceChunks
+                ? state.ServiceChunkIndex
+                : (state.Phase == OverlayRebuildPhase.RailwayChunks
+                    ? state.RailwayChunkIndex
+                    : (state.Phase == OverlayRebuildPhase.PathChunks ? state.PathChunkIndex : state.RoadChunkIndex));
             var shouldLog = force ||
                 elapsedMs - state.LastProgressLogMs >= 3000L ||
                 (currentIndex > 0 && currentIndex % 25 == 0);
@@ -424,6 +468,8 @@ namespace CityTimelineMod.Rendering
 
             Log.Info(
                 "GroundOverlay: progressive rebuild progress: phase=" + state.Phase +
+                ", serviceChunks=" + state.ServiceChunkIndex + "/" + state.ServiceChunks.Count +
+                ", servicePoints=" + state.ServiceCounters.CreatedPoints +
                 ", railwayChunks=" + state.RailwayChunkIndex + "/" + state.RailwayChunks.Count +
                 ", railwaySegments=" + state.RailwayCounters.CreatedSegments +
                 ", roadChunks=" + state.RoadChunkIndex + "/" + state.RoadChunks.Count +
@@ -450,6 +496,7 @@ namespace CityTimelineMod.Rendering
             LogVerboseOverlay(
                 "GroundOverlay: created water lines=" + state.CreatedWaterLines +
                 ", water batched segments=" + state.CreatedWaterSegments +
+                ", service points=" + state.ServiceCounters.CreatedPoints +
                 ", railway lines=" + state.RailwayCounters.CreatedLines +
                 ", railway batched segments=" + state.RailwayCounters.CreatedSegments +
                 ", road lines=" + state.RoadCounters.CreatedRoadLines +
@@ -468,6 +515,8 @@ namespace CityTimelineMod.Rendering
             Log.Info(
                 "GroundOverlay: progressive overlay rebuild finished. reason=" + state.Reason +
                 ", phase=" + state.Phase +
+                ", serviceChunks=" + state.ServiceChunkIndex + "/" + state.ServiceChunks.Count +
+                ", servicePoints=" + state.ServiceCounters.CreatedPoints +
                 ", railwayChunks=" + state.RailwayChunkIndex + "/" + state.RailwayChunks.Count +
                 ", railwaySegments=" + state.RailwayCounters.CreatedSegments +
                 ", roadChunks=" + state.RoadChunkIndex + "/" + state.RoadChunks.Count +
@@ -508,6 +557,8 @@ namespace CityTimelineMod.Rendering
             {
                 Log.Info(
                     "GroundOverlay: progressive overlay rebuild cancelled. reason=" + SafeLogValue(reason) +
+                    ", serviceChunks=" + state.ServiceChunkIndex + "/" + state.ServiceChunks.Count +
+                    ", servicePoints=" + state.ServiceCounters.CreatedPoints +
                     ", railwayChunks=" + state.RailwayChunkIndex + "/" + state.RailwayChunks.Count +
                     ", railwaySegments=" + state.RailwayCounters.CreatedSegments +
                     ", roadChunks=" + state.RoadChunkIndex + "/" + state.RoadChunks.Count +
@@ -525,10 +576,6 @@ namespace CityTimelineMod.Rendering
                 ResolveY(new Vector3(_config.WorldOriginX, 0f, _config.WorldOriginZ)) + _config.GroundMargin,
                 _config.WorldOriginZ
             );
-
-            CityTimelineMod.Roads.GeoRoadImportPlacement.CenterX = center.x;
-            CityTimelineMod.Roads.GeoRoadImportPlacement.CenterZ = center.z;
-            CityTimelineMod.Roads.GeoRoadImportPlacement.GroundY = center.y;
 
             if (_config.DebugBeacons)
             {

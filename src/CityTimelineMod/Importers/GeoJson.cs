@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
-using CityTimelineMod.Roads;
 
 namespace CityTimelineMod.Importers
 {
@@ -288,8 +287,6 @@ var geometry = feature["geometry"] as JObject;
 
                 if (geometry == null)
                     continue;
-
-                RuntimeRoadSpawner.AnalyzeRoadFeature(feature);
 
                 var type = geometry["type"] != null ? geometry["type"].ToString() : null;
                 var coordinates = geometry["coordinates"];
@@ -610,4 +607,3 @@ private static string GetSourceTagValue(string sourceTag, string key)
         }
     }
 }
-

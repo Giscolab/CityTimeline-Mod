@@ -54,6 +54,23 @@ namespace CityTimelineMod.Rendering
             return color;
         }
 
+        private static Color ResolveServiceHudSwatchColor(string familyKey)
+        {
+            switch (NormalizeServiceFamilyKey(familyKey))
+            {
+                case "education": return new Color32(0x4d, 0xa3, 0xff, 0xff);
+                case "fire": return new Color32(0xff, 0x5a, 0x52, 0xff);
+                case "medical": return new Color32(0xff, 0x73, 0xa8, 0xff);
+                case "parks": return new Color32(0x65, 0xd6, 0x6e, 0xff);
+                case "electricity": return new Color32(0xff, 0xd8, 0x4d, 0xff);
+                case "waste": return new Color32(0xad, 0x96, 0x7a, 0xff);
+                case "transport": return new Color32(0xb8, 0x87, 0xff, 0xff);
+                case "water": return new Color32(0x38, 0xc8, 0xff, 0xff);
+                case "communications": return new Color32(0xff, 0x9f, 0x43, 0xff);
+                default: return Color.white;
+            }
+        }
+
         private static void DrawHudSwatch(Color color)
         {
             var rect = GUILayoutUtility.GetRect(
@@ -155,6 +172,25 @@ namespace CityTimelineMod.Rendering
                         new HudSwatch(ResolveHudSwatchColor(_config.WaterAreaOutlineColor), "Contour")
                     };
 
+                case "services.education":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("education"), "Éducation / recherche") };
+                case "services.fire":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("fire"), "Sapeurs-pompiers") };
+                case "services.health":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("medical"), "Médical / mortuaire") };
+                case "services.parks":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("parks"), "Parcs / loisirs") };
+                case "services.electricity":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("electricity"), "Électricité") };
+                case "services.waste":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("waste"), "Déchets") };
+                case "services.transport":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("transport"), "Transports") };
+                case "services.water":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("water"), "Eau / égouts") };
+                case "services.communication":
+                    return new List<HudSwatch> { new HudSwatch(ResolveServiceHudSwatchColor("communications"), "Communications") };
+
                 default:
                     return null;
             }
@@ -200,7 +236,16 @@ namespace CityTimelineMod.Rendering
                     new HudSwatch(ResolveHudSwatchColor(_config.ZoningMixedColor), "Turquoise = Usage mixte"),
                     new HudSwatch(ResolveHudSwatchColor(_config.ZoningRampColor), "Verts vifs = Parkings"),
                     new HudSwatch(ResolveHudSwatchColor(_config.WaterAreaFillColor), "Bleus eau = Hydrographie"),
-                    new HudSwatch(ResolveHudSwatchColor(_config.RoadColorMotorway), "Rouge→blanc = Routes par importance")
+                    new HudSwatch(ResolveHudSwatchColor(_config.RoadColorMotorway), "Rouge→blanc = Routes par importance"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("education"), "Services : éducation"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("fire"), "Services : incendie"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("medical"), "Services : médical"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("parks"), "Services : parcs"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("electricity"), "Services : électricité"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("waste"), "Services : déchets"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("transport"), "Services : transports"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("water"), "Services : eau"),
+                    new HudSwatch(ResolveServiceHudSwatchColor("communications"), "Services : communications")
                 };
 
                 for (var i = 0; i < families.Count; i += 2)

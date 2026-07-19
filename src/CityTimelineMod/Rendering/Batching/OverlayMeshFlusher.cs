@@ -1,12 +1,56 @@
 using System;
 using CityTimelineMod.Rendering.Core;
 using CityTimelineMod.Rendering.Railways;
+using CityTimelineMod.Rendering.Services;
 using UnityEngine;
 
 namespace CityTimelineMod.Rendering.Batching
 {
     internal static class OverlayMeshFlusher
     {
+        internal static int FlushServicePointBatch(
+            Transform parent,
+            string batchKey,
+            ServicePointMeshBatch batch,
+            Action<string> logVerbose
+        )
+        {
+            if (batch == null || batch.Vertices.Count < 3 || batch.Triangles.Count < 3)
+                return 0;
+
+            var name = "service_batch_" + OverlayObjectNameUtil.SanitizeObjectName(batchKey) + "_" + batch.ChunkIndex;
+            var obj = new GameObject(name);
+            obj.transform.SetParent(parent, true);
+
+            var mesh = new Mesh();
+            mesh.name = name + "_mesh";
+            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.vertices = batch.Vertices.ToArray();
+            mesh.triangles = batch.Triangles.ToArray();
+            mesh.RecalculateBounds();
+            mesh.RecalculateNormals();
+
+            var filter = obj.AddComponent<MeshFilter>();
+            filter.sharedMesh = mesh;
+
+            var renderer = obj.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = batch.Material;
+
+            if (logVerbose != null)
+            {
+                logVerbose(
+                    "GroundOverlay: service batch created: " + name +
+                    ", points=" + batch.PointCount +
+                    ", vertices=" + batch.Vertices.Count +
+                    ", triangles=" + (batch.Triangles.Count / 3)
+                );
+            }
+
+            batch.ChunkIndex++;
+            batch.ClearGeometry();
+            return 1;
+        }
+
         internal static int FlushRailwayBatch(
             Transform parent,
             string batchKey,
@@ -35,7 +79,7 @@ namespace CityTimelineMod.Rendering.Batching
             filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = batch.Material;
+            renderer.sharedMaterial = batch.Material;
 
             if (logVerbose != null)
             {
@@ -80,7 +124,7 @@ namespace CityTimelineMod.Rendering.Batching
             filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = batch.Material;
+            renderer.sharedMaterial = batch.Material;
 
             logVerbose(
                 "GroundOverlay: road batch created: " + name +
@@ -120,7 +164,7 @@ namespace CityTimelineMod.Rendering.Batching
             filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = batch.Material;
+            renderer.sharedMaterial = batch.Material;
 
             batch.ChunkIndex++;
             batch.ArrowCount = 0;
@@ -155,7 +199,7 @@ namespace CityTimelineMod.Rendering.Batching
             filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = batch.Material;
+            renderer.sharedMaterial = batch.Material;
 
             logVerbose(
                 "GroundOverlay: zoning batch created: " + name +
@@ -197,7 +241,7 @@ namespace CityTimelineMod.Rendering.Batching
             filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = batch.Material;
+            renderer.sharedMaterial = batch.Material;
 
             logVerbose(
                 "GroundOverlay: water area fill batch created: " + name +
@@ -240,7 +284,7 @@ namespace CityTimelineMod.Rendering.Batching
             filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
-            renderer.material = batch.Material;
+            renderer.sharedMaterial = batch.Material;
 
             logVerbose(
                 "GroundOverlay: water batch created: " + name +

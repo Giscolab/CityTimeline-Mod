@@ -227,7 +227,7 @@ internal bool RenderZoning = true;
         internal string RoadSemanticFilterMode = "all";
 
         internal bool RuntimeRoadImportEnabled = false;
-        internal bool RuntimeRoadImportRunOnce = true;
+        internal bool RuntimeRoadImportRunOnce = false;
 
         // Nombre maximum de segments réellement créés dans le réseau CS2.
         // Ce n’est pas l’overlay visuel. C’est l’import runtime.
@@ -300,5 +300,4 @@ internal bool RenderZoning = true;
         // --- Nouveau helper ---
     }
 }
-
 

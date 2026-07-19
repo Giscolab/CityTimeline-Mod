@@ -30,6 +30,15 @@ namespace CityTimelineMod.Rendering.Materials
         internal Material RailwaySubwayTunnel;
         internal Material RailwayService;
         internal Material RailwayServiceTunnel;
+        internal Material ServiceWater;
+        internal Material ServiceElectricity;
+        internal Material ServiceEducation;
+        internal Material ServiceFire;
+        internal Material ServiceMedical;
+        internal Material ServiceParks;
+        internal Material ServiceWaste;
+        internal Material ServiceTransport;
+        internal Material ServiceCommunications;
         internal Material ZoningResidentialLow;
         internal Material ZoningResidentialMedium;
         internal Material ZoningResidentialHigh;

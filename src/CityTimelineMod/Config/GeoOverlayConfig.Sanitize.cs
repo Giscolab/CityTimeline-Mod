@@ -41,6 +41,7 @@ namespace CityTimelineMod.Config
             RoadChunksPerFrame = Mathf.Clamp(RoadChunksPerFrame, 1, 64);
             PathChunksPerFrame = Mathf.Clamp(PathChunksPerFrame, 1, 64);
             ClampRailwaySettings();
+            SanitizeServiceSettings();
             RoadRenderMode = NormalizeRoadRenderMode(RoadRenderMode);
             PathRenderMode = NormalizeRoadRenderMode(PathRenderMode);
             ZoningResidentialAlpha = Clamp01(ZoningResidentialAlpha);
@@ -55,17 +56,9 @@ namespace CityTimelineMod.Config
             ZoningOfficeAlpha = Clamp01(ZoningOfficeAlpha);
             ParkingAlpha = Clamp01(ParkingAlpha);
 
-            ServicesWaterAlpha = Clamp01(ServicesWaterAlpha);
-            ServicesElectricityAlpha = Clamp01(ServicesElectricityAlpha);
-            ServicesEducationAlpha = Clamp01(ServicesEducationAlpha);
-            ServicesFireAlpha = Clamp01(ServicesFireAlpha);
-            ServicesHealthAlpha = Clamp01(ServicesHealthAlpha);
-            ServicesParksAlpha = Clamp01(ServicesParksAlpha);
-            ServicesWasteAlpha = Clamp01(ServicesWasteAlpha);
-            ServicesTransportAlpha = Clamp01(ServicesTransportAlpha);
-            ServicesCommunicationAlpha = Clamp01(ServicesCommunicationAlpha);
-
             RoadSemanticFilterMode = NormalizeRoadSemanticFilterMode(RoadSemanticFilterMode);
+            RuntimeRoadImportEnabled = false;
+            RuntimeRoadImportRunOnce = false;
             RuntimeRoadImportMaxSegments = Math.Max(1, RuntimeRoadImportMaxSegments);
             RuntimeRoadImportStride = Math.Max(1, RuntimeRoadImportStride);
             RuntimeRoadImportMinSegmentLengthMeters = Mathf.Max(0.5f, RuntimeRoadImportMinSegmentLengthMeters);

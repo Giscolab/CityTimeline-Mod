@@ -15,16 +15,22 @@ import {
   Readout,
   Row,
   Section,
-  SelectField,
   SliderField,
   ToggleField,
 } from "./components/Controls";
 
-import { ImportRoutesPane } from "./components/RoadCatalog";
 import { RailwayPanel } from "./components/RailwayPanel";
+import { ServicesPanel } from "./components/ServicesPanel";
+import { StatisticsPanel } from "./components/StatisticsPanel";
 import { ZoningPanel } from "./components/ZoningPanel";
+import {
+  formatCount,
+  getMetric,
+  useBundleStats,
+} from "./components/bundleStats";
+import type { BundleStatsSnapshot } from "./components/bundleStats";
 
-type TabId = "p1" | "p2" | "p3" | "p4" | "p5";
+type TabId = "p1" | "p3" | "stats" | "p4" | "p5";
 
 const tabs: Array<{
   id: TabId;
@@ -37,24 +43,24 @@ const tabs: Array<{
     count: "01·02",
   },
   {
-    id: "p2",
-    label: "Import routes CS2",
-    count: "03",
-  },
-  {
     id: "p3",
     label: "Bundle & overlay",
     count: "04–06",
   },
   {
+    id: "stats",
+    label: "Statistiques",
+    count: "DATA",
+  },
+  {
     id: "p4",
     label: "Couches & rendu",
-    count: "07–10",
+    count: "07–11",
   },
   {
     id: "p5",
     label: "Calage avancé",
-    count: "11",
+    count: "12",
   },
 ];
 
@@ -168,9 +174,7 @@ function CityTimelineHUD({
 
   const [activeTab, setActiveTab] =
     useState<TabId>("p1");
-
-  const [activeBundle, setActiveBundle] =
-    useState("Bundle exemple");
+  const stats = useBundleStats();
 
   return (
     <div className="ctm-hud-host">
@@ -237,24 +241,19 @@ function CityTimelineHUD({
 
             <div className="scroll">
               {activeTab === "p1" ? (
-                <PrincipalPane />
-              ) : null}
-
-              {activeTab === "p2" ? (
-                <ImportRoutesPane />
+                <PrincipalPane stats={stats} />
               ) : null}
 
               {activeTab === "p3" ? (
-                <BundleOverlayPane
-                  activeBundle={activeBundle}
-                  setActiveBundle={
-                    setActiveBundle
-                  }
-                />
+                <BundleOverlayPane stats={stats} />
+              ) : null}
+
+              {activeTab === "stats" ? (
+                <StatisticsPanel stats={stats} />
               ) : null}
 
               {activeTab === "p4" ? (
-                <DisplayRenderPane />
+                <DisplayRenderPane stats={stats} />
               ) : null}
 
               {activeTab === "p5" ? (
@@ -264,6 +263,7 @@ function CityTimelineHUD({
 
             <Footer
               onClose={onClose}
+              stats={stats}
             />
           </div>
         </div>
@@ -272,7 +272,15 @@ function CityTimelineHUD({
   );
 }
 
-function PrincipalPane() {
+function PrincipalPane({ stats }: { stats: BundleStatsSnapshot }) {
+  const bundleLabel = stats.bundleName || stats.bundleId || "Bundle actif";
+  const roads = getMetric(stats.roads, "total", "roads", "roadTotal", "road_total");
+  const paths = getMetric(stats.roads, "paths", "pathways", "pathway");
+  const servicePoints = stats.services.some((family) => family.total !== null)
+    ? stats.services.reduce((total, family) => total + (family.total ?? 0), 0)
+    : null;
+  const railwayTotal = getMetric(stats.railway, "total");
+
   return (
     <div className="ctm-pane">
       <Section
@@ -329,67 +337,44 @@ function PrincipalPane() {
       <Section
         num="02"
         title="Résumé"
-        state="always"
-        note="Résumé utile. À garder en haut."
+        state={stats.available ? "connecté" : "indisponible"}
+        note={stats.status}
       >
         <Readout>
-          Bundle exemple — Paris 7e
+          {bundleLabel}{stats.bundleId && stats.bundleName ? ` · ${stats.bundleId}` : ""}
         </Readout>
 
         <Readout>
-          routes 12 480 · chemins 3 102 ·
-          total 15 582
+          objets OSM {formatCount(stats.objects)} · routes {formatCount(roads)} · chemins {formatCount(paths)}
         </Readout>
 
         <Readout>
-          enabled · fast-flush · max 60 000 ·
-          mode Toutes
-        </Readout>
-
-        <Readout>
-          import 73% · 11 240 / 15 582
-          segments
-        </Readout>
-
-        <Readout>
-          phase idle · 0 chunks · idle
+          services {formatCount(servicePoints)} · réseau ferroviaire {formatCount(railwayTotal)} voies
         </Readout>
       </Section>
     </div>
   );
 }
 
-interface BundleOverlayPaneProps {
-  activeBundle: string;
-  setActiveBundle: (
-    value: string,
-  ) => void;
-}
+function BundleOverlayPane({ stats }: { stats: BundleStatsSnapshot }) {
+  const bundleLabel = stats.bundleName || stats.bundleId || "Bundle actif";
+  const roads = getMetric(stats.roads, "total", "roads", "roadTotal", "road_total");
+  const paths = getMetric(stats.roads, "paths", "pathways", "pathway");
+  const waterLines = getMetric(stats.water, "lines", "lineCount", "line_count");
+  const waterAreas = getMetric(stats.water, "areas", "areaCount", "area_count");
 
-function BundleOverlayPane({
-  activeBundle,
-  setActiveBundle,
-}: BundleOverlayPaneProps) {
   return (
     <div className="ctm-pane">
       <Foldout
         num="04"
         title="Détails bundle / eau"
-        state="foldout"
-        note="Fonctionnel, mais doit rester secondaire."
+        state={stats.available ? "connecté" : "indisponible"}
+        note={stats.status}
         defaultOpen
       >
-        <SelectField
-          label="Ville / bundle actif"
-          value={activeBundle}
-          options={[
-            "Bundle exemple",
-            "Paris 7e",
-            "Lyon centre",
-            "Marseille",
-          ]}
-          onChange={setActiveBundle}
-        />
+        <Readout>
+          {bundleLabel}{stats.bundleId && stats.bundleName ? ` · ${stats.bundleId}` : ""}
+        </Readout>
 
         <Row columns={2}>
           <HudButton disabled>
@@ -410,27 +395,26 @@ function BundleOverlayPane({
         </Row>
 
         <Readout>
-          12 480 routes · 3 102 chemins ·
-          41 ponts
+          {formatCount(roads)} routes · {formatCount(paths)} chemins
         </Readout>
 
         <Readout>
-          rivers 8 · lakes 3 · contracts OK
+          {formatCount(waterLines)} lignes d’eau · {formatCount(waterAreas)} surfaces d’eau
+        </Readout>
+
+        <Readout>
+          {formatCount(stats.objects)} objets OSM exploitables
         </Readout>
       </Foldout>
 
       <Foldout
         num="05"
         title="État overlay / rebuild"
-        state="foldout"
-        note="Diagnostic utile, pas nécessaire dans le flux principal."
+        state="non exposé"
+        note="Ce contrat de statistiques ne fournit pas encore la télémétrie du rebuild."
       >
         <Readout>
-          Lisible · live
-        </Readout>
-
-        <Readout>
-          idle · restart 0 · cancel 0
+          Aucune métrique de rebuild reçue. Aucun zéro de démonstration n’est affiché.
         </Readout>
 
         <HudButton disabled>
@@ -441,36 +425,34 @@ function BundleOverlayPane({
       <Foldout
         num="06"
         title="Statistiques routes GeoJSON"
-        state="foldout"
+        state={stats.available ? "connecté" : "indisponible"}
         note="Utile pour valider le bundle."
       >
         <Readout>
-          12 480 routes chargées
+          {formatCount(roads)} routes chargées
         </Readout>
 
         <Readout>
-          3 102 chemins chargés
+          {formatCount(paths)} chemins chargés
         </Readout>
 
         <Readout>
-          15 582 total
+          autoroutes {formatCount(getMetric(stats.roads, "highway", "motorway"))} · axes principaux {formatCount(getMetric(stats.roads, "main", "mainRoad", "largeRoad", "large_road", "primary"))}
         </Readout>
 
         <Readout>
-          named 9 421 · oneway 882 ·
-          lanes 7 233 · maxspeed 6 110
+          secondaires {formatCount(getMetric(stats.roads, "secondary", "secondaryRoad", "mediumRoad", "medium_road"))} · tertiaires/résidentielles {formatCount(getMetric(stats.roads, "tertiary", "tertiaryResidential", "tertiary_residential", "smallRoad", "small_road"))}
         </Readout>
 
         <Readout>
-          ponts 41 · tunnels 12 ·
-          ronds-points 87
+          bretelles {formatCount(getMetric(stats.roads, "ramp", "link", "rampLink", "ramp_link"))} · non classées {formatCount(getMetric(stats.roads, "unclassified", "unclassifiedRoad", "gravelRoad", "gravel_road", "other"))}
         </Readout>
       </Foldout>
     </div>
   );
 }
 
-function DisplayRenderPane() {
+function DisplayRenderPane({ stats }: { stats: BundleStatsSnapshot }) {
   return (
     <div className="ctm-pane">
       <Foldout
@@ -560,8 +542,10 @@ function DisplayRenderPane() {
 
       <RailwayPanel />
 
+      <ServicesPanel services={stats.services} />
+
       <Foldout
-        num="09"
+        num="10"
         title="Performance overlay"
         state="foldout"
         note="À ouvrir seulement pour vérifier le coût du rendu."
@@ -599,13 +583,12 @@ function DisplayRenderPane() {
         />
 
         <Readout>
-          draw 0.8 ms · upload 0.2 ms ·
-          chunks 0
+          Télémétrie de performance non exposée par bundleStatsJson.
         </Readout>
       </Foldout>
 
       <Foldout
-        num="10"
+        num="11"
         title="Rendu avancé routes / filtres"
         state="foldout"
         note="Filtres visuels locaux pour préparer la cartographie des bindings."
@@ -671,7 +654,7 @@ function CalibrationPane() {
   return (
     <div className="ctm-pane">
       <Foldout
-        num="11"
+        num="12"
         title="Calage avancé"
         state="foldout · verrouillé"
         note="Doit rester verrouillé par défaut."
@@ -744,14 +727,18 @@ function CalibrationPane() {
 
 function Footer({
   onClose,
+  stats,
 }: {
   onClose: () => void;
+  stats: BundleStatsSnapshot;
 }) {
+  const bundleLabel = stats.bundleName || stats.bundleId || "Bundle actif";
+
   return (
     <div className="footer">
       <div className="footer-head">
         <span className="num">
-          12
+          13
         </span>
 
         <h2>
@@ -765,11 +752,11 @@ function Footer({
 
       <div className="meta">
         <Readout>
-          3 changements en attente
+          {stats.available ? `${bundleLabel} · données connectées` : stats.status}
         </Readout>
 
         <Readout>
-          live HUD · auto-save off
+          HUD live · statistiques synchronisées
         </Readout>
       </div>
 
