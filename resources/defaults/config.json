@@ -160,7 +160,7 @@
   "worldMapSizeKm": 57.344,
   "heightMapSizeKm": 14.336,
   "modEnabled": true,
-  "showOverlayHud": true,
+  "showOverlayHud": false,
   "verboseOverlayLogs": false,
   "waterLineColor": "bleuClair",
   "waterAreaOutlineColor": "bleuFonce",

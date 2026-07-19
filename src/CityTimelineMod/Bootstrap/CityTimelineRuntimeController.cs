@@ -18,7 +18,7 @@ namespace CityTimelineMod
 
         private string _configPath;
         private bool _modEnabled = true;
-        private bool _showOverlayHud = true;
+        private bool _showOverlayHud = false;
         private bool _expanded = false;
 
         private string _statusMessage = "État runtime chargé.";
@@ -155,7 +155,7 @@ namespace CityTimelineMod
                 if (!File.Exists(_configPath))
                 {
                     _modEnabled = true;
-                    _showOverlayHud = true;
+                    _showOverlayHud = false;
                     _statusMessage = "config.json absent : défaut ACTIF.";
                     Log.Info("CityTimelineMod runtime controller: config.json not found, default enabled.");
                     return;
@@ -165,7 +165,7 @@ namespace CityTimelineMod
                 var root = JObject.Parse(json);
 
                 _modEnabled = GetBool(root, "modEnabled", true);
-                _showOverlayHud = GetBool(root, "showOverlayHud", true);
+                _showOverlayHud = GetBool(root, "showOverlayHud", false);
 
                 _statusMessage = "config.json relu.";
                 Log.Info(

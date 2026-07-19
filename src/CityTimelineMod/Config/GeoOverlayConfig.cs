@@ -62,7 +62,7 @@ namespace CityTimelineMod.Config
                 internal string PathHighwayFilter = "all";
                 internal string OverlayProfile = "custom";
 internal bool RenderZoning = true;
-                internal bool ShowOverlayHud = true;
+                internal bool ShowOverlayHud = false;
                 internal bool VerboseOverlayLogs = false;
                 internal bool RenderMapBounds = true;
                 internal bool RenderWorldMapBounds = true;

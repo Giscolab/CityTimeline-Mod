@@ -44,7 +44,7 @@ private const string ModFolderName = "CityTimelineMod";
         private bool _suppressConfigWrite;
 
         private bool _modEnabled = true;
-        private bool _showOverlayHud = true;
+        private bool _showOverlayHud = false;
 
         private bool _renderRoads = true;
         private bool _renderPaths = true;
@@ -631,7 +631,7 @@ private const string ModFolderName = "CityTimelineMod";
             _suppressConfigWrite = true;
 
             _modEnabled = true;
-            _showOverlayHud = true;
+            _showOverlayHud = false;
 
             _renderRoads = true;
             _renderPaths = true;
@@ -937,4 +937,3 @@ private const string ModFolderName = "CityTimelineMod";
         }
     }
 }
-
