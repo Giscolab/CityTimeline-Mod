@@ -16,6 +16,11 @@ $uiSrc = Join-Path $repoRoot "src\CityTimelineMod.UI"
 $uiOut = Join-Path $uiSrc "dist"
 $resourcesRoot = Join-Path $repoRoot "resources"
 $packagingRoot = Join-Path $repoRoot "packaging"
+$realmapBundlesRoot = $env:CITYTIMELINE_REALMAP_BUNDLES_ROOT
+if ([string]::IsNullOrWhiteSpace($realmapBundlesRoot)) {
+    $githubRoot = Split-Path -Parent $repoRoot
+    $realmapBundlesRoot = Join-Path $githubRoot "cs2-realmap-generator\exports\bundles"
+}
 
 $csproj = Join-Path $projectRoot "CityTimelineMod.csproj"
 $bin = Join-Path $projectRoot "bin\Debug\net48"
@@ -73,6 +78,57 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet clean failed"
 }
 
+function Assert-BundleCatalog {
+    param(
+        [Parameter(Mandatory=$true)][string]$Root,
+        [Parameter(Mandatory=$true)][string]$Label
+    )
+
+    $rootFull = [System.IO.Path]::GetFullPath($Root)
+    $indexPath = Join-Path $rootFull "bundle_index.json"
+    if (!(Test-Path -LiteralPath $indexPath -PathType Leaf)) {
+        throw "$Label bundle_index.json missing: $indexPath"
+    }
+
+    try {
+        $index = Get-Content -LiteralPath $indexPath -Raw | ConvertFrom-Json
+    }
+    catch {
+        throw "$Label bundle_index.json is invalid: $indexPath ($($_.Exception.Message))"
+    }
+
+    $entries = @($index.bundles)
+    if ($entries.Count -eq 0) {
+        throw "$Label bundle_index.json contains no bundles: $indexPath"
+    }
+
+    foreach ($entry in $entries) {
+        $relativePath = [string]$entry.bundlePath
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            $relativePath = [string]$entry.relativePath
+        }
+        if ([string]::IsNullOrWhiteSpace($relativePath)) {
+            $relativePath = [string]$entry.id
+        }
+        if ([string]::IsNullOrWhiteSpace($relativePath) -or [System.IO.Path]::IsPathRooted($relativePath)) {
+            throw "$Label bundle entry has an invalid path: $($entry.id)"
+        }
+
+        $bundlePath = [System.IO.Path]::GetFullPath((Join-Path $rootFull $relativePath))
+        Assert-UnderPath -Parent $rootFull -Child $bundlePath
+        if (!(Test-Path -LiteralPath $bundlePath -PathType Container)) {
+            throw "$Label bundle directory missing for '$($entry.id)': $bundlePath"
+        }
+
+        $manifestPath = Join-Path $bundlePath "manifest.json"
+        if (!(Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+            throw "$Label manifest missing for '$($entry.id)': $manifestPath"
+        }
+    }
+
+    return $entries.Count
+}
+
 $dotnetOutput = dotnet build $csproj -c Debug --nologo -v:q 2>&1
 if ($LASTEXITCODE -ne 0) {
     $dotnetOutput | Out-Host
@@ -120,13 +176,21 @@ foreach ($requiredGeneratedUIFile in $requiredGeneratedUIFiles) {
 # IMPORTANT: do NOT delete $dst, because AppData config.json is the runtime truth.
 New-Item -ItemType Directory -Force -Path $dst | Out-Null
 
-# Migrate bundles written by the former data\bundles convention. RealMap and
-# the runtime config now share data\exports\bundles as their canonical path.
+# RealMap is the source of truth. Deploy the complete catalog, not only the
+# active bundle: every directory listed in bundle_index.json is mirrored.
 $canonicalBundles = Join-Path $dst "data\exports\bundles"
-$legacyBundles = Join-Path $dst "data\bundles"
-if (!(Test-Path -LiteralPath $canonicalBundles) -and (Test-Path -LiteralPath $legacyBundles)) {
-    New-Item -ItemType Directory -Force -Path $canonicalBundles | Out-Null
-    Copy-Item -Path (Join-Path $legacyBundles "*") -Destination $canonicalBundles -Recurse -Force
+$sourceBundleCount = Assert-BundleCatalog -Root $realmapBundlesRoot -Label "RealMap source"
+New-Item -ItemType Directory -Force -Path $canonicalBundles | Out-Null
+
+robocopy $realmapBundlesRoot $canonicalBundles /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+if ($LASTEXITCODE -ge 8) {
+    throw "robocopy RealMap bundles failed with exit code $LASTEXITCODE"
+}
+$global:LASTEXITCODE = 0
+
+$deployedBundleCount = Assert-BundleCatalog -Root $canonicalBundles -Label "Deployed"
+if ($deployedBundleCount -ne $sourceBundleCount) {
+    throw "Bundle catalog deployment mismatch: source=$sourceBundleCount deployed=$deployedBundleCount"
 }
 
 # 4) Clean obsolete UI deployment attempts.
