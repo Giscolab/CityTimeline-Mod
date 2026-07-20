@@ -1,6 +1,6 @@
 @font-face {
   font-family: "Overpass";
-  src: url("./assets/fonts/overpass.ttf") format("truetype");
+  src: url(coui://ui-mods/fonts/overpass.ttf) format("truetype");
   font-weight: 100 900;
   font-style: normal;
 }
@@ -1229,3 +1229,4 @@ td {
 .ctm-service-family[class*="service-"] {
   border-left-color: var(--service-color, var(--hud-accent-dim));
 }
+

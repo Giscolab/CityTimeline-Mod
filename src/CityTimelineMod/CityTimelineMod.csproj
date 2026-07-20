@@ -69,6 +69,39 @@
     <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\bbox_manifest.json" Link="Resources\legacy-geojson\bbox_manifest.json" />
   </ItemGroup>
 
+  <!--
+    DeployWIP supplied by the CS2 toolchain deletes $(DeployDir) before copying
+    the new build. RealMap publishes runtime-owned bundles directly below that
+    directory, so preserve them (and the user's runtime config) across every
+    IDE/dotnet deployment. data\bundles is the pre-index-layout location and is
+    migrated once to the canonical data\exports\bundles location.
+  -->
+  <Target Name="PreserveCityTimelineRuntimeData" BeforeTargets="DeployWIP">
+    <PropertyGroup>
+      <CityTimelineDeployBackup>$(BaseIntermediateOutputPath)deploy-runtime-backup</CityTimelineDeployBackup>
+      <CityTimelineCanonicalBundles>$(DeployDir)\data\exports\bundles</CityTimelineCanonicalBundles>
+      <CityTimelineLegacyBundles>$(DeployDir)\data\bundles</CityTimelineLegacyBundles>
+      <CityTimelineRuntimeBundlesRoot Condition="Exists('$(CityTimelineCanonicalBundles)\bundle_index.json')">$(CityTimelineCanonicalBundles)</CityTimelineRuntimeBundlesRoot>
+      <CityTimelineRuntimeBundlesRoot Condition="'$(CityTimelineRuntimeBundlesRoot)' == '' AND Exists('$(CityTimelineLegacyBundles)\bundle_index.json')">$(CityTimelineLegacyBundles)</CityTimelineRuntimeBundlesRoot>
+    </PropertyGroup>
+
+    <RemoveDir Directories="$(CityTimelineDeployBackup)" />
+
+    <ItemGroup>
+      <CityTimelineRuntimeConfig Include="$(DeployDir)\config.json"
+                                 Condition="Exists('$(DeployDir)\config.json')" />
+      <CityTimelineRuntimeBundles Include="$(CityTimelineRuntimeBundlesRoot)\**\*.*"
+                                  Condition="'$(CityTimelineRuntimeBundlesRoot)' != ''" />
+    </ItemGroup>
+
+    <Copy SourceFiles="@(CityTimelineRuntimeConfig)"
+          DestinationFolder="$(CityTimelineDeployBackup)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(CityTimelineRuntimeBundles)"
+          DestinationFiles="@(CityTimelineRuntimeBundles->'$(CityTimelineDeployBackup)\bundles\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="CityTimelineDeployContent" AfterTargets="DeployWIP">
     <ItemGroup>
       <CityTimelineRootFiles Include="$(PackagingRoot)\mod.json" />
@@ -94,14 +127,34 @@
     <Copy SourceFiles="@(CityTimelineUiFontFiles)"
           DestinationFiles="@(CityTimelineUiFontFiles->'$(DeployDir)\fonts\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
+
+    <ItemGroup>
+      <CityTimelinePreservedConfig Include="$(CityTimelineDeployBackup)\config.json"
+                                   Condition="Exists('$(CityTimelineDeployBackup)\config.json')" />
+      <CityTimelinePreservedBundles Include="$(CityTimelineDeployBackup)\bundles\**\*.*"
+                                    Condition="Exists('$(CityTimelineDeployBackup)\bundles')" />
+    </ItemGroup>
+
+    <!-- Restore runtime-owned state after repository defaults have deployed. -->
+    <Copy SourceFiles="@(CityTimelinePreservedConfig)"
+          DestinationFiles="@(CityTimelinePreservedConfig->'$(DeployDir)\config.json')" />
+    <Copy SourceFiles="@(CityTimelinePreservedBundles)"
+          DestinationFiles="@(CityTimelinePreservedBundles->'$(DeployDir)\data\exports\bundles\%(RecursiveDir)%(Filename)%(Extension)')" />
+
+    <Error Condition="!Exists('$(DeployDir)\0Harmony.dll')"
+           Text="CityTimelineMod deployment is incomplete: 0Harmony.dll is missing from $(DeployDir)." />
+    <RemoveDir Directories="$(CityTimelineDeployBackup)" />
   </Target>
 
-  <Target Name="CopyHarmonyToOutput" AfterTargets="Build">
+  <!-- DeployWIP snapshots $(OutDir), so Harmony must be present before it runs. -->
+  <Target Name="CopyHarmonyToOutput" BeforeTargets="DeployWIP">
     <ItemGroup>
       <HarmonyRuntime Include="$(PkgLib_Harmony)\lib\net472\0Harmony.dll" Condition="Exists('$(PkgLib_Harmony)\lib\net472\0Harmony.dll')" />
       <HarmonyRuntime Include="$(PkgLib_Harmony)\lib\net48\0Harmony.dll" Condition="Exists('$(PkgLib_Harmony)\lib\net48\0Harmony.dll')" />
       <HarmonyRuntime Include="$(PkgLib_Harmony)\lib\netstandard2.0\0Harmony.dll" Condition="Exists('$(PkgLib_Harmony)\lib\netstandard2.0\0Harmony.dll')" />
     </ItemGroup>
-    <Copy SourceFiles="@(HarmonyRuntime)" DestinationFolder="$(OutputPath)" SkipUnchangedFiles="true" />
+    <Error Condition="'@(HarmonyRuntime)' == ''"
+           Text="Lib.Harmony 2.2.2 runtime assembly was not found in the NuGet package cache." />
+    <Copy SourceFiles="@(HarmonyRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>

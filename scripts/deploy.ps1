@@ -120,6 +120,15 @@ foreach ($requiredGeneratedUIFile in $requiredGeneratedUIFiles) {
 # IMPORTANT: do NOT delete $dst, because AppData config.json is the runtime truth.
 New-Item -ItemType Directory -Force -Path $dst | Out-Null
 
+# Migrate bundles written by the former data\bundles convention. RealMap and
+# the runtime config now share data\exports\bundles as their canonical path.
+$canonicalBundles = Join-Path $dst "data\exports\bundles"
+$legacyBundles = Join-Path $dst "data\bundles"
+if (!(Test-Path -LiteralPath $canonicalBundles) -and (Test-Path -LiteralPath $legacyBundles)) {
+    New-Item -ItemType Directory -Force -Path $canonicalBundles | Out-Null
+    Copy-Item -Path (Join-Path $legacyBundles "*") -Destination $canonicalBundles -Recurse -Force
+}
+
 # 4) Clean obsolete UI deployment attempts.
 Remove-PathIfExists -Path (Join-Path $dst "UI") -ExpectedParent $dst
 Remove-PathIfExists -Path (Join-Path $dst "vendor") -ExpectedParent $dst
@@ -217,6 +226,13 @@ $requiredFiles = @(
 foreach ($requiredFile in $requiredFiles) {
     if (!(Test-Path $requiredFile)) {
         throw "Deployment validation failed. Missing required file: $requiredFile"
+    }
+}
+
+if (Test-Path -LiteralPath $canonicalBundles) {
+    $bundleIndex = Join-Path $canonicalBundles "bundle_index.json"
+    if (!(Test-Path -LiteralPath $bundleIndex)) {
+        throw "Deployment validation failed. Bundle directory exists without bundle_index.json: $canonicalBundles"
     }
 }
 
