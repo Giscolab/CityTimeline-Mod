@@ -26,6 +26,8 @@ namespace CityTimelineMod.Rendering.Roads
                     return "secondary";
 
                 case "tertiary":
+                case "residential":
+                case "living_street":
                     return "tertiary";
 
                 default:

@@ -10,6 +10,7 @@ namespace CityTimelineMod.UI
         private ValueBinding<string> _bundleStatsJsonBinding;
         private TriggerBinding<string> _setServiceVisibleBinding;
         private TriggerBinding<string> _setServiceOpacityBinding;
+        private string _lastBundleStatsJson;
 
         private void CreateStatisticsBindings()
         {
@@ -87,7 +88,12 @@ namespace CityTimelineMod.UI
         private void SyncStatisticsBindings()
         {
             var json = GeoDebugOverlay.GetBundleHudSnapshotJson();
-            UpdateBinding(_bundleStatsJsonBinding, string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            var next = string.IsNullOrWhiteSpace(json) ? "{}" : json;
+            if (string.Equals(next, _lastBundleStatsJson, System.StringComparison.Ordinal))
+                return;
+
+            _lastBundleStatsJson = next;
+            UpdateBinding(_bundleStatsJsonBinding, next);
         }
     }
 }

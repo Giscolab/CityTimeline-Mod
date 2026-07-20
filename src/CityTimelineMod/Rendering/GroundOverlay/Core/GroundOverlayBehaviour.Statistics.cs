@@ -36,11 +36,22 @@ namespace CityTimelineMod.Rendering
             {
                 ["available"] = stats.Available,
                 ["status"] = stats.Available
-                    ? "Données Realmap chargées dans CityTimelineMod."
+                    ? (stats.CoverageComplete
+                        ? "Bundle Realmap complet chargé dans CityTimelineMod."
+                        : "Bundle chargé mais incomplet : " + stats.PresentSourceFileCount +
+                            "/" + stats.ExpectedSourceFileCount + " fichiers attendus.")
                     : "Statistiques détaillées indisponibles pour ce bundle.",
                 ["bundleId"] = _config != null ? _config.ActiveBundleId ?? "" : "",
                 ["bundleName"] = ResolveBundleDisplayName(stats),
-                ["objects"] = NullableHudCount(objectStatsAvailable, stats.GetObjectCount())
+                ["objects"] = NullableHudCount(objectStatsAvailable, stats.GetObjectCount()),
+                ["visualEntities"] = new JValue(
+                    stats.AllBundleFeatureCount ??
+                    (stats.GetObjectCount() + stats.GetTotalServices() +
+                        (_railwayStats != null ? _railwayStats.Total : 0))
+                ),
+                ["uniqueOsmElements"] = stats.UniqueOsmElementCount.HasValue
+                    ? new JValue(stats.UniqueOsmElementCount.Value)
+                    : JValue.CreateNull()
             };
 
             root["zoning"] = BuildZoningHudJson(stats, zoningStatsAvailable);
@@ -58,6 +69,13 @@ namespace CityTimelineMod.Rendering
             };
             root["services"] = BuildServiceHudJson(stats);
             root["railway"] = BuildRailwayHudJson();
+            root["coverage"] = new JObject
+            {
+                ["complete"] = stats.CoverageComplete,
+                ["presentFiles"] = stats.PresentSourceFileCount,
+                ["expectedFiles"] = stats.ExpectedSourceFileCount,
+                ["missingFiles"] = new JArray(stats.MissingSourceFiles)
+            };
             _bundleHudSnapshotJsonCache = root.ToString(Newtonsoft.Json.Formatting.None);
             return _bundleHudSnapshotJsonCache;
         }

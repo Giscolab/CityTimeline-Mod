@@ -23,20 +23,23 @@ namespace CityTimelineMod.Rendering
             ref bool hasEndpoints
         )
         {
-            RenderWaterGroup(
-                _waterLines,
-                "cyan_water_line_segment_",
-                waterLineMaterial,
-                _config.WaterLineSegmentWidth,
-                _config.WaterLineSegmentHeight,
-                _config.WaterLineYOffset,
-                stride,
-                ref createdWaterSegments,
-                ref createdWaterLines,
-                ref firstWorld,
-                ref lastWorld,
-                ref hasEndpoints
-            );
+            if (_config.RenderWaterLines)
+            {
+                RenderWaterGroup(
+                    _waterLines,
+                    "cyan_water_line_segment_",
+                    waterLineMaterial,
+                    _config.WaterLineSegmentWidth,
+                    _config.WaterLineSegmentHeight,
+                    _config.WaterLineYOffset,
+                    stride,
+                    ref createdWaterSegments,
+                    ref createdWaterLines,
+                    ref firstWorld,
+                    ref lastWorld,
+                    ref hasEndpoints
+                );
+            }
 
             if (_config.RenderWaterAreas && _config.RenderWaterAreaFillMeshes)
                 RenderWaterAreaFillMeshes(_waterAreaOutlines, waterAreaFillMaterial, stride);

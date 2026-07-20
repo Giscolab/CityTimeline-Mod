@@ -317,6 +317,31 @@ namespace CityTimelineMod.Bundles
                 return false;
             }
 
+            // Completeness is audited at selection time but remains compatible
+            // with legacy bundles. A missing optional layer must never prevent an
+            // older city from loading; the exact omissions are exposed in the HUD.
+            var geoJsonPackRoot = Path.Combine(bundleRoot, "geojson_pack");
+            int presentFileCount;
+            var missingFiles = GeoJsonBundleContract.FindMissingFiles(
+                geoJsonPackRoot,
+                out presentFileCount
+            );
+            if (missingFiles.Count == 0)
+            {
+                Log.Info(
+                    "BundleResolver: complete visual bundle contract " +
+                    presentFileCount + "/" + GeoJsonBundleContract.CompleteRelativeFiles.Length + "."
+                );
+            }
+            else
+            {
+                Log.Info(
+                    "BundleResolver: WARNING compatibility mode; visual bundle contract " +
+                    presentFileCount + "/" + GeoJsonBundleContract.CompleteRelativeFiles.Length +
+                    ", missing=" + string.Join(",", missingFiles.ToArray()) + "."
+                );
+            }
+
             return true;
         }
 

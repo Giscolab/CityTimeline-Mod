@@ -97,6 +97,21 @@ namespace CityTimelineMod.Rendering.Statistics
         internal string City = "";
         internal string Bbox = "";
         internal int ZoningFeatureCount;
+        internal int? AllBundleFeatureCount;
+        internal int? UniqueOsmElementCount;
+        internal int ExpectedSourceFileCount;
+        internal int PresentSourceFileCount;
+        internal readonly List<string> MissingSourceFiles = new List<string>();
+
+        internal bool CoverageComplete
+        {
+            get
+            {
+                return ExpectedSourceFileCount > 0 &&
+                    PresentSourceFileCount == ExpectedSourceFileCount &&
+                    MissingSourceFiles.Count == 0;
+            }
+        }
 
         internal readonly SortedDictionary<string, int> LayerCounts =
             new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -213,6 +228,13 @@ namespace CityTimelineMod.Rendering.Statistics
             };
 
             root["sources"] = BuildSourcesJson();
+            root["coverage"] = new JObject
+            {
+                ["complete"] = CoverageComplete,
+                ["presentFiles"] = PresentSourceFileCount,
+                ["expectedFiles"] = ExpectedSourceFileCount,
+                ["missingFiles"] = new JArray(MissingSourceFiles)
+            };
             root["totals"] = new JObject
             {
                 ["allFeatures"] = GetObjectCount(),
@@ -267,6 +289,7 @@ namespace CityTimelineMod.Rendering.Statistics
             Sources["roadsIndex"] = new BundleHudSourceState("roadsIndex");
             Sources["servicesIndex"] = new BundleHudSourceState("servicesIndex");
             Sources["zoningPolygons"] = new BundleHudSourceState("zoningPolygons");
+            Sources["extractionReport"] = new BundleHudSourceState("extractionReport");
 
             for (var i = 0; i < ZoningKeys.Length; i++)
                 ZoningCounts[ZoningKeys[i]] = 0;
@@ -306,7 +329,7 @@ namespace CityTimelineMod.Rendering.Statistics
         private JObject BuildSourcesJson()
         {
             var result = new JObject();
-            var ordered = new[] { "layerIndex", "roadsIndex", "servicesIndex", "zoningPolygons" };
+            var ordered = new[] { "layerIndex", "roadsIndex", "servicesIndex", "zoningPolygons", "extractionReport" };
             var emitted = new HashSet<string>(StringComparer.Ordinal);
 
             for (var i = 0; i < ordered.Length; i++)

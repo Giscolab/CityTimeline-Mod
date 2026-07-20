@@ -207,6 +207,15 @@ namespace CityTimelineMod
                 var bundleHudSnapshot = BundleHudStatsLoader.Load(geoJsonPackRoot);
 
                 Log.Info(
+                    "Bundle completeness: " + bundleHudSnapshot.PresentSourceFileCount +
+                    "/" + bundleHudSnapshot.ExpectedSourceFileCount +
+                    " expected files, complete=" + bundleHudSnapshot.CoverageComplete +
+                    (bundleHudSnapshot.MissingSourceFiles.Count == 0
+                        ? ""
+                        : ", missing=" + string.Join(", ", bundleHudSnapshot.MissingSourceFiles))
+                );
+
+                Log.Info(
                     "Loaded service points: " + serviceLoadResult.Points.Count +
                     ", loaded families=" + serviceLoadResult.LoadedFamilyCount +
                     ", missing families=" + serviceLoadResult.MissingFamilyCount +
@@ -247,74 +256,27 @@ namespace CityTimelineMod
                 Log.Info("Loaded path geometries: " + pathGeometries.Count);
                 Log.Info("Loaded railway geometries: " + railwayGeometries.Count + ", available=" + railwayAvailable);
 
-                var renderWaterLineGeometries = new List<List<GeoPoint>>();
-                var renderWaterAreaOutlines = new List<List<GeoPoint>>();
+                // Keep every loaded source geometry resident even when its layer is
+                // initially hidden.  CoHTML controls can then enable any layer and
+                // request a rebuild without having to reload or reparse the bundle.
+                // Visibility remains a rendering concern; it must never truncate the
+                // data contract installed by the bootstrap.
+                var renderWaterLineGeometries = new List<List<GeoPoint>>(lineGeometries);
+                var renderWaterAreaOutlines = new List<List<GeoPoint>>(areaOutlines);
+                var renderRoadGeometries = new List<GeoRoadLine>(roadGeometries);
+                renderRoadGeometries.AddRange(pathGeometries);
 
-                if (config.RenderWaterLines)
-                {
-                    renderWaterLineGeometries.AddRange(lineGeometries);
-                    Log.Info("Render water lines enabled: " + lineGeometries.Count);
-                }
-                else
-                {
-                    Log.Info("Render water lines disabled by config.");
-                }
-
-                if (config.RenderWaterAreas)
-                {
-                    renderWaterAreaOutlines.AddRange(areaOutlines);
-                    Log.Info("Render water areas enabled: " + areaOutlines.Count);
-                }
-                else
-                {
-                    Log.Info("Render water areas disabled by config.");
-                }
-
-                var renderRoadGeometries = new List<GeoRoadLine>();
-
-                if (config.RenderRoads)
-                {
-                    renderRoadGeometries.AddRange(roadGeometries);
-                    Log.Info("Render roads enabled source=" + config.RoadGeometrySource + ": " + roadGeometries.Count);
-
-                    if (config.RenderPaths)
-                    {
-                        renderRoadGeometries.AddRange(pathGeometries);
-                        Log.Info("Render paths enabled: " + pathGeometries.Count);
-                    }
-                    else
-                    {
-                        Log.Info("Render paths disabled by config.");
-                    }
-                }
-                else
-                {
-                    Log.Info("Render roads disabled by config.");
-                }
+                Log.Info("Water line source geometries retained: " + lineGeometries.Count +
+                    ", initially visible=" + config.RenderWaterLines);
+                Log.Info("Water area source geometries retained: " + areaOutlines.Count +
+                    ", initially visible=" + config.RenderWaterAreas);
+                Log.Info("Road source geometries retained source=" + config.RoadGeometrySource +
+                    ": " + roadGeometries.Count + ", initially visible=" + config.RenderRoads);
+                Log.Info("Path source geometries retained: " + pathGeometries.Count +
+                    ", initially visible=" + config.RenderPaths);
 
                 Log.Info("Total water line render geometries: " + renderWaterLineGeometries.Count);
                 Log.Info("Total water area render geometries: " + renderWaterAreaOutlines.Count);
-
-                // Paths must be independently renderable when renderRoads=false.
-                if (config.RenderPaths && pathGeometries != null && pathGeometries.Count > 0)
-                {
-                    var hasPathRenderGeometries = false;
-
-                    foreach (var line in renderRoadGeometries)
-                    {
-                        if (line != null && line.IsPath)
-                        {
-                            hasPathRenderGeometries = true;
-                            break;
-                        }
-                    }
-
-                    if (!hasPathRenderGeometries)
-                    {
-                        renderRoadGeometries.AddRange(pathGeometries);
-                        Log.Info("Render paths enabled independently: " + pathGeometries.Count);
-                    }
-                }
 
                 Log.Info("Total road render geometries: " + renderRoadGeometries.Count);
                 Log.Info("Total zoning polygons loaded: " + zoningPolygons.Count);

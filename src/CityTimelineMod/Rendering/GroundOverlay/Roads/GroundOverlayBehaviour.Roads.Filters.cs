@@ -66,6 +66,9 @@ namespace CityTimelineMod.Rendering
                 return false;
             }
 
+            if (!ShouldRenderOverlaySublayer(ResolveRoadOverlaySublayerKey(roadLine)))
+                return false;
+
             if (!isPath && !RoadRenderRules.ShouldRenderRoadByTier(roadLine.Highway, _config.MinimumRoadDebugTier))
                 return false;
 

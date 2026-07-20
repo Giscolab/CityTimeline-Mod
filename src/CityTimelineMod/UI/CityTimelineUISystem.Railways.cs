@@ -151,6 +151,7 @@ namespace CityTimelineMod.UI
                 return;
 
             _nextRailwayBindingSyncTime = UnityEngine.Time.unscaledTime + 1f;
+            SyncOverlayLayerBindings();
             SyncRailwayBindings();
             SyncStatisticsBindings();
         }

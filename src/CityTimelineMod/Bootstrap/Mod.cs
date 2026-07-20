@@ -56,7 +56,10 @@ namespace CityTimelineMod
             try
             {
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldErrorPrefabSystem>(SystemUpdatePhase.ToolUpdate);
-                updateSystem.UpdateAt<CityTimelineMod.Diagnostics.LargeMapTerrainDiagnosticSystem>(SystemUpdatePhase.Modification1);
+                // Do not register the development terrain probe in production.
+                // When the detailed terrain was not ready it stayed enabled,
+                // sampled it every frame and emitted a reflection-heavy dump or
+                // a log pulse every 300 frames.
 
                 // GeoJSON is a visual/informational overlay only.  Do not schedule
                 // the legacy outside-connection repair systems: both force
@@ -77,12 +80,10 @@ namespace CityTimelineMod
                 Log.Error(ex);
             }
 
-            try { CityTimelineRuntimeController.Install(); }
-            catch (Exception ex)
-            {
-                Debug.LogError("[CityTimelineMod] Runtime controller error: " + ex);
-                Log.Error(ex);
-            }
+            // The React/CoHTML HUD is the sole runtime UI.  The legacy IMGUI
+            // controller called OnGUI for every Unity GUI event and mutated the
+            // shared GUI.skin even while collapsed, which could produce small
+            // visual/frame-time disturbances during gameplay.
 
             try { GeoBundleBootstrap.RunOnce(); }
             catch (Exception ex)
@@ -103,13 +104,6 @@ namespace CityTimelineMod
                 Debug.LogError("[CityTimelineMod] PlayableWorld dispose error: " + ex);
                 Log.Error(ex);
             }
-            try { CityTimelineRuntimeController.Uninstall(); }
-            catch (Exception ex)
-            {
-                Debug.LogError("[CityTimelineMod] Runtime controller dispose error: " + ex);
-                Log.Error(ex);
-            }
-
             try
             {
                 CityTimelineLargeMapPatcher.Uninstall();

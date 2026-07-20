@@ -57,6 +57,7 @@ config.RoadGeometrySource = GetString(root, "roadGeometrySource", config.RoadGeo
 config.RenderPaths = GetBool(root, "renderPaths", config.RenderPaths);
 config.LoadRailwaySettings(root);
 config.LoadServiceSettings(root);
+config.LoadOverlaySublayerSettings(root);
 config.RoadHighwayFilter = GetString(root, "roadHighwayFilter", config.RoadHighwayFilter);
 config.PathHighwayFilter = GetString(root, "pathHighwayFilter", config.PathHighwayFilter);
 config.OverlayProfile = GetString(root, "overlayProfile", config.OverlayProfile);
@@ -1095,6 +1096,7 @@ Log.Info(
                 WriteRailwaySettings(root);
                 SanitizeServiceSettings();
                 WriteServiceSettings(root);
+                WriteOverlaySublayerSettings(root);
                 root["renderZoning"] = RenderZoning;
                 root["renderMapBounds"] = RenderMapBounds;
                 root["renderWorldMapBounds"] = RenderWorldMapBounds;
@@ -1240,6 +1242,7 @@ Log.Info(
                 RenderPaths = GetBool(root, "renderPaths", RenderPaths);
                 LoadRailwaySettings(root);
                 LoadServiceSettings(root);
+                LoadOverlaySublayerSettings(root);
                 RenderZoning = GetBool(root, "renderZoning", RenderZoning);
                 RenderMapBounds = GetBool(root, "renderMapBounds", RenderMapBounds);
                 VerboseOverlayLogs = GetBool(root, "verboseOverlayLogs", VerboseOverlayLogs);

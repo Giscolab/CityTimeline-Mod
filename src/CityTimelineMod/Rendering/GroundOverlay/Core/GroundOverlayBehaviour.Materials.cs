@@ -16,6 +16,8 @@ namespace CityTimelineMod.Rendering
             new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, List<Material>> _serviceMaterialGroups =
             new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<Material>> _overlaySublayerMaterialGroups =
+            new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
         private readonly List<Material> _ownedOverlayMaterials = new List<Material>();
 
         private OverlayRenderMaterials CreateOverlayRenderMaterials()
@@ -105,6 +107,30 @@ namespace CityTimelineMod.Rendering
             _roadMaterials.Add(materials.RoadLabel);
 
             _pathMaterials.Add(materials.Path);
+
+            RegisterOverlaySublayerMaterial("roads.highway", materials.RoadMotorway);
+            RegisterOverlaySublayerMaterial("roads.large_road", materials.RoadPrimary);
+            RegisterOverlaySublayerMaterial("roads.medium_road", materials.RoadSecondary);
+            RegisterOverlaySublayerMaterial("roads.small_road", materials.RoadTertiary);
+            RegisterOverlaySublayerMaterial("roads.ramp", materials.RoadLink);
+            RegisterOverlaySublayerMaterial("roads.gravel_road", materials.FallbackRoad);
+            RegisterOverlaySublayerMaterial("roads.pathway", materials.Path);
+
+            // Water sublayers directly toggle RenderWaterLines/RenderWaterAreas.
+            // Keep their distinct line/outline/fill alpha values in the central
+            // water applier instead of flattening both area materials to one alpha.
+
+            RegisterOverlaySublayerMaterial("zoning.residential_low", materials.ZoningResidentialLow);
+            RegisterOverlaySublayerMaterial("zoning.residential_medium", materials.ZoningResidentialMedium);
+            RegisterOverlaySublayerMaterial("zoning.residential_high", materials.ZoningResidentialHigh);
+            RegisterOverlaySublayerMaterial("zoning.commercial_low", materials.ZoningCommercialLow);
+            RegisterOverlaySublayerMaterial("zoning.commercial_high", materials.ZoningCommercialHigh);
+            RegisterOverlaySublayerMaterial("zoning.retail", materials.ZoningRetailDetail);
+            RegisterOverlaySublayerMaterial("zoning.industrial", materials.ZoningIndustrial);
+            RegisterOverlaySublayerMaterial("zoning.office", materials.ZoningOffice);
+            RegisterOverlaySublayerMaterial("zoning.parking_surface", materials.ZoningSurface);
+            RegisterOverlaySublayerMaterial("zoning.parking_structure", materials.ZoningRamp);
+            RegisterOverlaySublayerMaterial("zoning.mixed", materials.ZoningMixed);
 
             RegisterRailwayMaterial("train.surface", materials.RailwayTrain);
             RegisterRailwayMaterial("train.tunnel", materials.RailwayTrainTunnel);
@@ -238,6 +264,7 @@ namespace CityTimelineMod.Rendering
             _roadLabelMeshes.Clear();
             _railwayMaterialGroups.Clear();
             _serviceMaterialGroups.Clear();
+            _overlaySublayerMaterialGroups.Clear();
 
             _zoningResidentialFamilyMaterials.Clear();
             _zoningCommercialFamilyMaterials.Clear();
@@ -266,7 +293,8 @@ namespace CityTimelineMod.Rendering
                 _waterLineMaterials,
                 _waterAreaOutlineMaterials,
                 _waterAreaFillMaterials,
-                _waterVisible,
+                _config.RenderWaterLines,
+                _config.RenderWaterAreas,
                 _config.WaterLineAlpha,
                 _config.WaterAreaOutlineAlpha,
                 _config.WaterAreaFillAlpha
@@ -274,6 +302,7 @@ namespace CityTimelineMod.Rendering
 
             ApplyRailwayVisibilityToMaterials();
             ApplyServiceVisibilityToMaterials();
+            ApplyOverlaySublayerVisibilityToMaterials();
 
             OverlayVisibilityApplier.ApplyMapBoundsVisibility(
                 _mapBoundsMaterials,
@@ -308,6 +337,97 @@ namespace CityTimelineMod.Rendering
             }
 
             group.Add(material);
+        }
+
+        private void RegisterOverlaySublayerMaterial(string key, Material material)
+        {
+            if (material == null || string.IsNullOrWhiteSpace(key))
+                return;
+
+            List<Material> group;
+            if (!_overlaySublayerMaterialGroups.TryGetValue(key, out group))
+            {
+                group = new List<Material>();
+                _overlaySublayerMaterialGroups[key] = group;
+            }
+
+            group.Add(material);
+        }
+
+        private void ApplyOverlaySublayerVisibilityToMaterials()
+        {
+            if (_config == null)
+                return;
+
+            foreach (var pair in _overlaySublayerMaterialGroups)
+            {
+                var key = pair.Key;
+                var visible = ShouldRenderOverlaySublayer(key);
+                var alpha = 1f;
+
+                if (key.StartsWith("roads.", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    var isPath = string.Equals(key, "roads.pathway", System.StringComparison.OrdinalIgnoreCase);
+                    visible = visible && (isPath ? _config.RenderPaths : _config.RenderRoads);
+                    alpha = isPath ? _config.PathAlpha : _config.RoadAlpha;
+                }
+                else if (string.Equals(key, "water.lines", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    visible = visible && _config.RenderWaterLines;
+                    alpha = _config.WaterLineAlpha;
+                }
+                else if (string.Equals(key, "water.areas", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    visible = visible && _config.RenderWaterAreas;
+                    alpha = _config.WaterAreaFillAlpha;
+                }
+                else if (key.StartsWith("zoning.", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    visible = visible && _config.RenderZoning && _zoningVisible &&
+                        ResolveZoningSublayerFamilyVisible(key);
+                    alpha = ResolveZoningSublayerAlpha(key);
+                }
+
+                ApplyMaterialGroupAlpha(pair.Value, visible, alpha);
+            }
+        }
+
+        private bool ResolveZoningSublayerFamilyVisible(string key)
+        {
+            if (key.StartsWith("zoning.residential_", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerVisibleForMaterials("zoning.residential", _config.ZoningResidentialVisible);
+            if (key.StartsWith("zoning.commercial_", System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "zoning.retail", System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "zoning.mixed", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return ResolveModernLayerVisibleForMaterials("zoning.commercial", _config.ZoningCommercialVisible);
+            }
+            if (string.Equals(key, "zoning.industrial", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerVisibleForMaterials("zoning.industrial", _config.ZoningIndustrialVisible);
+            if (string.Equals(key, "zoning.office", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerVisibleForMaterials("zoning.office", _config.ZoningOfficeVisible);
+            if (key.StartsWith("zoning.parking_", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerVisibleForMaterials("parking", _config.ParkingVisible);
+            return true;
+        }
+
+        private float ResolveZoningSublayerAlpha(string key)
+        {
+            if (key.StartsWith("zoning.residential_", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerAlphaForMaterials("zoning.residential", _config.ZoningResidentialAlpha);
+            if (key.StartsWith("zoning.commercial_", System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "zoning.retail", System.StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(key, "zoning.mixed", System.StringComparison.OrdinalIgnoreCase))
+            {
+                return ResolveModernLayerAlphaForMaterials("zoning.commercial", _config.ZoningCommercialAlpha);
+            }
+            if (string.Equals(key, "zoning.industrial", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerAlphaForMaterials("zoning.industrial", _config.ZoningIndustrialAlpha);
+            if (string.Equals(key, "zoning.office", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerAlphaForMaterials("zoning.office", _config.ZoningOfficeAlpha);
+            if (key.StartsWith("zoning.parking_", System.StringComparison.OrdinalIgnoreCase))
+                return ResolveModernLayerAlphaForMaterials("parking", _config.ParkingAlpha);
+            return _config.ZoningAlpha;
         }
 
         private void ApplyServiceVisibilityToMaterials()

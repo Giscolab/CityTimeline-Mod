@@ -38,6 +38,8 @@ namespace CityTimelineMod.Rendering
             var createdMeshObjects = 0;
             var skippedByFilter = 0;
             var skippedByLimit = 0;
+            var sourceHoleRings = 0;
+            var renderedHoleRings = 0;
             var eligibleCs2Counts = new Dictionary<string, int>();
 
             var batches = new Dictionary<string, ZoningMeshBatch>();
@@ -52,10 +54,18 @@ namespace CityTimelineMod.Rendering
                 if (polygon == null || polygon.Rings == null || polygon.Rings.Count == 0)
                     continue;
 
+                var materialKey = ZoningMaterialResolver.ResolveMaterialKey(polygon.Zone, polygon.Cs2);
+                var sublayerKey = ResolveZoningOverlaySublayerKey(materialKey);
+                if (!string.IsNullOrWhiteSpace(sublayerKey) && !ShouldRenderOverlaySublayer(sublayerKey))
+                {
+                    skippedByFilter++;
+                    continue;
+                }
+
                 if (!ZoningFilterRules.ShouldRenderByFilter(
                     polygon.Zone,
                     polygon.Cs2,
-                    ZoningMaterialResolver.ResolveMaterialKey(polygon.Zone, polygon.Cs2),
+                    materialKey,
                     _config.ZoningDebugFilterZone,
                     _config.ZoningDebugFilterCs2Contains,
                     _config.ZoningDebugFilterMaterialKey))
@@ -77,34 +87,26 @@ namespace CityTimelineMod.Rendering
                     continue;
                 }
 
-                var outerRing = polygon.Rings[0];
-
-                if (outerRing == null || outerRing.Count < 3)
+                sourceHoleRings += Math.Max(0, polygon.Rings.Count - 1);
+                var worldRings = BuildSampledZoningRings(
+                    polygon.Rings,
+                    safeStride,
+                    maxVerticesPerMesh,
+                    originLon,
+                    originLat
+                );
+                if (worldRings.Count == 0 || worldRings[0].Count < 3)
                     continue;
 
-                var vertices = new List<Vector3>();
-
-                for (var i = 0; i < outerRing.Count; i += safeStride)
-                {
-                    var world = GeoTransform.ToWorld(outerRing[i], _config, originLon, originLat);
-                    world.y = ResolveY(world) + _config.GroundMargin + _config.ZoningFillYOffset;
-                    vertices.Add(world);
-
-                    if (vertices.Count >= maxVerticesPerMesh)
-                        break;
-                }
-
-                if (vertices.Count < 3)
-                    continue;
-
+                List<Vector3> vertices;
                 var triangles = PolygonTriangulator.MakeDoubleSidedTriangles(
-                    PolygonTriangulator.TriangulatePolygonXZ(vertices)
+                    PolygonTriangulator.TriangulatePolygonWithHolesXZ(worldRings, out vertices)
                 );
 
                 if (triangles.Count < 3)
                     continue;
 
-                var materialKey = ZoningMaterialResolver.ResolveMaterialKey(polygon.Zone, polygon.Cs2);
+                renderedHoleRings += Math.Max(0, worldRings.Count - 1);
 
                 ZoningMeshBatch batch;
 
@@ -155,6 +157,8 @@ namespace CityTimelineMod.Rendering
                 ", meshObjects=" + createdMeshObjects +
                 ", skippedByFilter=" + skippedByFilter +
                 ", skippedByLimit=" + skippedByLimit +
+                ", sourceHoleRings=" + sourceHoleRings +
+                ", renderedHoleRings=" + renderedHoleRings +
                 ", renderAllZoningPolygons=" + renderAllPolygons +
                 ", filterZone=" + (string.IsNullOrWhiteSpace(_config.ZoningDebugFilterZone) ? "(empty)" : _config.ZoningDebugFilterZone) +
                 ", filterCs2Contains=" + (string.IsNullOrWhiteSpace(_config.ZoningDebugFilterCs2Contains) ? "(empty)" : _config.ZoningDebugFilterCs2Contains) +
@@ -168,6 +172,75 @@ namespace CityTimelineMod.Rendering
             );
 
             return createdMeshObjects;
+        }
+
+        private List<List<Vector3>> BuildSampledZoningRings(
+            List<List<Importers.GeoPoint>> sourceRings,
+            int stride,
+            int maxVertices,
+            double originLon,
+            double originLat)
+        {
+            var result = new List<List<Vector3>>();
+            if (sourceRings == null || sourceRings.Count == 0)
+                return result;
+
+            var outer = BuildSampledZoningRing(
+                sourceRings[0],
+                stride,
+                maxVertices,
+                originLon,
+                originLat
+            );
+            if (outer.Count < 3)
+                return result;
+
+            result.Add(outer);
+            var usedVertices = outer.Count;
+
+            for (var i = 1; i < sourceRings.Count; i++)
+            {
+                // Two duplicate vertices are added by every zero-width bridge.
+                var remaining = maxVertices - usedVertices - 2;
+                if (remaining < 3)
+                    break;
+
+                var hole = BuildSampledZoningRing(
+                    sourceRings[i],
+                    stride,
+                    remaining,
+                    originLon,
+                    originLat
+                );
+                if (hole.Count < 3)
+                    continue;
+
+                result.Add(hole);
+                usedVertices += hole.Count + 2;
+            }
+
+            return result;
+        }
+
+        private List<Vector3> BuildSampledZoningRing(
+            List<Importers.GeoPoint> sourceRing,
+            int stride,
+            int maxVertices,
+            double originLon,
+            double originLat)
+        {
+            var result = new List<Vector3>();
+            if (sourceRing == null || sourceRing.Count < 3)
+                return result;
+
+            for (var i = 0; i < sourceRing.Count && result.Count < maxVertices; i += Math.Max(1, stride))
+            {
+                var world = GeoTransform.ToWorld(sourceRing[i], _config, originLon, originLat);
+                world.y = ResolveY(world) + _config.GroundMargin + _config.ZoningFillYOffset;
+                result.Add(world);
+            }
+
+            return result;
         }
 
         private void LogZoningMaterialLegend()

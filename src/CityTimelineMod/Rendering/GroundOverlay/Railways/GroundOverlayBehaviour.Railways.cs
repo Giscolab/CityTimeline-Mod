@@ -23,6 +23,8 @@ namespace CityTimelineMod.Rendering
         private string _railwayStatus = NoRailwayDataMessage;
         private bool _railwaySettingsSavePending;
         private float _railwaySettingsSaveDeadline;
+        private bool _railwayRebuildPending;
+        private string _railwayRebuildReason;
 
         private void InitializeRailwayOverlay(
             List<GeoRailwayLine> lines,
@@ -126,12 +128,14 @@ namespace CityTimelineMod.Rendering
                     return false;
             }
 
-            _railwaySettingsSavePending = false;
-            _config.SaveVisualSettingsToConfig();
+            ScheduleRailwaySettingsSave();
             ApplyRailwayVisibilityToMaterials();
 
-            if (requiresRebuild && _railwayAvailable)
-                RequestOverlayRebuild("railway HUD filter: " + normalized, true);
+            // Existing meshes disappear immediately through their material.
+            // Only enabling a startup-filtered category needs reconstruction,
+            // and that reconstruction is debounced with the settings write.
+            if (requiresRebuild && value && _railwayAvailable)
+                ScheduleRailwayRebuild("railway HUD filter enabled: " + normalized);
 
             return true;
         }
@@ -157,7 +161,7 @@ namespace CityTimelineMod.Rendering
                 ScheduleRailwaySettingsSave();
 
                 if (_railwayAvailable)
-                    RequestOverlayRebuild("railway HUD thickness", true);
+                    ScheduleRailwayRebuild("railway HUD thickness");
 
                 return true;
             }
@@ -171,6 +175,13 @@ namespace CityTimelineMod.Rendering
             _railwaySettingsSaveDeadline = Time.realtimeSinceStartup + 0.35f;
         }
 
+        private void ScheduleRailwayRebuild(string reason)
+        {
+            _railwayRebuildPending = true;
+            _railwayRebuildReason = reason;
+            _railwaySettingsSaveDeadline = Time.realtimeSinceStartup + 0.35f;
+        }
+
         private void UpdatePendingRailwaySettingsSave()
         {
             if (!_railwaySettingsSavePending || Time.realtimeSinceStartup < _railwaySettingsSaveDeadline)
@@ -180,6 +191,16 @@ namespace CityTimelineMod.Rendering
 
             if (_config != null)
                 _config.SaveVisualSettingsToConfig();
+
+            if (_railwayRebuildPending)
+            {
+                _railwayRebuildPending = false;
+                var reason = string.IsNullOrWhiteSpace(_railwayRebuildReason)
+                    ? "railway HUD debounced change"
+                    : _railwayRebuildReason;
+                _railwayRebuildReason = null;
+                RequestOverlayRebuild(reason, true);
+            }
         }
 
         private void OnDestroy()
@@ -189,6 +210,9 @@ namespace CityTimelineMod.Rendering
                 _railwaySettingsSavePending = false;
                 _config.SaveVisualSettingsToConfig();
             }
+
+            _railwayRebuildPending = false;
+            _railwayRebuildReason = null;
         }
 
         private static string NormalizeRailwaySettingKey(string key)

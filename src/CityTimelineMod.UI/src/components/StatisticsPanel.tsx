@@ -91,11 +91,23 @@ export function StatisticsPanel({ stats }: StatisticsPanelProps) {
         <div className="ctm-statistics-summary">
           <Readout>{bundleLabel}</Readout>
           <Readout>
-            Objets OSM exploitables · <strong>{formatCount(stats.objects)}</strong>
+            Entités visuelles du bundle · <strong>{formatCount(stats.visualEntities)}</strong>
+          </Readout>
+          <Readout>
+            Objets overlay historiques · {formatCount(stats.objects)} · éléments OSM uniques · {formatCount(stats.uniqueOsmElements)}
           </Readout>
           <Readout>
             0 = source chargée sans objet correspondant · — = donnée absente du bundle
           </Readout>
+          <Readout>
+            Contrat bundle complet · <strong>{formatCount(stats.coverage.presentFiles)} / {formatCount(stats.coverage.expectedFiles)} fichiers</strong>
+            {stats.coverage.complete ? " · complet" : " · incomplet"}
+          </Readout>
+          {!stats.coverage.complete && stats.coverage.missingFiles.length > 0 ? (
+            <Readout>
+              Manquants : {stats.coverage.missingFiles.join(", ")}
+            </Readout>
+          ) : null}
         </div>
       </Section>
 

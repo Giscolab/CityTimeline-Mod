@@ -60,6 +60,7 @@ namespace CityTimelineMod.UI
             AddBinding(_toggleBinding);
             AddBinding(_setVisibleBinding);
             AddBinding(_closeBinding);
+            CreateOverlayLayerBindings();
             CreateRailwayBindings();
             CreateStatisticsBindings();
 
@@ -153,6 +154,9 @@ namespace CityTimelineMod.UI
                 // Opening the panel performs one immediate refresh; periodic
                 // polling remains suspended whenever the panel is closed.
                 _lastRailwayBindingSignature = null;
+                _lastOverlayLayerBindingSignature = null;
+                _lastOverlaySublayersJson = null;
+                SyncOverlayLayerBindings();
                 SyncRailwayBindings();
                 SyncStatisticsBindings();
                 _nextRailwayBindingSyncTime = UnityEngine.Time.unscaledTime + 1f;

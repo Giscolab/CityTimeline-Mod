@@ -22,6 +22,7 @@ import {
 import { RailwayPanel } from "./components/RailwayPanel";
 import { ServicesPanel } from "./components/ServicesPanel";
 import { StatisticsPanel } from "./components/StatisticsPanel";
+import { OverlayLayersPanel } from "./components/OverlayLayersPanel";
 import {
   formatCount,
   getMetric,
@@ -335,7 +336,7 @@ function PrincipalPane({ stats }: { stats: BundleStatsSnapshot }) {
         </Readout>
 
         <Readout>
-          objets OSM {formatCount(stats.objects)} · routes {formatCount(roads)} · chemins {formatCount(paths)}
+          entités visuelles {formatCount(stats.visualEntities)} · routes {formatCount(roads)} · chemins {formatCount(paths)}
         </Readout>
 
         <Readout>
@@ -393,7 +394,7 @@ function BundleOverlayPane({ stats }: { stats: BundleStatsSnapshot }) {
         </Readout>
 
         <Readout>
-          {formatCount(stats.objects)} objets OSM exploitables
+          {formatCount(stats.visualEntities)} entités visuelles du bundle
         </Readout>
       </Foldout>
 
@@ -445,88 +446,7 @@ function BundleOverlayPane({ stats }: { stats: BundleStatsSnapshot }) {
 function DisplayRenderPane({ stats }: { stats: BundleStatsSnapshot }) {
   return (
     <div className="ctm-pane">
-      <Foldout
-        num="07"
-        title="Couches visibles / transparence"
-        state="foldout open by default"
-        note="Bug d'origine corrigé : chaque foldout est indépendant."
-        noteTone="bug"
-        defaultOpen
-      >
-        <GroupTitle>
-          Couches
-        </GroupTitle>
-
-        <Row columns={2}>
-          <ToggleField
-            id="ctm-i11"
-            defaultChecked
-          >
-            Zonage
-          </ToggleField>
-
-          <ToggleField
-            id="ctm-i12"
-            defaultChecked
-          >
-            Routes
-          </ToggleField>
-
-          <ToggleField
-            id="ctm-i13"
-            defaultChecked
-          >
-            Chemins
-          </ToggleField>
-
-          <ToggleField
-            id="ctm-i14"
-            defaultChecked
-          >
-            Eau
-          </ToggleField>
-
-          <ToggleField id="ctm-i15">
-            Bounds
-          </ToggleField>
-
-          <ToggleField id="ctm-i16">
-            Debug labels
-          </ToggleField>
-        </Row>
-
-        <GroupTitle>
-          Transparence
-        </GroupTitle>
-
-        <SliderField
-          label="Alpha zoning"
-          min={0}
-          max={100}
-          defaultValue={65}
-          suffix="%"
-        />
-
-        <SliderField
-          label="Alpha routes"
-          min={0}
-          max={100}
-          defaultValue={88}
-          suffix="%"
-        />
-
-        <SliderField
-          label="Alpha eau"
-          min={0}
-          max={100}
-          defaultValue={70}
-          suffix="%"
-        />
-
-        <Readout>
-          Catégories zoning issues directement du GeoJSON — aucun prefab ni placement automatique.
-        </Readout>
-      </Foldout>
+      <OverlayLayersPanel stats={stats} />
 
       <RailwayPanel />
 

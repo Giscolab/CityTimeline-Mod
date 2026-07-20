@@ -16,11 +16,11 @@ namespace CityTimelineMod.Rendering.Materials
             SetMaterialsAlpha(pathMaterials, renderPaths ? pathAlpha : 0f);
         }
 
-        internal static void ApplyWaterVisibility(List<Material> waterLineMaterials, List<Material> waterAreaOutlineMaterials, List<Material> waterAreaFillMaterials, bool visible, float waterLineAlpha, float waterAreaOutlineAlpha, float waterAreaFillAlpha)
+        internal static void ApplyWaterVisibility(List<Material> waterLineMaterials, List<Material> waterAreaOutlineMaterials, List<Material> waterAreaFillMaterials, bool renderLines, bool renderAreas, float waterLineAlpha, float waterAreaOutlineAlpha, float waterAreaFillAlpha)
         {
-            SetMaterialsAlpha(waterLineMaterials, visible ? waterLineAlpha : 0f);
-            SetMaterialsAlpha(waterAreaOutlineMaterials, visible ? waterAreaOutlineAlpha : 0f);
-            SetMaterialsAlpha(waterAreaFillMaterials, visible ? waterAreaFillAlpha : 0f);
+            SetMaterialsAlpha(waterLineMaterials, renderLines ? waterLineAlpha : 0f);
+            SetMaterialsAlpha(waterAreaOutlineMaterials, renderAreas ? waterAreaOutlineAlpha : 0f);
+            SetMaterialsAlpha(waterAreaFillMaterials, renderAreas ? waterAreaFillAlpha : 0f);
         }
 
         internal static void ApplyMapBoundsVisibility(List<Material> mapBoundsMaterials, bool renderMapBounds, float mapBoundsAlpha)

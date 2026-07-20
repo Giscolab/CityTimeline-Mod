@@ -2,6 +2,7 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Text;
+using CityTimelineMod.Bundles;
 using CityTimelineMod.Rendering.Services;
 using Newtonsoft.Json.Linq;
 
@@ -41,8 +42,26 @@ namespace CityTimelineMod.Rendering.Statistics
                 "zoningPolygons",
                 Path.Combine(geojson, "zoning_polygons.geojson"),
                 delegate(JObject root) { ReadZoningPolygons(snapshot, root); });
+            LoadSource(
+                snapshot,
+                "extractionReport",
+                Path.Combine(reports, "extraction_report.json"),
+                delegate(JObject root) { ReadExtractionReport(snapshot, root); });
+
+            AuditBundleCoverage(snapshot);
 
             return snapshot;
+        }
+
+        private static void AuditBundleCoverage(BundleHudSnapshot snapshot)
+        {
+            snapshot.ExpectedSourceFileCount = GeoJsonBundleContract.CompleteRelativeFiles.Length;
+            snapshot.MissingSourceFiles.Clear();
+            var missing = GeoJsonBundleContract.FindMissingFiles(
+                snapshot.PackRoot,
+                out snapshot.PresentSourceFileCount
+            );
+            snapshot.MissingSourceFiles.AddRange(missing);
         }
 
         internal static string ResolveGeoJsonPackRoot(string bundleOrGeoJsonPackPath)
@@ -217,6 +236,19 @@ namespace CityTimelineMod.Rendering.Statistics
                 snapshot.ZoningCounts.TryGetValue(key, out count);
                 snapshot.ZoningCounts[key] = count + 1;
             }
+        }
+
+        private static void ReadExtractionReport(BundleHudSnapshot snapshot, JObject root)
+        {
+            UpdateMetadata(snapshot, root);
+            var summary = root["summary"] as JObject;
+            if (summary == null)
+                throw new InvalidDataException("summary is missing");
+
+            if (summary["allBundleFeatureCount"] != null)
+                snapshot.AllBundleFeatureCount = ReadCount(summary, "allBundleFeatureCount");
+            if (summary["uniqueOsmElementCount"] != null)
+                snapshot.UniqueOsmElementCount = ReadCount(summary, "uniqueOsmElementCount");
         }
 
         internal static string ClassifyZoning(string cs2, string zone)

@@ -26,11 +26,19 @@ export interface BundleStatsSnapshot {
   bundleId: string;
   bundleName: string;
   objects: number | null;
+  visualEntities: number | null;
+  uniqueOsmElements: number | null;
   zoning: MetricRecord;
   roads: MetricRecord;
   water: MetricRecord;
   services: ServiceFamilyStats[];
   railway: MetricRecord;
+  coverage: {
+    complete: boolean;
+    presentFiles: number;
+    expectedFiles: number;
+    missingFiles: string[];
+  };
 }
 
 export const bundleStatsJson$ = bindValue<string>(
@@ -45,11 +53,19 @@ const EMPTY_STATS: BundleStatsSnapshot = {
   bundleId: "",
   bundleName: "",
   objects: null,
+  visualEntities: null,
+  uniqueOsmElements: null,
   zoning: {},
   roads: {},
   water: {},
   services: [],
   railway: {},
+  coverage: {
+    complete: false,
+    presentFiles: 0,
+    expectedFiles: 0,
+    missingFiles: [],
+  },
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,6 +164,21 @@ function asServices(value: unknown): ServiceFamilyStats[] {
   });
 }
 
+function asCoverage(value: unknown): BundleStatsSnapshot["coverage"] {
+  if (!isRecord(value)) return EMPTY_STATS.coverage;
+  const presentFiles = asCount(value.presentFiles) ?? 0;
+  const expectedFiles = asCount(value.expectedFiles) ?? 0;
+  const missingFiles = Array.isArray(value.missingFiles)
+    ? value.missingFiles.filter((item): item is string => typeof item === "string")
+    : [];
+  return {
+    complete: value.complete === true,
+    presentFiles,
+    expectedFiles,
+    missingFiles,
+  };
+}
+
 export function parseBundleStatsJson(json: string): BundleStatsSnapshot {
   if (!json || !json.trim()) {
     return EMPTY_STATS;
@@ -170,11 +201,14 @@ export function parseBundleStatsJson(json: string): BundleStatsSnapshot {
       bundleId: asString(value.bundleId),
       bundleName: asString(value.bundleName),
       objects: asCount(value.objects),
+      visualEntities: asCount(value.visualEntities),
+      uniqueOsmElements: asCount(value.uniqueOsmElements),
       zoning: asMetrics(value.zoning),
       roads: asMetrics(value.roads),
       water: asMetrics(value.water),
       services: asServices(value.services),
       railway: asMetrics(value.railway),
+      coverage: asCoverage(value.coverage),
     };
   } catch (error) {
     console.error("[CityTimelineMod UI] Invalid bundleStatsJson binding", error);

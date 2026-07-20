@@ -166,6 +166,43 @@ namespace CityTimelineMod.Rendering
             return overlay != null ? overlay.GetBundleHudSnapshotJson() : "{}";
         }
 
+        internal static OverlayLayerHudSnapshot GetOverlayLayerHudSnapshot()
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null
+                ? overlay.GetOverlayLayerHudSnapshot()
+                : OverlayLayerHudSnapshot.Unavailable();
+        }
+
+        internal static bool SetOverlayLayerBoolean(string key, bool value)
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null && overlay.SetOverlayLayerBoolean(key, value);
+        }
+
+        internal static bool SetOverlayLayerFloat(string key, float value)
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null && overlay.SetOverlayLayerFloat(key, value);
+        }
+
+        internal static string GetOverlaySublayersJson()
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null ? overlay.GetOverlaySublayersJson() : "{}";
+        }
+
+        internal static bool SetOverlaySublayerVisible(string key, bool value)
+        {
+            var existing = GameObject.Find(RootName);
+            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            return overlay != null && overlay.SetOverlaySublayerVisible(key, value);
+        }
+
         internal static bool SetServiceBoolean(string key, bool value)
         {
             var existing = GameObject.Find(RootName);
