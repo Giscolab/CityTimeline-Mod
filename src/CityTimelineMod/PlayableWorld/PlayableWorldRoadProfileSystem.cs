@@ -11,8 +11,9 @@ using UnityEngine.Scripting;
 namespace CityTimelineMod.PlayableWorld
 {
     /*
-     * Corrige uniquement le profil vertical des nouvelles routes
-     * terrestres qui utilisent le backdrop hors des ±7168 m.
+     * Corrige le profil vertical des nouveaux réseaux terrestres
+     * (routes et voies ferrées) qui utilisent le backdrop
+     * hors des ±7168 m.
      *
      * La courbe XZ reste strictement inchangée.
      * Aucun champ du TerrainSystem n'est modifié.
@@ -38,7 +39,7 @@ namespace CityTimelineMod.PlayableWorld
             );
 
             Util.Log.Info(
-                "[PlayableWorld] road-profile system created."
+                "[PlayableWorld] network-profile system created."
             );
         }
 
@@ -72,6 +73,8 @@ namespace CityTimelineMod.PlayableWorld
                 TerrainUtils.GetBounds(ref terrainData);
 
             int changed = 0;
+            int changedRoads = 0;
+            int changedTracks = 0;
 
             using (
                 NativeArray<Entity> entities =
@@ -102,11 +105,17 @@ namespace CityTimelineMod.PlayableWorld
                     if (definition.m_Prefab == Entity.Null)
                         continue;
 
-                    if (
-                        !EntityManager.HasComponent<RoadData>(
+                    bool isRoad =
+                        EntityManager.HasComponent<RoadData>(
                             definition.m_Prefab
-                        )
-                    )
+                        );
+
+                    bool isTrack =
+                        EntityManager.HasComponent<TrackData>(
+                            definition.m_Prefab
+                        );
+
+                    if (!isRoad && !isTrack)
                     {
                         continue;
                     }
@@ -192,15 +201,24 @@ namespace CityTimelineMod.PlayableWorld
                     );
 
                     changed++;
+
+                    if (isTrack)
+                        changedTracks++;
+                    else
+                        changedRoads++;
                 }
             }
 
             if (changed > 0)
             {
                 Util.Log.Info(
-                    "[PlayableWorld] backdrop road profiles " +
+                    "[PlayableWorld] backdrop network profiles " +
                     "applied. courses=" +
-                    changed
+                    changed +
+                    ", roads=" +
+                    changedRoads +
+                    ", tracks=" +
+                    changedTracks
                 );
             }
         }

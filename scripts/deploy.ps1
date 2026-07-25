@@ -129,7 +129,8 @@ function Assert-BundleCatalog {
     return $entries.Count
 }
 
-$dotnetOutput = dotnet build $csproj -c Debug --nologo -v:q 2>&1
+[Console]::WriteLine("Vérification des dépendances du projet en cours...")
+$dotnetOutput = dotnet build $csproj -c Debug --no-restore --nologo -v:q 2>&1
 if ($LASTEXITCODE -ne 0) {
     $dotnetOutput | Out-Host
     throw "dotnet build failed"
@@ -139,7 +140,7 @@ if (!(Test-Path $dll)) {
     throw "Build succeeded but DLL was not found: $dll"
 }
 
-[Console]::WriteLine("C# OK")
+[Console]::WriteLine("Compilation C# réussie — les fichiers source n’ont pas été restaurés ni modifiés.")
 # 2) Build frontend. Webpack cleans the generated UI folder before emitting files.
 if (!(Test-Path $uiSrc)) {
     throw "UI source directory missing: $uiSrc"
@@ -322,4 +323,3 @@ Get-ChildItem $dst -Filter "ilpp.pid" -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
 [Console]::WriteLine("Deploy OK: $dst")
-
