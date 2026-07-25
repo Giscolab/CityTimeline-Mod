@@ -57,7 +57,6 @@
     <Compile Remove="Roads\**\*.cs" />
     <Compile Remove="Systems\RuntimeRoadToolDriverSystem.cs" />
     <Compile Remove="LargeMap\AirOutsideConnectionRepairSystem.cs" />
-    <Compile Remove="LargeMap\RailOutsideConnectionRepairSystem.cs" />
   </ItemGroup>
 
   <ItemGroup>

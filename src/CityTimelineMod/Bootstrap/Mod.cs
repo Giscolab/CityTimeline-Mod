@@ -56,6 +56,7 @@ namespace CityTimelineMod
             try
             {
                 updateSystem.UpdateAt<CityTimelineMod.PlayableWorld.PlayableWorldErrorPrefabSystem>(SystemUpdatePhase.ToolUpdate);
+                updateSystem.UpdateAt<CityTimelineMod.LargeMap.RailOutsideConnectionRepairSystem>(SystemUpdatePhase.Modification1);
                 // Do not register the development terrain probe in production.
                 // When the detailed terrain was not ready it stayed enabled,
                 // sampled it every frame and emitted a reflection-heavy dump or

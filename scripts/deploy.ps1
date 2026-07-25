@@ -71,7 +71,7 @@ function Remove-PathIfExists {
     }
 }
 
-# 1) Build DLL.
+# 1) Clean and build DLL.
 $dotnetOutput = dotnet clean $csproj --nologo -v:q 2>&1
 if ($LASTEXITCODE -ne 0) {
     $dotnetOutput | Out-Host
@@ -141,6 +141,7 @@ if (!(Test-Path $dll)) {
 }
 
 [Console]::WriteLine("Compilation C# réussie — les fichiers source n’ont pas été restaurés ni modifiés.")
+
 # 2) Build frontend. Webpack cleans the generated UI folder before emitting files.
 if (!(Test-Path $uiSrc)) {
     throw "UI source directory missing: $uiSrc"
@@ -180,6 +181,12 @@ New-Item -ItemType Directory -Force -Path $dst | Out-Null
 # RealMap is the source of truth. Deploy the complete catalog, not only the
 # active bundle: every directory listed in bundle_index.json is mirrored.
 $canonicalBundles = Join-Path $dst "data\exports\bundles"
+
+# Explicit precondition check to avoid a cryptic failure later.
+if (-not (Test-Path -LiteralPath $realmapBundlesRoot)) {
+    throw "RealMap source directory is missing or invalid: $realmapBundlesRoot (set CITYTIMELINE_REALMAP_BUNDLES_ROOT if needed)"
+}
+
 $sourceBundleCount = Assert-BundleCatalog -Root $realmapBundlesRoot -Label "RealMap source"
 New-Item -ItemType Directory -Force -Path $canonicalBundles | Out-Null
 
@@ -187,6 +194,7 @@ robocopy $realmapBundlesRoot $canonicalBundles /MIR /NFL /NDL /NJH /NJS /NP | Ou
 if ($LASTEXITCODE -ge 8) {
     throw "robocopy RealMap bundles failed with exit code $LASTEXITCODE"
 }
+# Reset for subsequent commands (robocopy sets $LASTEXITCODE even on success).
 $global:LASTEXITCODE = 0
 
 $deployedBundleCount = Assert-BundleCatalog -Root $canonicalBundles -Label "Deployed"
@@ -239,11 +247,9 @@ if (Test-Path $srcData) {
     if ($LASTEXITCODE -ge 8) {
         throw "robocopy data failed with exit code $LASTEXITCODE"
     }
-
     $global:LASTEXITCODE = 0
 }
-else {
-}
+# else: no legacy-geojson to deploy (intentional no-op).
 
 # 7) Deploy the single CS2 UI module to the code mod root.
 Copy-Item -Force (Join-Path $uiOut "CityTimelineMod.mjs") (Join-Path $dst "CityTimelineMod.mjs")
@@ -256,14 +262,13 @@ Copy-Item -Force (Join-Path $uiOut "fonts\overpass.ttf") (Join-Path $dstFonts "o
 # 8) Config policy.
 # AppData config.json is authoritative at runtime.
 # The repository default is a read-only initialization template.
-if (Test-Path $appConfig) {
-}
-elseif (Test-Path $repoConfig) {
+if (-not (Test-Path -LiteralPath $appConfig) -and (Test-Path -LiteralPath $repoConfig)) {
     Copy-Item -Force $repoConfig $appConfig
 }
-else {
+elseif (-not (Test-Path -LiteralPath $appConfig)) {
     throw "No config.json found in AppData or repository defaults. Cannot deploy safely."
 }
+# else: AppData config already exists, keep it (runtime truth).
 
 # 9) Deploy the code mod manifest from the repository source of truth.
 if (!(Test-Path -LiteralPath $repoManifest)) {
