@@ -16,12 +16,30 @@ namespace CityTimelineMod.LargeMap
         private static readonly HashSet<MethodBase> MethodsToPatch =
             new HashSet<MethodBase>(new MethodComparer());
 
+        private static readonly HashSet<MethodBase> BurstMethods =
+            new HashSet<MethodBase>(new MethodComparer());
+
         private static readonly Type BaseGenericType = typeof(CellMapSystem<>);
 
-        internal static void Apply(Harmony harmony)
+        private const int ExpectedFieldCount = 14;
+        private const int ExpectedTargetCount = 59;
+
+        private static readonly MethodInfo EffectiveMapSizeMethod =
+            AccessTools.Method(
+                typeof(CityTimelineLargeMapState),
+                nameof(CityTimelineLargeMapState.GetEffectiveCellMapSizeMeters)
+            );
+
+        private static bool _manifestPrepared;
+
+        internal static IReadOnlyCollection<MethodBase> PrepareManifest()
         {
+            CityTimelineLargeMapPatcher.VerifySupportedGameModuleIdentity();
+
             ReplacementMap.Clear();
             MethodsToPatch.Clear();
+            BurstMethods.Clear();
+            _manifestPrepared = false;
 
             Register<AirPollutionSystem>(4, 1);
             Register<AvailabilityInfoToGridSystem>(4, 1);
@@ -40,13 +58,71 @@ namespace CityTimelineMod.LargeMap
 
             ScanGameAssemblyForClientMethods();
 
-            var transpiler = new HarmonyMethod(
+            if (ReplacementMap.Count != ExpectedFieldCount)
+            {
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap field manifest mismatch. expected=" +
+                    ExpectedFieldCount + ", actual=" + ReplacementMap.Count + "."
+                );
+            }
+
+            if (MethodsToPatch.Count != ExpectedTargetCount)
+            {
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap target manifest mismatch. expected=" +
+                    ExpectedTargetCount + ", actual=" + MethodsToPatch.Count + "."
+                );
+            }
+
+            if (EffectiveMapSizeMethod == null)
+            {
+                throw new MissingMethodException(
+                    typeof(CityTimelineLargeMapState).FullName,
+                    nameof(CityTimelineLargeMapState.GetEffectiveCellMapSizeMeters)
+                );
+            }
+
+            _manifestPrepared = true;
+
+            Util.Log.Info(
+                "[LargeMap] CellMap manifest resolved. fields=" +
+                ReplacementMap.Count + ", targets=" + MethodsToPatch.Count +
+                ", burstManagedTargets=" + BurstMethods.Count + "."
+            );
+
+            if (BurstMethods.Count != 0)
+            {
+                Util.Log.Info(
+                    "[LargeMap] CellMap Harmony manifest includes " +
+                    BurstMethods.Count + " Burst-declared targets. Native Burst " +
+                    "execution is a separate in-game validation and is not proven by ownership."
+                );
+            }
+
+            return new List<MethodBase>(MethodsToPatch);
+        }
+
+        internal static MethodInfo GetTranspilerMethod()
+        {
+            return AccessTools.Method(
                 typeof(LargeMapCellMapSystemPatches),
                 nameof(Transpiler)
             );
+        }
+
+        internal static void Apply(Harmony harmony)
+        {
+            if (harmony == null)
+                throw new ArgumentNullException(nameof(harmony));
+
+            if (!_manifestPrepared)
+                throw new InvalidOperationException("CellMap manifest was not prepared.");
+
+            var transpiler = new HarmonyMethod(
+                GetTranspilerMethod()
+            );
 
             var patched = 0;
-            var failed = 0;
 
             foreach (var method in MethodsToPatch)
             {
@@ -57,14 +133,10 @@ namespace CityTimelineMod.LargeMap
                 }
                 catch (Exception ex)
                 {
-                    failed++;
-                    Util.Log.Error(
-                        "[LargeMap] CellMap transpiler failed: " +
-                        DescribeMethod(method) +
-                        " error=" +
-                        ex.GetType().Name +
-                        ": " +
-                        ex.Message
+                    throw new InvalidOperationException(
+                        "[LargeMap] CellMap transpiler failed for " +
+                        DescribeMethod(method) + ".",
+                        ex
                     );
                 }
             }
@@ -75,17 +147,24 @@ namespace CityTimelineMod.LargeMap
                 ", methods=" +
                 MethodsToPatch.Count +
                 ", patched=" +
-                patched +
-                ", failed=" +
-                failed
+                patched
             );
 
-            if (failed != 0)
+            if (patched != MethodsToPatch.Count)
             {
                 throw new InvalidOperationException(
-                    "[LargeMap] CellMap patch incomplete. failed=" + failed
+                    "[LargeMap] CellMap patch incomplete. expected=" +
+                    MethodsToPatch.Count + ", patched=" + patched + "."
                 );
             }
+        }
+
+        internal static void ResetManifest()
+        {
+            ReplacementMap.Clear();
+            MethodsToPatch.Clear();
+            BurstMethods.Clear();
+            _manifestPrepared = false;
         }
 
         private static void Register<TDerived>(int mapMultiplier, int textureMultiplier)
@@ -103,14 +182,29 @@ namespace CityTimelineMod.LargeMap
                         BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic
                     );
 
-                    if (mapField != null)
-                        RegisterField(mapField, mapMultiplier);
+                    if (mapField == null)
+                    {
+                        throw new MissingFieldException(
+                            baseType.FullName,
+                            "kMapSize"
+                        );
+                    }
+
+                    RegisterField(mapField, mapMultiplier);
 
                     ScanDeclaredMethods(baseType);
                     break;
                 }
 
                 baseType = baseType.BaseType;
+            }
+
+            if (baseType == null)
+            {
+                throw new InvalidOperationException(
+                    "[LargeMap] " + derivedType.FullName +
+                    " no longer derives from CellMapSystem<>."
+                );
             }
 
             var texField = derivedType.GetField(
@@ -129,39 +223,41 @@ namespace CityTimelineMod.LargeMap
             if (field == null || multiplier <= 1)
                 return;
 
-            try
+            var raw = field.GetValue(null);
+
+            if (!(raw is int))
             {
-                var raw = field.GetValue(null);
-
-                if (!(raw is int))
-                    return;
-
-                var original = (int)raw;
-                var replacement = original * multiplier;
-
-                if (!ReplacementMap.ContainsKey(field))
-                {
-                    ReplacementMap[field] = replacement;
-
-                    Util.Log.Info(
-                        "[LargeMap] CellMap field registered: " +
-                        field.DeclaringType.FullName +
-                        "." +
-                        field.Name +
-                        " " +
-                        original +
-                        " -> " +
-                        replacement
-                    );
-                }
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap field is not Int32: " +
+                    field.DeclaringType.FullName + "." + field.Name + "."
+                );
             }
-            catch (Exception ex)
+
+            var original = (int)raw;
+            if (original != CityTimelineLargeMapState.OriginalMapSizeMeters)
             {
-                Util.Log.Error(
-                    "[LargeMap] CellMap field register failed: " +
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap field has unexpected value: " +
+                    field.DeclaringType.FullName + "." + field.Name +
+                    "=" + original + "."
+                );
+            }
+
+            var replacement = original * multiplier;
+
+            if (!ReplacementMap.ContainsKey(field))
+            {
+                ReplacementMap[field] = replacement;
+
+                Util.Log.Info(
+                    "[LargeMap] CellMap field registered: " +
+                    field.DeclaringType.FullName +
+                    "." +
                     field.Name +
-                    " error=" +
-                    ex.Message
+                    " " +
+                    original +
+                    " -> " +
+                    replacement
                 );
             }
         }
@@ -186,8 +282,11 @@ namespace CityTimelineMod.LargeMap
                 if (method == null || method.IsAbstract || method.ContainsGenericParameters)
                     continue;
 
-                if (IsClientMethod(method))
-                    MethodsToPatch.Add(method);
+                if (IsClientMethod(method) && MethodsToPatch.Add(method) &&
+                    HasBurstCompileAttribute(method))
+                {
+                    BurstMethods.Add(method);
+                }
             }
 
             var constructors = type.GetConstructors(
@@ -205,8 +304,11 @@ namespace CityTimelineMod.LargeMap
                 if (ctor == null || ctor.ContainsGenericParameters)
                     continue;
 
-                if (IsClientMethod(ctor))
-                    MethodsToPatch.Add(ctor);
+                if (IsClientMethod(ctor) && MethodsToPatch.Add(ctor) &&
+                    HasBurstCompileAttribute(ctor))
+                {
+                    BurstMethods.Add(ctor);
+                }
             }
         }
 
@@ -230,15 +332,15 @@ namespace CityTimelineMod.LargeMap
                     if (type.IsInterface || type.IsGenericTypeDefinition)
                         continue;
 
-                    if (HasBurstCompileAttribute(type))
-                        continue;
-
                     ScanDeclaredMethods(type);
                 }
             }
             catch (Exception ex)
             {
-                Util.Log.Error("[LargeMap] CellMap assembly scan failed: " + ex);
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap assembly scan failed.",
+                    ex
+                );
             }
         }
 
@@ -251,18 +353,22 @@ namespace CityTimelineMod.LargeMap
                 ns.StartsWith("Game.Tools", StringComparison.Ordinal);
         }
 
-        private static bool HasBurstCompileAttribute(Type type)
+        private static bool HasBurstCompileAttribute(MemberInfo member)
         {
             try
             {
-                var attributes = type.GetCustomAttributes(false);
-
-                for (var i = 0; i < attributes.Length; i++)
+                for (MemberInfo current = member;
+                     current != null;
+                     current = current is Type
+                         ? ((Type)current).DeclaringType
+                         : current.DeclaringType)
                 {
-                    var attrType = attributes[i].GetType();
-
-                    if (attrType.Name == "BurstCompileAttribute")
-                        return true;
+                    var attributes = CustomAttributeData.GetCustomAttributes(current);
+                    for (var i = 0; i < attributes.Count; i++)
+                    {
+                        if (attributes[i].AttributeType.Name == "BurstCompileAttribute")
+                            return true;
+                    }
                 }
             }
             catch
@@ -326,8 +432,12 @@ namespace CityTimelineMod.LargeMap
             IEnumerable<CodeInstruction> instructions,
             MethodBase original)
         {
-            foreach (var instruction in instructions)
+            var codes = new List<CodeInstruction>(instructions);
+            var replacements = 0;
+
+            for (var i = 0; i < codes.Count; i++)
             {
+                var instruction = codes[i];
                 if (instruction.opcode == OpCodes.Ldsfld &&
                     instruction.operand is FieldInfo)
                 {
@@ -336,13 +446,30 @@ namespace CityTimelineMod.LargeMap
 
                     if (ReplacementMap.TryGetValue(field, out replacement))
                     {
-                        instruction.opcode = OpCodes.Ldc_I4;
-                        instruction.operand = replacement;
+                        if (replacement != CityTimelineLargeMapState.MapSizeMeters)
+                        {
+                            throw new InvalidOperationException(
+                                "[LargeMap] unsupported CellMap replacement=" + replacement +
+                                " in " + DescribeMethod(original) + "."
+                            );
+                        }
+
+                        instruction.opcode = OpCodes.Call;
+                        instruction.operand = EffectiveMapSizeMethod;
+                        replacements++;
                     }
                 }
-
-                yield return instruction;
             }
+
+            if (replacements == 0)
+            {
+                throw new InvalidOperationException(
+                    "[LargeMap] CellMap transpiler made no replacement in " +
+                    DescribeMethod(original) + "."
+                );
+            }
+
+            return codes;
         }
 
         private static string DescribeMethod(MethodBase method)
