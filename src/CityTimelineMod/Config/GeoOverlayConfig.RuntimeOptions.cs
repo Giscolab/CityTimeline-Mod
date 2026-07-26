@@ -11,6 +11,9 @@ namespace CityTimelineMod.Config
             if (string.IsNullOrWhiteSpace(key))
                 return false;
 
+            if (IsRestartScopedLifecycleOption(key))
+                return false;
+
             try
             {
                 var option = new JObject
@@ -20,9 +23,6 @@ namespace CityTimelineMod.Config
 
                 switch (key.Trim().ToLowerInvariant())
                 {
-                    case "modenabled": ModEnabled = GetBool(option, key, ModEnabled); break;
-                    case "largemapenabled": LargeMapEnabled = GetBool(option, key, LargeMapEnabled); break;
-                    case "playableworldenabled": PlayableWorldEnabled = GetBool(option, key, PlayableWorldEnabled); break;
                     case "showoverlayhud": ShowOverlayHud = GetBool(option, key, ShowOverlayHud); break;
 
                     case "renderroads": RenderRoads = GetBool(option, key, RenderRoads); break;
@@ -120,6 +120,22 @@ namespace CityTimelineMod.Config
             {
                 Log.Error("GeoOverlayConfig: failed to apply runtime option '" + key + "'. " + ex);
                 return false;
+            }
+        }
+
+        internal static bool IsRestartScopedLifecycleOption(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+                return false;
+
+            switch (key.Trim().ToLowerInvariant())
+            {
+                case "modenabled":
+                case "largemapenabled":
+                case "playableworldenabled":
+                    return true;
+                default:
+                    return false;
             }
         }
     }

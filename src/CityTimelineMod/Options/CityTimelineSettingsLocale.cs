@@ -48,7 +48,7 @@ namespace CityTimelineMod.Options
                 { _settings.GetBindingKeyHintLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Afficher le HUD debug" },
-                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Affiche ou masque le HUD IMGUI. Raccourci : Alt+H. Le mini CTM Alt+T reste géré par le runtime." },
+                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Affiche ou masque le HUD IMGUI. Raccourci : Alt+H." },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RenderMapBounds)), "Afficher les limites worldmap / heightmap" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.RenderMapBounds)), "Affiche les repères de limites : worldmap en blanc, heightmap en magenta, centre carte en rouge." },
@@ -227,6 +227,5 @@ namespace CityTimelineMod.Options
         }
     }
 }
-
 
 

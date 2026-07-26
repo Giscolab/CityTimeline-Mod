@@ -61,11 +61,14 @@ namespace CityTimelineMod.Config
                     if (!string.IsNullOrWhiteSpace(directory))
                         Directory.CreateDirectory(directory);
 
-                    File.WriteAllText(
+                    if (!TryWriteUtf8TextAtomically(
                         path,
                         root.ToString(Formatting.Indented),
-                        new UTF8Encoding(false)
-                    );
+                        out error
+                    ))
+                    {
+                        return false;
+                    }
 
                     updatedRoot = (JObject)root.DeepClone();
                     return true;
@@ -76,6 +79,117 @@ namespace CityTimelineMod.Config
                     return false;
                 }
             }
+        }
+
+        internal static bool TryWriteUtf8TextAtomically(
+            string path,
+            string contents,
+            out string error
+        )
+        {
+            return TryWriteBytesAtomically(
+                path,
+                new UTF8Encoding(false).GetBytes(contents ?? string.Empty),
+                out error
+            );
+        }
+
+        internal static bool TryWriteBytesAtomically(
+            string path,
+            byte[] contents,
+            out string error
+        )
+        {
+            error = null;
+
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                error = "The target path is empty.";
+                return false;
+            }
+
+            if (contents == null)
+            {
+                error = "The file contents are null.";
+                return false;
+            }
+
+            string temporaryPath = null;
+
+            try
+            {
+                var fullPath = Path.GetFullPath(path);
+                var directory = Path.GetDirectoryName(fullPath);
+                if (string.IsNullOrWhiteSpace(directory))
+                {
+                    error = "The target directory is empty for " + fullPath;
+                    return false;
+                }
+
+                Directory.CreateDirectory(directory);
+                temporaryPath = Path.Combine(
+                    directory,
+                    "." + Path.GetFileName(fullPath) + "." + Guid.NewGuid().ToString("N") + ".tmp"
+                );
+
+                using (var output = new FileStream(
+                    temporaryPath,
+                    FileMode.CreateNew,
+                    FileAccess.Write,
+                    FileShare.None,
+                    4096,
+                    FileOptions.WriteThrough
+                ))
+                {
+                    output.Write(contents, 0, contents.Length);
+                    output.Flush();
+                }
+
+                if (File.Exists(fullPath))
+                    File.Replace(temporaryPath, fullPath, null);
+                else
+                    File.Move(temporaryPath, fullPath);
+
+                temporaryPath = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.ToString();
+                return false;
+            }
+            finally
+            {
+                if (!string.IsNullOrWhiteSpace(temporaryPath))
+                {
+                    try
+                    {
+                        if (File.Exists(temporaryPath))
+                            File.Delete(temporaryPath);
+                    }
+                    catch
+                    {
+                        // Best-effort cleanup only. The destination was never
+                        // replaced if the temporary file is still present.
+                    }
+                }
+            }
+        }
+
+        internal static bool ByteArraysEqual(byte[] expected, byte[] actual)
+        {
+            if (ReferenceEquals(expected, actual))
+                return true;
+            if (expected == null || actual == null || expected.Length != actual.Length)
+                return false;
+
+            for (var index = 0; index < expected.Length; index++)
+            {
+                if (expected[index] != actual[index])
+                    return false;
+            }
+
+            return true;
         }
 
         private static bool TryReadRuntimeConfigRootUnsafe(

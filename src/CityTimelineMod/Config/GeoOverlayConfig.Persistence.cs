@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using CityTimelineMod.Bundles;
 using CityTimelineMod.Util;
 using Newtonsoft.Json.Linq;
@@ -631,6 +633,250 @@ Log.Info(
             }
         }
 
+        internal GeoOverlayConfig CloneForBundleReload()
+        {
+            return (GeoOverlayConfig)MemberwiseClone();
+        }
+
+        internal GeoOverlayConfig CreateBundleReloadBaseline()
+        {
+            if (!IsReliable)
+            {
+                throw new InvalidOperationException(
+                    "A reliable runtime snapshot is required for the bundle fallback baseline."
+                );
+            }
+
+            // Keep this baseline independent from the prepared active-bundle
+            // state. Only values that may be replaced by index/manifest
+            // metadata are captured. Lifecycle flags are deliberately absent:
+            // candidates inherit them exclusively from Mod.RuntimeConfig.
+            return new GeoOverlayConfig
+            {
+                IsReliable = true,
+                ReliabilityError = null,
+                UseGeoJsonCenter = UseGeoJsonCenter,
+                OriginLon = OriginLon,
+                OriginLat = OriginLat,
+                WorldOriginX = WorldOriginX,
+                WorldOriginZ = WorldOriginZ,
+                WorldScale = WorldScale,
+                OverlayRotationDegrees = OverlayRotationDegrees,
+                OverlayScaleX = OverlayScaleX,
+                OverlayScaleZ = OverlayScaleZ,
+                FlipX = FlipX,
+                FlipZ = FlipZ,
+                WorldMapSizeKm = WorldMapSizeKm,
+                HeightMapSizeKm = HeightMapSizeKm,
+                WorldMapMinLon = WorldMapMinLon,
+                WorldMapMinLat = WorldMapMinLat,
+                WorldMapMaxLon = WorldMapMaxLon,
+                WorldMapMaxLat = WorldMapMaxLat,
+                HeightMapMinLon = HeightMapMinLon,
+                HeightMapMinLat = HeightMapMinLat,
+                HeightMapMaxLon = HeightMapMaxLon,
+                HeightMapMaxLat = HeightMapMaxLat
+            };
+        }
+
+        internal GeoOverlayConfig CloneForBundleReloadCandidate(GeoOverlayConfig strictFallbacks)
+        {
+            if (strictFallbacks == null || !strictFallbacks.IsReliable)
+                throw new ArgumentException("A reliable strict config snapshot is required.", nameof(strictFallbacks));
+
+            var candidate = (GeoOverlayConfig)MemberwiseClone();
+
+            // Manifest values from the active bundle must never become fallbacks
+            // for the next bundle. Restore only the config/default values that
+            // the normal startup path would expose before applying an index and
+            // manifest, while retaining unrelated live visual settings.
+            candidate.UseGeoJsonCenter = strictFallbacks.UseGeoJsonCenter;
+            candidate.OriginLon = strictFallbacks.OriginLon;
+            candidate.OriginLat = strictFallbacks.OriginLat;
+            candidate.WorldOriginX = strictFallbacks.WorldOriginX;
+            candidate.WorldOriginZ = strictFallbacks.WorldOriginZ;
+            candidate.WorldScale = strictFallbacks.WorldScale;
+            candidate.OverlayRotationDegrees = strictFallbacks.OverlayRotationDegrees;
+            candidate.OverlayScaleX = strictFallbacks.OverlayScaleX;
+            candidate.OverlayScaleZ = strictFallbacks.OverlayScaleZ;
+            candidate.FlipX = strictFallbacks.FlipX;
+            candidate.FlipZ = strictFallbacks.FlipZ;
+
+            candidate.BundleManifestPath = null;
+            candidate.ResolvedBundlesRoot = null;
+            candidate.ActiveBundleRoot = null;
+            candidate.BundleIndexResolutionSucceeded = false;
+            candidate.BundleIndexResolutionError = null;
+            candidate.ActiveBundleId = "";
+            candidate.ActiveBundleDisplayName = null;
+            candidate.ActiveBundleCity = null;
+            candidate.ActiveBundleCountry = null;
+            candidate.ActiveBundleCenterLon = double.NaN;
+            candidate.ActiveBundleCenterLat = double.NaN;
+            candidate.RecommendedCs2WaterLevel = double.NaN;
+            candidate.WaterReferenceElevationMeters = double.NaN;
+            candidate.BelowSeaReserveMeters = double.NaN;
+            candidate.WaterContractSource = null;
+            candidate.WaterContractFormula = null;
+            candidate.PackPath = null;
+
+            candidate.WorldMapSizeKm = strictFallbacks.WorldMapSizeKm;
+            candidate.HeightMapSizeKm = strictFallbacks.HeightMapSizeKm;
+            candidate.WorldMapMinLon = strictFallbacks.WorldMapMinLon;
+            candidate.WorldMapMinLat = strictFallbacks.WorldMapMinLat;
+            candidate.WorldMapMaxLon = strictFallbacks.WorldMapMaxLon;
+            candidate.WorldMapMaxLat = strictFallbacks.WorldMapMaxLat;
+            candidate.HeightMapMinLon = strictFallbacks.HeightMapMinLon;
+            candidate.HeightMapMinLat = strictFallbacks.HeightMapMinLat;
+            candidate.HeightMapMaxLon = strictFallbacks.HeightMapMaxLon;
+            candidate.HeightMapMaxLat = strictFallbacks.HeightMapMaxLat;
+
+            return candidate;
+        }
+
+        internal void ApplyPreparedBundleStateFrom(GeoOverlayConfig source)
+        {
+            if (source == null)
+                throw new ArgumentNullException(nameof(source));
+
+            UseGeoJsonCenter = source.UseGeoJsonCenter;
+            OriginLon = source.OriginLon;
+            OriginLat = source.OriginLat;
+            WorldOriginX = source.WorldOriginX;
+            WorldOriginZ = source.WorldOriginZ;
+            WorldScale = source.WorldScale;
+            OverlayRotationDegrees = source.OverlayRotationDegrees;
+            OverlayScaleX = source.OverlayScaleX;
+            OverlayScaleZ = source.OverlayScaleZ;
+            FlipX = source.FlipX;
+            FlipZ = source.FlipZ;
+
+            BundleManifestPath = source.BundleManifestPath;
+            UseBundleIndex = source.UseBundleIndex;
+            ActiveBundleId = source.ActiveBundleId;
+            ResolvedBundlesRoot = source.ResolvedBundlesRoot;
+            ActiveBundleRoot = source.ActiveBundleRoot;
+            BundleIndexResolutionSucceeded = source.BundleIndexResolutionSucceeded;
+            BundleIndexResolutionError = source.BundleIndexResolutionError;
+            ActiveBundleDisplayName = source.ActiveBundleDisplayName;
+            ActiveBundleCity = source.ActiveBundleCity;
+            ActiveBundleCountry = source.ActiveBundleCountry;
+            ActiveBundleCenterLon = source.ActiveBundleCenterLon;
+            ActiveBundleCenterLat = source.ActiveBundleCenterLat;
+            RecommendedCs2WaterLevel = source.RecommendedCs2WaterLevel;
+            WaterReferenceElevationMeters = source.WaterReferenceElevationMeters;
+            BelowSeaReserveMeters = source.BelowSeaReserveMeters;
+            WaterContractSource = source.WaterContractSource;
+            WaterContractFormula = source.WaterContractFormula;
+            PackPath = source.PackPath;
+
+            WorldMapSizeKm = source.WorldMapSizeKm;
+            HeightMapSizeKm = source.HeightMapSizeKm;
+            WorldMapMinLon = source.WorldMapMinLon;
+            WorldMapMinLat = source.WorldMapMinLat;
+            WorldMapMaxLon = source.WorldMapMaxLon;
+            WorldMapMaxLat = source.WorldMapMaxLat;
+            HeightMapMinLon = source.HeightMapMinLon;
+            HeightMapMinLat = source.HeightMapMinLat;
+            HeightMapMaxLon = source.HeightMapMaxLon;
+            HeightMapMaxLat = source.HeightMapMaxLat;
+        }
+
+        internal bool TryReloadVisualSettingsFromConfig(
+            out string error,
+            out GeoOverlayConfig refreshedBundleBaseline)
+        {
+            error = null;
+            refreshedBundleBaseline = null;
+
+            if (string.IsNullOrWhiteSpace(ConfigPath))
+            {
+                error = "ConfigPath is empty.";
+                return false;
+            }
+
+            var loaded = Load(Path.GetDirectoryName(ConfigPath));
+            if (loaded == null || !loaded.IsReliable)
+            {
+                error = loaded == null
+                    ? "The strict config loader returned no snapshot."
+                    : loaded.ReliabilityError;
+                return false;
+            }
+
+            if (loaded.ModEnabled != ModEnabled ||
+                loaded.LargeMapEnabled != LargeMapEnabled ||
+                loaded.PlayableWorldEnabled != PlayableWorldEnabled)
+            {
+                Log.Info(
+                    "GeoOverlayConfig: lifecycle option changes found during visual reload; " +
+                    "modEnabled, largeMapEnabled and playableWorldEnabled remain restart-scoped."
+                );
+            }
+
+            CopyReloadableVisualFields(loaded);
+            refreshedBundleBaseline = loaded.CreateBundleReloadBaseline();
+            Log.Info("GeoOverlayConfig: visual settings reloaded through the strict runtime loader.");
+            return true;
+        }
+
+        private void CopyReloadableVisualFields(GeoOverlayConfig source)
+        {
+            var blocked = new HashSet<string>(StringComparer.Ordinal)
+            {
+                nameof(ModEnabled),
+                nameof(LargeMapEnabled),
+                nameof(PlayableWorldEnabled),
+                nameof(IsReliable),
+                nameof(ReliabilityError),
+                nameof(ConfigPath),
+                nameof(BundleManifestPath),
+                nameof(UseBundleIndex),
+                nameof(BundlesRoot),
+                nameof(ActiveBundleId),
+                nameof(ResolvedBundlesRoot),
+                nameof(ActiveBundleRoot),
+                nameof(BundleIndexResolutionSucceeded),
+                nameof(BundleIndexResolutionError),
+                nameof(ActiveBundleDisplayName),
+                nameof(ActiveBundleCity),
+                nameof(ActiveBundleCountry),
+                nameof(ActiveBundleCenterLon),
+                nameof(ActiveBundleCenterLat),
+                nameof(RecommendedCs2WaterLevel),
+                nameof(WaterReferenceElevationMeters),
+                nameof(BelowSeaReserveMeters),
+                nameof(WaterContractSource),
+                nameof(WaterContractFormula),
+                nameof(PackPath),
+                nameof(ShowOverlayHud),
+                nameof(OverlaySublayerVisibility)
+            };
+
+            var fields = typeof(GeoOverlayConfig).GetFields(
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic
+            );
+
+            foreach (var field in fields)
+            {
+                if (field.IsInitOnly || blocked.Contains(field.Name) ||
+                    field.Name.StartsWith("RuntimeRoadImport", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                field.SetValue(this, field.GetValue(source));
+            }
+
+            OverlaySublayerVisibility.Clear();
+            foreach (var pair in source.OverlaySublayerVisibility)
+                OverlaySublayerVisibility[pair.Key] = pair.Value;
+
+            ClampRuntimeVisualSettings();
+            ClampRailwaySettings();
+            SanitizeServiceSettings();
+        }
+
         private static void ClampRuntimeRoadImportSettings(GeoOverlayConfig config)
         {
             if (config == null)
@@ -1114,6 +1360,15 @@ Log.Info(
                 ConfigPath,
                 root =>
                 {
+                root["worldOriginX"] = WorldOriginX;
+                root["worldOriginZ"] = WorldOriginZ;
+                root["worldScale"] = WorldScale;
+                root["overlayRotationDegrees"] = OverlayRotationDegrees;
+                root["overlayScaleX"] = OverlayScaleX;
+                root["overlayScaleZ"] = OverlayScaleZ;
+                root["flipX"] = FlipX;
+                root["flipZ"] = FlipZ;
+
                 root["renderWaterLines"] = RenderWaterLines;
                 root["renderWaterAreas"] = RenderWaterAreas;
                 root["renderWaterAreaOutlines"] = RenderWaterAreaOutlines;

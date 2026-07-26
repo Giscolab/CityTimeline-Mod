@@ -833,6 +833,30 @@ private const string ModFolderName = "CityTimelineMod";
             }
         }
 
+        internal void ApplyRuntimeVisualSnapshot(GeoOverlayConfig snapshot)
+        {
+            if (snapshot == null || !snapshot.IsReliable)
+                return;
+
+            // Lifecycle decisions are restart-scoped. A visual reload may
+            // refresh official option values, but it must not change the three
+            // values that authorized the current runtime session.
+            var modEnabled = _modEnabled;
+            var largeMapEnabled = _largeMapEnabled;
+            var playableWorldEnabled = _playableWorldEnabled;
+
+            try
+            {
+                ApplyRuntimeSnapshot(snapshot);
+            }
+            finally
+            {
+                _modEnabled = modEnabled;
+                _largeMapEnabled = largeMapEnabled;
+                _playableWorldEnabled = playableWorldEnabled;
+            }
+        }
+
         private void SetBool(ref bool field, bool value, string configKey)
         {
             if (field == value)
@@ -931,6 +955,15 @@ private const string ModFolderName = "CityTimelineMod";
                 }
 
                 UnityEngine.Debug.Log("[CityTimelineMod] Option saved to config.json: " + key + "=" + value);
+
+                if (GeoOverlayConfig.IsRestartScopedLifecycleOption(key))
+                {
+                    UnityEngine.Debug.Log(
+                        "[CityTimelineMod] Lifecycle option saved; restart required before it takes effect. " +
+                        "The current runtime snapshot is unchanged: " + key + "=" + value
+                    );
+                    return true;
+                }
 
                 if (!runtimeSnapshot.ApplyRuntimeOption(key, value))
                 {
