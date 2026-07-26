@@ -39,30 +39,30 @@ namespace CityTimelineMod.UI
             _overlayBoundsOpacityBinding = new ValueBinding<float>(BindingGroup, "overlayBoundsOpacity", 1f);
             _overlaySublayersJsonBinding = new ValueBinding<string>(BindingGroup, "overlaySublayersJson", "{}");
 
-            AddBinding(_overlayLayersAvailableBinding);
-            AddBinding(_overlayZoningVisibleBinding);
-            AddBinding(_overlayRoadsVisibleBinding);
-            AddBinding(_overlayPathsVisibleBinding);
-            AddBinding(_overlayWaterVisibleBinding);
-            AddBinding(_overlayBoundsVisibleBinding);
-            AddBinding(_overlayZoningOpacityBinding);
-            AddBinding(_overlayRoadsOpacityBinding);
-            AddBinding(_overlayPathsOpacityBinding);
-            AddBinding(_overlayWaterOpacityBinding);
-            AddBinding(_overlayBoundsOpacityBinding);
-            AddBinding(_overlaySublayersJsonBinding);
+            AddRuntimeBinding(_overlayLayersAvailableBinding);
+            AddRuntimeBinding(_overlayZoningVisibleBinding);
+            AddRuntimeBinding(_overlayRoadsVisibleBinding);
+            AddRuntimeBinding(_overlayPathsVisibleBinding);
+            AddRuntimeBinding(_overlayWaterVisibleBinding);
+            AddRuntimeBinding(_overlayBoundsVisibleBinding);
+            AddRuntimeBinding(_overlayZoningOpacityBinding);
+            AddRuntimeBinding(_overlayRoadsOpacityBinding);
+            AddRuntimeBinding(_overlayPathsOpacityBinding);
+            AddRuntimeBinding(_overlayWaterOpacityBinding);
+            AddRuntimeBinding(_overlayBoundsOpacityBinding);
+            AddRuntimeBinding(_overlaySublayersJsonBinding);
 
-            AddBinding(CreateOverlayBooleanTrigger("setOverlayZoningVisible", "zoning"));
-            AddBinding(CreateOverlayBooleanTrigger("setOverlayRoadsVisible", "roads"));
-            AddBinding(CreateOverlayBooleanTrigger("setOverlayPathsVisible", "paths"));
-            AddBinding(CreateOverlayBooleanTrigger("setOverlayWaterVisible", "water"));
-            AddBinding(CreateOverlayBooleanTrigger("setOverlayBoundsVisible", "bounds"));
-            AddBinding(CreateOverlayFloatTrigger("setOverlayZoningOpacity", "zoning"));
-            AddBinding(CreateOverlayFloatTrigger("setOverlayRoadsOpacity", "roads"));
-            AddBinding(CreateOverlayFloatTrigger("setOverlayPathsOpacity", "paths"));
-            AddBinding(CreateOverlayFloatTrigger("setOverlayWaterOpacity", "water"));
-            AddBinding(CreateOverlayFloatTrigger("setOverlayBoundsOpacity", "bounds"));
-            AddBinding(new TriggerBinding<string>(
+            AddRuntimeBinding(CreateOverlayBooleanTrigger("setOverlayZoningVisible", "zoning"));
+            AddRuntimeBinding(CreateOverlayBooleanTrigger("setOverlayRoadsVisible", "roads"));
+            AddRuntimeBinding(CreateOverlayBooleanTrigger("setOverlayPathsVisible", "paths"));
+            AddRuntimeBinding(CreateOverlayBooleanTrigger("setOverlayWaterVisible", "water"));
+            AddRuntimeBinding(CreateOverlayBooleanTrigger("setOverlayBoundsVisible", "bounds"));
+            AddRuntimeBinding(CreateOverlayFloatTrigger("setOverlayZoningOpacity", "zoning"));
+            AddRuntimeBinding(CreateOverlayFloatTrigger("setOverlayRoadsOpacity", "roads"));
+            AddRuntimeBinding(CreateOverlayFloatTrigger("setOverlayPathsOpacity", "paths"));
+            AddRuntimeBinding(CreateOverlayFloatTrigger("setOverlayWaterOpacity", "water"));
+            AddRuntimeBinding(CreateOverlayFloatTrigger("setOverlayBoundsOpacity", "bounds"));
+            AddRuntimeBinding(new TriggerBinding<string>(
                 BindingGroup,
                 "setOverlaySublayerVisible",
                 ApplyOverlaySublayerPayload
@@ -78,6 +78,9 @@ namespace CityTimelineMod.UI
                 triggerName,
                 value =>
                 {
+                    if (!RuntimeCallbacksAllowed)
+                        return;
+
                     GeoDebugOverlay.SetOverlayLayerBoolean(key, value);
                     SyncOverlayLayerBindings();
                     SyncStatisticsBindings();
@@ -92,6 +95,9 @@ namespace CityTimelineMod.UI
                 triggerName,
                 value =>
                 {
+                    if (!RuntimeCallbacksAllowed)
+                        return;
+
                     GeoDebugOverlay.SetOverlayLayerFloat(key, value);
                     SyncOverlayLayerBindings();
                 }
@@ -100,6 +106,9 @@ namespace CityTimelineMod.UI
 
         private void SyncOverlayLayerBindings()
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             var state = GeoDebugOverlay.GetOverlayLayerHudSnapshot() ??
                 OverlayLayerHudSnapshot.Unavailable();
             var signature = BuildOverlayLayerBindingSignature(state);
@@ -130,6 +139,9 @@ namespace CityTimelineMod.UI
 
         private void ApplyOverlaySublayerPayload(string payload)
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             if (string.IsNullOrWhiteSpace(payload))
                 return;
 

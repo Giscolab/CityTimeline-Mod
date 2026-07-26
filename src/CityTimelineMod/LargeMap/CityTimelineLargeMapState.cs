@@ -10,7 +10,18 @@ namespace CityTimelineMod.LargeMap
         internal const float MapSizeMetersFloat = 57344f;
         internal const float HalfMapSizeMetersFloat = MapSizeMetersFloat * 0.5f;
 
-        // Solution A : une seule heightmap principale de 57,344 km.
-        internal static bool Enabled = true;
+        // Lot 1 keeps this experimental module hard-disabled. No runtime path
+        // may call Enable until the complete LargeMap contract is safe again.
+        internal static bool Enabled { get; private set; } = false;
+
+        internal static void Enable()
+        {
+            Enabled = true;
+        }
+
+        internal static void Disable()
+        {
+            Enabled = false;
+        }
     }
 }

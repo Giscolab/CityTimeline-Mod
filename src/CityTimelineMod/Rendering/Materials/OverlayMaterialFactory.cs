@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace CityTimelineMod.Rendering.Materials
@@ -5,6 +6,11 @@ namespace CityTimelineMod.Rendering.Materials
     internal static class OverlayMaterialFactory
     {
         internal static Material Create(Color color)
+        {
+            return Create(color, null);
+        }
+
+        internal static Material Create(Color color, Action<Material> registerOwnership)
         {
             Shader shader = Shader.Find("Unlit/Transparent");
 
@@ -30,6 +36,8 @@ namespace CityTimelineMod.Rendering.Materials
                 return null;
 
             var material = new Material(shader);
+            registerOwnership?.Invoke(material);
+            material.name = "CityTimelineMod_OverlayMaterial_" + material.GetInstanceID();
             ApplyTransparentSettings(material, color);
             return material;
         }

@@ -377,6 +377,9 @@ namespace CityTimelineMod.Rendering
             {
                 Log.Error("GroundOverlay: progressive overlay rebuild failed. " + ex);
                 CancelProgressiveOverlayRebuild("error", false);
+                _created = false;
+                GeoBundleBootstrap.Reset();
+                GeoDebugOverlay.Uninstall();
             }
         }
 

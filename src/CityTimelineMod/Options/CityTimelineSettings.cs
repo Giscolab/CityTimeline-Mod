@@ -1,13 +1,10 @@
 using System;
-using System.IO;
-using System.Text;
 using CityTimelineMod.Rendering;
 using CityTimelineMod.Config;
 using Colossal.IO.AssetDatabase;
 using Game.Input;
 using Game.Modding;
 using Game.Settings;
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace CityTimelineMod.Options
@@ -44,6 +41,8 @@ private const string ModFolderName = "CityTimelineMod";
         private bool _suppressConfigWrite;
 
         private bool _modEnabled = true;
+        private bool _largeMapEnabled = false;
+        private bool _playableWorldEnabled = false;
         private bool _showOverlayHud = false;
 
         private bool _renderRoads = true;
@@ -119,9 +118,10 @@ private const string ModFolderName = "CityTimelineMod";
         private string _heightMapBoundsColor = "magentaHeightmap";
         private string _mapCenterColor = "rougeCentre";
 
+        internal bool RuntimeConfigReliable { get; private set; }
+
         public CityTimelineSettings(IMod mod) : base(mod)
         {
-            LoadFromRuntimeConfig();
         }
 
         [SettingsUIKeyboardBinding(
@@ -137,6 +137,20 @@ private const string ModFolderName = "CityTimelineMod";
         {
             get => _modEnabled;
             set => SetBool(ref _modEnabled, value, "modEnabled");
+        }
+
+        [SettingsUIHidden]
+        public bool LargeMapEnabled
+        {
+            get => _largeMapEnabled;
+            set => SetBool(ref _largeMapEnabled, value, "largeMapEnabled");
+        }
+
+        [SettingsUIHidden]
+        public bool PlayableWorldEnabled
+        {
+            get => _playableWorldEnabled;
+            set => SetBool(ref _playableWorldEnabled, value, "playableWorldEnabled");
         }
 
         [SettingsUISection(SectionGeneral, GroupMain)]
@@ -631,6 +645,8 @@ private const string ModFolderName = "CityTimelineMod";
             _suppressConfigWrite = true;
 
             _modEnabled = true;
+            _largeMapEnabled = false;
+            _playableWorldEnabled = false;
             _showOverlayHud = false;
 
             _renderRoads = true;
@@ -706,103 +722,110 @@ private const string ModFolderName = "CityTimelineMod";
             _heightMapBoundsColor = "magentaHeightmap";
             _mapCenterColor = "rougeCentre";
 
-            LoadFromRuntimeConfig();
+            RuntimeConfigReliable = false;
 
             _suppressConfigWrite = false;
         }
 
-        public void LoadFromRuntimeConfig()
+        internal void ApplyRuntimeSnapshot(GeoOverlayConfig snapshot)
         {
             _suppressConfigWrite = true;
 
             try
             {
-                var path = ResolveRuntimeConfigPath();
-
-                if (File.Exists(path))
+                RuntimeConfigReliable = snapshot != null && snapshot.IsReliable;
+                if (snapshot == null)
                 {
-                    var root = JObject.Parse(File.ReadAllText(path, Encoding.UTF8));
-
-                    _modEnabled = GetBool(root, "modEnabled", _modEnabled);
-                    _showOverlayHud = GetBool(root, "showOverlayHud", _showOverlayHud);
-
-                    _renderRoads = GetBool(root, "renderRoads", _renderRoads);
-                    _renderPaths = GetBool(root, "renderPaths", _renderPaths);
-                    _renderWaterLines = GetBool(root, "renderWaterLines", _renderWaterLines);
-                    _renderWaterAreas = GetBool(root, "renderWaterAreas", _renderWaterAreas);
-                    _renderWaterAreaOutlines = GetBool(root, "renderWaterAreaOutlines", _renderWaterAreaOutlines);
-                    _renderWaterAreaFillMeshes = GetBool(root, "renderWaterAreaFillMeshes", _renderWaterAreaFillMeshes);
-                    _renderZoning = GetBool(root, "renderZoning", _renderZoning);
-                    _renderMapBounds = GetBool(root, "renderMapBounds", _renderMapBounds);
-                    _renderWorldMapBounds = GetBool(root, "renderWorldMapBounds", _renderWorldMapBounds);
-                    _renderHeightMapBounds = GetBool(root, "renderHeightMapBounds", _renderHeightMapBounds);
-                    _renderMapCenter = GetBool(root, "renderMapCenter", _renderMapCenter);
-                    _verboseOverlayLogs = GetBool(root, "verboseOverlayLogs", _verboseOverlayLogs);
-
-                    _roadAlpha = GetFloat(root, "roadAlpha", _roadAlpha);
-                    _pathAlpha = GetFloat(root, "pathAlpha", _pathAlpha);
-                    _waterLineAlpha = GetFloat(root, "waterLineAlpha", _waterLineAlpha);
-                    _waterAreaOutlineAlpha = GetFloat(root, "waterAreaOutlineAlpha", _waterAreaOutlineAlpha);
-                    _waterAreaFillAlpha = GetFloat(root, "waterAreaFillAlpha", _waterAreaFillAlpha);
-                    _zoningAlpha = GetFloat(root, "zoningAlpha", _zoningAlpha);
-                    _mapBoundsAlpha = GetFloat(root, "mapBoundsAlpha", _mapBoundsAlpha);
-                    _worldMapBoundsAlpha = GetFloat(root, "worldMapBoundsAlpha", _worldMapBoundsAlpha);
-                    _heightMapBoundsAlpha = GetFloat(root, "heightMapBoundsAlpha", _heightMapBoundsAlpha);
-                    _mapCenterAlpha = GetFloat(root, "mapCenterAlpha", _mapCenterAlpha);
-
-                    _roadYOffset = GetFloat(root, "roadYOffset", _roadYOffset);
-                    _pathYOffset = GetFloat(root, "pathYOffset", _pathYOffset);
-                    _waterLineYOffset = GetFloat(root, "waterLineYOffset", _waterLineYOffset);
-                    _waterAreaOutlineYOffset = GetFloat(root, "waterAreaOutlineYOffset", _waterAreaOutlineYOffset);
-                    _waterAreaFillYOffset = GetFloat(root, "waterAreaFillYOffset", _waterAreaFillYOffset);
-                    _zoningFillYOffset = GetFloat(root, "zoningFillYOffset", _zoningFillYOffset);
-                    _mapBoundsYOffset = GetFloat(root, "mapBoundsYOffset", _mapBoundsYOffset);
-
-                    _roadGeometrySource = GetString(root, "roadGeometrySource", _roadGeometrySource);
-                    _minimumRoadDebugTier = GetInt(root, "minimumRoadDebugTier", _minimumRoadDebugTier);
-                    _runtimeRoadImportEnabled = GetBool(root, "runtimeRoadImportEnabled", _runtimeRoadImportEnabled);
-                    _runtimeRoadImportRunOnce = GetBool(root, "runtimeRoadImportRunOnce", _runtimeRoadImportRunOnce);
-                    _runtimeRoadImportMaxSegments = GetInt(root, "runtimeRoadImportMaxSegments", _runtimeRoadImportMaxSegments);
-                    _runtimeRoadImportBatchSize = GetInt(root, "runtimeRoadImportBatchSize", _runtimeRoadImportBatchSize);
-                    _runtimeRoadImportSelectionMode = GetString(root, "runtimeRoadImportSelectionMode", _runtimeRoadImportSelectionMode);
-                    _runtimeRoadImportDistanceBucketMeters = GetFloat(root, "runtimeRoadImportDistanceBucketMeters", _runtimeRoadImportDistanceBucketMeters);
-                    _runtimeRoadImportPriorityWeight = GetFloat(root, "runtimeRoadImportPriorityWeight", _runtimeRoadImportPriorityWeight);
-                    _runtimeRoadImportSkipParkingAisles = GetBool(root, "runtimeRoadImportSkipParkingAisles", _runtimeRoadImportSkipParkingAisles);
-                    _runtimeRoadImportSkipClearlyUnpaved = GetBool(root, "runtimeRoadImportSkipClearlyUnpaved", _runtimeRoadImportSkipClearlyUnpaved);
-
-                    _roadColorDefault = GetString(root, "roadColorDefault", _roadColorDefault);
-                    _roadColorMotorway = GetString(root, "roadColorMotorway", _roadColorMotorway);
-                    _roadColorPrimary = GetString(root, "roadColorPrimary", _roadColorPrimary);
-                    _roadColorSecondary = GetString(root, "roadColorSecondary", _roadColorSecondary);
-                    _roadColorTertiary = GetString(root, "roadColorTertiary", _roadColorTertiary);
-                    _roadColorLink = GetString(root, "roadColorLink", _roadColorLink);
-                    _pathColor = GetString(root, "pathColor", _pathColor);
-
-                    _waterLineColor = GetString(root, "waterLineColor", _waterLineColor);
-                    _waterAreaOutlineColor = GetString(root, "waterAreaOutlineColor", _waterAreaOutlineColor);
-                    _waterAreaFillColor = GetString(root, "waterAreaFillColor", _waterAreaFillColor);
-
-                    _zoningResidentialLowColor = GetString(root, "zoningResidentialLowColor", _zoningResidentialLowColor);
-                    _zoningResidentialMediumColor = GetString(root, "zoningResidentialMediumColor", _zoningResidentialMediumColor);
-                    _zoningResidentialHighColor = GetString(root, "zoningResidentialHighColor", _zoningResidentialHighColor);
-                    _zoningCommercialLowColor = GetString(root, "zoningCommercialLowColor", _zoningCommercialLowColor);
-                    _zoningCommercialHighColor = GetString(root, "zoningCommercialHighColor", _zoningCommercialHighColor);
-                    _zoningRetailColor = GetString(root, "zoningRetailColor", _zoningRetailColor);
-                    _zoningIndustrialColor = GetString(root, "zoningIndustrialColor", _zoningIndustrialColor);
-                    _zoningOfficeColor = GetString(root, "zoningOfficeColor", _zoningOfficeColor);
-                    _zoningSurfaceColor = GetString(root, "zoningSurfaceColor", _zoningSurfaceColor);
-                    _zoningRampColor = GetString(root, "zoningRampColor", _zoningRampColor);
-                    _zoningMixedColor = GetString(root, "zoningMixedColor", _zoningMixedColor);
-                    _zoningFallbackColor = GetString(root, "zoningFallbackColor", _zoningFallbackColor);
-
-                    _worldMapBoundsColor = GetString(root, "worldMapBoundsColor", _worldMapBoundsColor);
-                    _heightMapBoundsColor = GetString(root, "heightMapBoundsColor", _heightMapBoundsColor);
-                    _mapCenterColor = GetString(root, "mapCenterColor", _mapCenterColor);
+                    _modEnabled = false;
+                    _largeMapEnabled = false;
+                    _playableWorldEnabled = false;
+                    return;
                 }
-            }
-            catch (Exception ex)
-            {
-                UnityEngine.Debug.Log("[CityTimelineMod] Failed to load runtime options from config.json: " + ex);
+
+                _modEnabled = snapshot.ModEnabled;
+                _largeMapEnabled = snapshot.LargeMapEnabled;
+                _playableWorldEnabled = snapshot.PlayableWorldEnabled;
+
+                // An unreliable snapshot is constructed fail-closed with all
+                // lifecycle flags false. Publish those safe values in the
+                // official options UI without applying partially parsed visuals.
+                if (!RuntimeConfigReliable)
+                    return;
+
+                _showOverlayHud = snapshot.ShowOverlayHud;
+
+                _renderRoads = snapshot.RenderRoads;
+                _renderPaths = snapshot.RenderPaths;
+                _renderWaterLines = snapshot.RenderWaterLines;
+                _renderWaterAreas = snapshot.RenderWaterAreas;
+                _renderWaterAreaOutlines = snapshot.RenderWaterAreaOutlines;
+                _renderWaterAreaFillMeshes = snapshot.RenderWaterAreaFillMeshes;
+                _renderZoning = snapshot.RenderZoning;
+                _renderMapBounds = snapshot.RenderMapBounds;
+                _renderWorldMapBounds = snapshot.RenderWorldMapBounds;
+                _renderHeightMapBounds = snapshot.RenderHeightMapBounds;
+                _renderMapCenter = snapshot.RenderMapCenter;
+                _verboseOverlayLogs = snapshot.VerboseOverlayLogs;
+
+                _roadAlpha = snapshot.RoadAlpha;
+                _pathAlpha = snapshot.PathAlpha;
+                _waterLineAlpha = snapshot.WaterLineAlpha;
+                _waterAreaOutlineAlpha = snapshot.WaterAreaOutlineAlpha;
+                _waterAreaFillAlpha = snapshot.WaterAreaFillAlpha;
+                _zoningAlpha = snapshot.ZoningAlpha;
+                _mapBoundsAlpha = snapshot.MapBoundsAlpha;
+                _worldMapBoundsAlpha = snapshot.WorldMapBoundsAlpha;
+                _heightMapBoundsAlpha = snapshot.HeightMapBoundsAlpha;
+                _mapCenterAlpha = snapshot.MapCenterAlpha;
+
+                _roadYOffset = snapshot.RoadYOffset;
+                _pathYOffset = snapshot.PathYOffset;
+                _waterLineYOffset = snapshot.WaterLineYOffset;
+                _waterAreaOutlineYOffset = snapshot.WaterAreaOutlineYOffset;
+                _waterAreaFillYOffset = snapshot.WaterAreaFillYOffset;
+                _zoningFillYOffset = snapshot.ZoningFillYOffset;
+                _mapBoundsYOffset = snapshot.MapBoundsYOffset;
+
+                _roadGeometrySource = snapshot.RoadGeometrySource;
+                _minimumRoadDebugTier = snapshot.MinimumRoadDebugTier;
+                _runtimeRoadImportEnabled = false;
+                _runtimeRoadImportRunOnce = false;
+                _runtimeRoadImportMaxSegments = snapshot.RuntimeRoadImportMaxSegments;
+                _runtimeRoadImportBatchSize = snapshot.RuntimeRoadImportBatchSize;
+                _runtimeRoadImportSelectionMode = snapshot.RuntimeRoadImportSelectionMode;
+                _runtimeRoadImportDistanceBucketMeters = snapshot.RuntimeRoadImportDistanceBucketMeters;
+                _runtimeRoadImportPriorityWeight = snapshot.RuntimeRoadImportPriorityWeight;
+                _runtimeRoadImportSkipParkingAisles = snapshot.RuntimeRoadImportSkipParkingAisles;
+                _runtimeRoadImportSkipClearlyUnpaved = snapshot.RuntimeRoadImportSkipClearlyUnpaved;
+
+                _roadColorDefault = snapshot.RoadColorDefault;
+                _roadColorMotorway = snapshot.RoadColorMotorway;
+                _roadColorPrimary = snapshot.RoadColorPrimary;
+                _roadColorSecondary = snapshot.RoadColorSecondary;
+                _roadColorTertiary = snapshot.RoadColorTertiary;
+                _roadColorLink = snapshot.RoadColorLink;
+                _pathColor = snapshot.PathColor;
+
+                _waterLineColor = snapshot.WaterLineColor;
+                _waterAreaOutlineColor = snapshot.WaterAreaOutlineColor;
+                _waterAreaFillColor = snapshot.WaterAreaFillColor;
+
+                _zoningResidentialLowColor = snapshot.ZoningResidentialLowColor;
+                _zoningResidentialMediumColor = snapshot.ZoningResidentialMediumColor;
+                _zoningResidentialHighColor = snapshot.ZoningResidentialHighColor;
+                _zoningCommercialLowColor = snapshot.ZoningCommercialLowColor;
+                _zoningCommercialHighColor = snapshot.ZoningCommercialHighColor;
+                _zoningRetailColor = snapshot.ZoningRetailColor;
+                _zoningIndustrialColor = snapshot.ZoningIndustrialColor;
+                _zoningOfficeColor = snapshot.ZoningOfficeColor;
+                _zoningSurfaceColor = snapshot.ZoningSurfaceColor;
+                _zoningRampColor = snapshot.ZoningRampColor;
+                _zoningMixedColor = snapshot.ZoningMixedColor;
+                _zoningFallbackColor = snapshot.ZoningFallbackColor;
+
+                _worldMapBoundsColor = snapshot.WorldMapBoundsColor;
+                _heightMapBoundsColor = snapshot.HeightMapBoundsColor;
+                _mapCenterColor = snapshot.MapCenterColor;
             }
             finally
             {
@@ -815,10 +838,11 @@ private const string ModFolderName = "CityTimelineMod";
             if (field == value)
                 return;
 
+            var previous = field;
             field = value;
 
-            if (!_suppressConfigWrite)
-                SaveValueToRuntimeConfig(configKey, value);
+            if (!_suppressConfigWrite && !SaveValueToRuntimeConfig(configKey, value))
+                field = previous;
         }
 
         private void SetFloat(ref float field, float value, string configKey)
@@ -826,10 +850,11 @@ private const string ModFolderName = "CityTimelineMod";
             if (Math.Abs(field - value) < 0.00001f)
                 return;
 
+            var previous = field;
             field = value;
 
-            if (!_suppressConfigWrite)
-                SaveValueToRuntimeConfig(configKey, value);
+            if (!_suppressConfigWrite && !SaveValueToRuntimeConfig(configKey, value))
+                field = previous;
         }
 
         private void SetInt(ref int field, int value, string configKey)
@@ -837,10 +862,11 @@ private const string ModFolderName = "CityTimelineMod";
             if (field == value)
                 return;
 
+            var previous = field;
             field = value;
 
-            if (!_suppressConfigWrite)
-                SaveValueToRuntimeConfig(configKey, value);
+            if (!_suppressConfigWrite && !SaveValueToRuntimeConfig(configKey, value))
+                field = previous;
         }
 
         private void SetString(ref string field, string value, string configKey)
@@ -850,84 +876,77 @@ private const string ModFolderName = "CityTimelineMod";
             if (string.Equals(field, value, StringComparison.Ordinal))
                 return;
 
+            var previous = field;
             field = value;
 
-            if (!_suppressConfigWrite)
-                SaveValueToRuntimeConfig(configKey, value);
+            if (!_suppressConfigWrite && !SaveValueToRuntimeConfig(configKey, value))
+                field = previous;
         }
 
-        private static bool GetBool(JObject root, string key, bool fallback)
-        {
-            if (root != null && root.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var token))
-            {
-                try { return token.Value<bool>(); }
-                catch { return fallback; }
-            }
-
-            return fallback;
-        }
-
-        private static float GetFloat(JObject root, string key, float fallback)
-        {
-            if (root != null && root.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var token))
-            {
-                try { return token.Value<float>(); }
-                catch { return fallback; }
-            }
-
-            return fallback;
-        }
-
-        private static int GetInt(JObject root, string key, int fallback)
-        {
-            if (root != null && root.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var token))
-            {
-                try { return token.Value<int>(); }
-                catch { return fallback; }
-            }
-
-            return fallback;
-        }
-
-        private static string GetString(JObject root, string key, string fallback)
-        {
-            if (root != null && root.TryGetValue(key, StringComparison.OrdinalIgnoreCase, out var token))
-            {
-                try { return token.Value<string>() ?? fallback; }
-                catch { return fallback; }
-            }
-
-            return fallback;
-        }
-
-        private static void SaveValueToRuntimeConfig(string key, object value)
+        private bool SaveValueToRuntimeConfig(string key, object value)
         {
             try
             {
+                var runtimeSnapshot = Mod.RuntimeConfig;
+                if (runtimeSnapshot == null)
+                {
+                    UnityEngine.Debug.Log(
+                        "[CityTimelineMod] Option save blocked because the runtime snapshot is unavailable: " +
+                        key
+                    );
+                    return false;
+                }
+
                 var path = ResolveRuntimeConfigPath();
-                var dir = Path.GetDirectoryName(path);
-
-                if (!Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                JObject root;
-
-                if (File.Exists(path))
-                    root = JObject.Parse(File.ReadAllText(path, Encoding.UTF8));
-                else
-                    root = new JObject();
-
-                root[key] = JToken.FromObject(value);
-
-                File.WriteAllText(path, root.ToString(Formatting.Indented), new UTF8Encoding(false));
+                JObject updatedRoot;
+                string updateError;
+                if (!GeoOverlayConfig.TryUpdateRuntimeConfigFile(
+                    path,
+                    root =>
+                    {
+                        var replacement = JToken.FromObject(value);
+                        JToken existing;
+                        if (root.TryGetValue(
+                            key,
+                            StringComparison.OrdinalIgnoreCase,
+                            out existing
+                        ))
+                        {
+                            existing.Replace(replacement);
+                        }
+                        else
+                        {
+                            root[key] = replacement;
+                        }
+                    },
+                    out updatedRoot,
+                    out updateError
+                ))
+                {
+                    UnityEngine.Debug.Log(
+                        "[CityTimelineMod] Failed to save option to config.json: " +
+                        key + " => " + updateError
+                    );
+                    return false;
+                }
 
                 UnityEngine.Debug.Log("[CityTimelineMod] Option saved to config.json: " + key + "=" + value);
 
-                GeoDebugOverlay.ApplyRuntimeConfigChange(key);
+                if (!runtimeSnapshot.ApplyRuntimeOption(key, value))
+                {
+                    UnityEngine.Debug.Log(
+                        "[CityTimelineMod] Runtime snapshot rejected saved option: " + key
+                    );
+                    return false;
+                }
+
+                GeoDebugOverlay.ApplyRuntimeConfigChange(key, value);
+                return true;
             }
             catch (Exception ex)
             {
                 UnityEngine.Debug.Log("[CityTimelineMod] Failed to save option to config.json: " + key + " => " + ex);
+                return false;
             }
         }
 

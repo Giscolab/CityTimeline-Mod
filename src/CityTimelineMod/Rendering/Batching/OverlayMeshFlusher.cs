@@ -6,8 +6,47 @@ using UnityEngine;
 
 namespace CityTimelineMod.Rendering.Batching
 {
+    internal sealed class OverlayOwnedMesh : MonoBehaviour
+    {
+        private Mesh _mesh;
+
+        internal Mesh Create(string meshName)
+        {
+            if (_mesh != null)
+                throw new InvalidOperationException("An owned overlay mesh is already registered.");
+
+            _mesh = new Mesh();
+            _mesh.name = meshName;
+            return _mesh;
+        }
+
+        internal void DestroyOwnedMesh()
+        {
+            var mesh = _mesh;
+
+            if (mesh != null)
+                UnityEngine.Object.Destroy(mesh);
+
+            _mesh = null;
+        }
+
+        private void OnDestroy()
+        {
+            DestroyOwnedMesh();
+        }
+    }
+
     internal static class OverlayMeshFlusher
     {
+        private static Mesh CreateOwnedMesh(GameObject owner, string meshName)
+        {
+            var filter = owner.AddComponent<MeshFilter>();
+            var ownership = owner.AddComponent<OverlayOwnedMesh>();
+            var mesh = ownership.Create(meshName);
+            filter.sharedMesh = mesh;
+            return mesh;
+        }
+
         internal static int FlushServicePointBatch(
             Transform parent,
             string batchKey,
@@ -22,16 +61,12 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -65,8 +100,7 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             // A single long tunnel segment can expand into thousands of dash quads.
             // Force 32-bit indices so the mesh remains valid beyond 65,535 vertices.
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -74,9 +108,6 @@ namespace CityTimelineMod.Rendering.Batching
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -113,15 +144,11 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -153,15 +180,11 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -188,15 +211,11 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -230,15 +249,11 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -273,15 +288,11 @@ namespace CityTimelineMod.Rendering.Batching
             var obj = new GameObject(name);
             obj.transform.SetParent(parent, true);
 
-            var mesh = new Mesh();
-            mesh.name = name + "_mesh";
+            var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
-
-            var filter = obj.AddComponent<MeshFilter>();
-            filter.sharedMesh = mesh;
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;

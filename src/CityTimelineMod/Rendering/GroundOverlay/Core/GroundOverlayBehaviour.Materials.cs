@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CityTimelineMod.Rendering.Materials;
+using CityTimelineMod.Util;
 using UnityEngine;
 
 namespace CityTimelineMod.Rendering
@@ -19,27 +20,137 @@ namespace CityTimelineMod.Rendering
         private readonly Dictionary<string, List<Material>> _overlaySublayerMaterialGroups =
             new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
         private readonly List<Material> _ownedOverlayMaterials = new List<Material>();
+        private bool _overlayTeardownRequested;
+        private bool _overlayTeardownInProgress;
+        private bool _overlayTeardownComplete;
+
+        internal bool TeardownOverlayResources()
+        {
+            if (_overlayTeardownComplete)
+                return true;
+
+            if (_overlayTeardownInProgress)
+                return false;
+
+            _overlayTeardownRequested = true;
+            _overlayTeardownInProgress = true;
+            var completed = true;
+
+            // Railway changes are debounced during normal play.  Flush them
+            // while the authoritative config snapshot is still available.
+            if (_railwaySettingsSavePending)
+            {
+                try
+                {
+                    if (_config != null && _config.SaveVisualSettingsToConfig())
+                        _railwaySettingsSavePending = false;
+                    else
+                        completed = false;
+                }
+                catch (System.Exception ex)
+                {
+                    completed = false;
+                    Log.Error("GroundOverlay: deferred railway save failed during teardown. " + ex);
+                }
+            }
+
+            // Do not discard the authoritative config or destroy the retry
+            // container while a required deferred save is still pending.
+            if (!completed || _railwaySettingsSavePending)
+            {
+                _created = false;
+                _overlayTeardownInProgress = false;
+                Log.Error("GroundOverlay: teardown paused until the deferred railway save can be retried.");
+                return false;
+            }
+
+            _rebuildCancelRequested = true;
+
+            try
+            {
+                CancelProgressiveOverlayRebuild("overlay teardown", false);
+                _progressiveRebuild = null;
+            }
+            catch (System.Exception ex)
+            {
+                completed = false;
+                Log.Error("GroundOverlay: progressive rebuild cleanup failed. " + ex);
+            }
+
+            _rebuildRestartPending = false;
+            _controlPanelRebuildPending = false;
+            _pendingBundleReloadId = null;
+            _railwayRebuildPending = false;
+            _railwayRebuildReason = null;
+            _config = null;
+
+            try
+            {
+                ClearOverlayChildren();
+            }
+            catch (System.Exception ex)
+            {
+                completed = false;
+                Log.Error("GroundOverlay: child/mesh cleanup failed. " + ex);
+            }
+
+            try
+            {
+                ClearOverlayMaterialRegistries();
+            }
+            catch (System.Exception ex)
+            {
+                completed = false;
+                Log.Error("GroundOverlay: material cleanup failed. " + ex);
+            }
+
+            try
+            {
+                DestroyHudResources();
+            }
+            catch (System.Exception ex)
+            {
+                completed = false;
+                Log.Error("GroundOverlay: HUD cleanup failed. " + ex);
+            }
+
+            _created = false;
+            _overlayTeardownInProgress = false;
+
+            if (completed)
+                _overlayTeardownComplete = true;
+
+            return _overlayTeardownComplete;
+        }
+
+        private Material CreateOwnedOverlayMaterial(Color color)
+        {
+            return OverlayMaterialFactory.Create(
+                color,
+                material => _ownedOverlayMaterials.Add(material)
+            );
+        }
 
         private OverlayRenderMaterials CreateOverlayRenderMaterials()
         {
             var materials = new OverlayRenderMaterials();
 
-            materials.Cyan = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.WaterLineColor, _config.WaterLineAlpha));
-            materials.WaterAreaBlue = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.WaterAreaOutlineColor, _config.WaterAreaOutlineAlpha));
-            materials.WaterAreaFillBlue = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.WaterAreaFillColor, _config.WaterAreaFillAlpha));
-            materials.FallbackRoad = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.RoadColorDefault, _config.RoadAlpha));
-            materials.RoadMotorway = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.RoadColorMotorway, _config.RoadAlpha));
-            materials.RoadPrimary = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.RoadColorPrimary, _config.RoadAlpha));
-            materials.RoadSecondary = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.RoadColorSecondary, _config.RoadAlpha));
-            materials.RoadTertiary = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.RoadColorTertiary, _config.RoadAlpha));
-            materials.RoadLink = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.RoadColorLink, _config.RoadAlpha));
-            materials.Path = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.PathColor, _config.PathAlpha));
-            materials.RoadOneWay = OverlayMaterialFactory.Create(new Color(0.25f, 0.9f, 1f, _config.RoadAlpha));
-            materials.RoadBridge = OverlayMaterialFactory.Create(new Color(1f, 0.85f, 0.15f, _config.RoadAlpha));
-            materials.RoadTunnel = OverlayMaterialFactory.Create(new Color(0.65f, 0.35f, 1f, _config.RoadAlpha));
-            materials.RoadRoundabout = OverlayMaterialFactory.Create(new Color(1f, 0.35f, 0.15f, _config.RoadAlpha));
-            materials.RoadArrow = OverlayMaterialFactory.Create(new Color(1f, 1f, 1f, _config.RoadAlpha));
-            materials.RoadLabel = OverlayMaterialFactory.Create(new Color(1f, 1f, 1f, _config.RoadAlpha));
+            materials.Cyan = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.WaterLineColor, _config.WaterLineAlpha));
+            materials.WaterAreaBlue = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.WaterAreaOutlineColor, _config.WaterAreaOutlineAlpha));
+            materials.WaterAreaFillBlue = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.WaterAreaFillColor, _config.WaterAreaFillAlpha));
+            materials.FallbackRoad = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorDefault, _config.RoadAlpha));
+            materials.RoadMotorway = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorMotorway, _config.RoadAlpha));
+            materials.RoadPrimary = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorPrimary, _config.RoadAlpha));
+            materials.RoadSecondary = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorSecondary, _config.RoadAlpha));
+            materials.RoadTertiary = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorTertiary, _config.RoadAlpha));
+            materials.RoadLink = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorLink, _config.RoadAlpha));
+            materials.Path = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.PathColor, _config.PathAlpha));
+            materials.RoadOneWay = CreateOwnedOverlayMaterial(new Color(0.25f, 0.9f, 1f, _config.RoadAlpha));
+            materials.RoadBridge = CreateOwnedOverlayMaterial(new Color(1f, 0.85f, 0.15f, _config.RoadAlpha));
+            materials.RoadTunnel = CreateOwnedOverlayMaterial(new Color(0.65f, 0.35f, 1f, _config.RoadAlpha));
+            materials.RoadRoundabout = CreateOwnedOverlayMaterial(new Color(1f, 0.35f, 0.15f, _config.RoadAlpha));
+            materials.RoadArrow = CreateOwnedOverlayMaterial(new Color(1f, 1f, 1f, _config.RoadAlpha));
+            materials.RoadLabel = CreateOwnedOverlayMaterial(new Color(1f, 1f, 1f, _config.RoadAlpha));
 
             // Palette shared with cs2-realmap-generator/visualizer/js/railway-controller.js.
             materials.RailwayTrain = CreateRailwayMaterial(0xf8, 0xfa, 0xfc, 1f);
@@ -64,27 +175,27 @@ namespace CityTimelineMod.Rendering
             materials.ServiceTransport = CreateServiceMaterial(0xb8, 0x87, 0xff, _config.ServicesTransportAlpha);
             materials.ServiceCommunications = CreateServiceMaterial(0xff, 0x9f, 0x43, _config.ServicesCommunicationAlpha);
 
-            materials.ZoningResidentialLow = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialLowColor, _config.ZoningAlpha));
-            materials.ZoningResidentialMedium = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialMediumColor, _config.ZoningAlpha));
-            materials.ZoningResidentialHigh = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningResidentialHighColor, _config.ZoningAlpha));
-            materials.ZoningCommercialLow = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningCommercialLowColor, _config.ZoningAlpha));
-            materials.ZoningCommercialHigh = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningCommercialHighColor, _config.ZoningAlpha));
-            materials.ZoningRetailDetail = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningRetailColor, _config.ZoningAlpha));
-            materials.ZoningIndustrial = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningIndustrialColor, _config.ZoningAlpha));
-            materials.ZoningOffice = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningOfficeColor, _config.ZoningAlpha));
-            materials.ZoningSurface = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningSurfaceColor, _config.ZoningAlpha));
-            materials.ZoningRamp = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningRampColor, _config.ZoningAlpha));
-            materials.ZoningMixed = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningMixedColor, _config.ZoningAlpha));
-            materials.ZoningFallback = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.ZoningFallbackColor, _config.ZoningAlpha));
+            materials.ZoningResidentialLow = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningResidentialLowColor, _config.ZoningAlpha));
+            materials.ZoningResidentialMedium = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningResidentialMediumColor, _config.ZoningAlpha));
+            materials.ZoningResidentialHigh = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningResidentialHighColor, _config.ZoningAlpha));
+            materials.ZoningCommercialLow = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningCommercialLowColor, _config.ZoningAlpha));
+            materials.ZoningCommercialHigh = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningCommercialHighColor, _config.ZoningAlpha));
+            materials.ZoningRetailDetail = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningRetailColor, _config.ZoningAlpha));
+            materials.ZoningIndustrial = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningIndustrialColor, _config.ZoningAlpha));
+            materials.ZoningOffice = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningOfficeColor, _config.ZoningAlpha));
+            materials.ZoningSurface = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningSurfaceColor, _config.ZoningAlpha));
+            materials.ZoningRamp = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningRampColor, _config.ZoningAlpha));
+            materials.ZoningMixed = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningMixedColor, _config.ZoningAlpha));
+            materials.ZoningFallback = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.ZoningFallbackColor, _config.ZoningAlpha));
 
-            materials.DebugRed = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.DebugRedColor, 1f));
-            materials.DebugGreen = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.DebugGreenColor, 1f));
-            materials.DebugYellow = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.DebugYellowColor, 1f));
-            materials.DebugMagenta = OverlayMaterialFactory.Create(_config.ResolveColorName(_config.DebugMagentaColor, 1f));
+            materials.DebugRed = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.DebugRedColor, 1f));
+            materials.DebugGreen = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.DebugGreenColor, 1f));
+            materials.DebugYellow = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.DebugYellowColor, 1f));
+            materials.DebugMagenta = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.DebugMagentaColor, 1f));
 
-            materials.WorldMapBounds = OverlayMaterialFactory.Create(new Color(1f, 1f, 1f, _config.WorldMapBoundsAlpha));
-            materials.HeightMapBounds = OverlayMaterialFactory.Create(new Color(1f, 0.1f, 1f, _config.HeightMapBoundsAlpha));
-            materials.MapCenter = OverlayMaterialFactory.Create(new Color(1f, 0f, 0f, _config.MapCenterAlpha));
+            materials.WorldMapBounds = CreateOwnedOverlayMaterial(new Color(1f, 1f, 1f, _config.WorldMapBoundsAlpha));
+            materials.HeightMapBounds = CreateOwnedOverlayMaterial(new Color(1f, 0.1f, 1f, _config.HeightMapBoundsAlpha));
+            materials.MapCenter = CreateOwnedOverlayMaterial(new Color(1f, 0f, 0f, _config.MapCenterAlpha));
 
             _waterLineMaterials.Add(materials.Cyan);
             _waterAreaOutlineMaterials.Add(materials.WaterAreaBlue);
@@ -183,77 +294,35 @@ namespace CityTimelineMod.Rendering
             _zoningMaterials.Add(materials.ZoningRamp);
             _zoningMaterials.Add(materials.ZoningFallback);
 
-            _ownedOverlayMaterials.AddRange(new[]
-            {
-                materials.Cyan,
-                materials.WaterAreaBlue,
-                materials.WaterAreaFillBlue,
-                materials.FallbackRoad,
-                materials.RoadMotorway,
-                materials.RoadPrimary,
-                materials.RoadSecondary,
-                materials.RoadTertiary,
-                materials.RoadLink,
-                materials.Path,
-                materials.RoadOneWay,
-                materials.RoadBridge,
-                materials.RoadTunnel,
-                materials.RoadRoundabout,
-                materials.RoadArrow,
-                materials.RoadLabel,
-                materials.RailwayTrain,
-                materials.RailwayTrainTunnel,
-                materials.RailwayTram,
-                materials.RailwayTramTunnel,
-                materials.RailwayLightRail,
-                materials.RailwayLightRailTunnel,
-                materials.RailwaySubway,
-                materials.RailwaySubwayTunnel,
-                materials.RailwayService,
-                materials.RailwayServiceTunnel,
-                materials.ServiceWater,
-                materials.ServiceElectricity,
-                materials.ServiceEducation,
-                materials.ServiceFire,
-                materials.ServiceMedical,
-                materials.ServiceParks,
-                materials.ServiceWaste,
-                materials.ServiceTransport,
-                materials.ServiceCommunications,
-                materials.ZoningResidentialLow,
-                materials.ZoningResidentialMedium,
-                materials.ZoningResidentialHigh,
-                materials.ZoningCommercialLow,
-                materials.ZoningCommercialHigh,
-                materials.ZoningRetailDetail,
-                materials.ZoningIndustrial,
-                materials.ZoningOffice,
-                materials.ZoningSurface,
-                materials.ZoningRamp,
-                materials.ZoningMixed,
-                materials.ZoningFallback,
-                materials.DebugRed,
-                materials.DebugGreen,
-                materials.DebugYellow,
-                materials.DebugMagenta,
-                materials.WorldMapBounds,
-                materials.HeightMapBounds,
-                materials.MapCenter
-            });
-
             return materials;
         }
 
 
         private void ClearOverlayMaterialRegistries()
         {
-            foreach (var material in _ownedOverlayMaterials)
+            var failed = false;
+
+            for (var i = _ownedOverlayMaterials.Count - 1; i >= 0; i--)
             {
-                if (material != null)
-                    UnityEngine.Object.Destroy(material);
+                var material = _ownedOverlayMaterials[i];
+
+                try
+                {
+                    if (material != null)
+                        UnityEngine.Object.Destroy(material);
+
+                    _ownedOverlayMaterials.RemoveAt(i);
+                }
+                catch (System.Exception ex)
+                {
+                    failed = true;
+                    Log.Error("GroundOverlay: failed to destroy owned material. " + ex);
+                }
             }
 
-            _ownedOverlayMaterials.Clear();
+            if (failed)
+                throw new System.InvalidOperationException("One or more owned overlay materials could not be destroyed.");
+
             _zoningMaterials.Clear();
             _roadMaterials.Clear();
             _pathMaterials.Clear();
@@ -272,6 +341,7 @@ namespace CityTimelineMod.Rendering
             _zoningOfficeFamilyMaterials.Clear();
             _zoningParkingFamilyMaterials.Clear();
             _zoningFallbackFamilyMaterials.Clear();
+
         }
 
 
@@ -314,12 +384,12 @@ namespace CityTimelineMod.Rendering
         private Material CreateRailwayMaterial(byte red, byte green, byte blue, float opacityScale)
         {
             var alpha = Mathf.Clamp01(_config.RailwayOpacity * opacityScale);
-            return OverlayMaterialFactory.Create(new Color32(red, green, blue, (byte)Mathf.RoundToInt(alpha * 255f)));
+            return CreateOwnedOverlayMaterial(new Color32(red, green, blue, (byte)Mathf.RoundToInt(alpha * 255f)));
         }
 
-        private static Material CreateServiceMaterial(byte red, byte green, byte blue, float alpha)
+        private Material CreateServiceMaterial(byte red, byte green, byte blue, float alpha)
         {
-            return OverlayMaterialFactory.Create(
+            return CreateOwnedOverlayMaterial(
                 new Color32(red, green, blue, (byte)Mathf.RoundToInt(Mathf.Clamp01(alpha) * 255f))
             );
         }

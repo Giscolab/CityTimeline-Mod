@@ -12,6 +12,10 @@ namespace CityTimelineMod.Config
     {
         internal bool UseGeoJsonCenter = true;
         internal bool ModEnabled = true;
+        internal bool LargeMapEnabled = false;
+        internal bool PlayableWorldEnabled = false;
+        internal bool IsReliable = true;
+        internal string ReliabilityError = null;
         internal double OriginLon = -117.795;
         internal double OriginLat = 33.7025;
 

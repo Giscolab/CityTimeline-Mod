@@ -58,14 +58,14 @@ namespace CityTimelineMod.Config
                 if (!string.IsNullOrWhiteSpace(writableDirectory))
                     Directory.CreateDirectory(writableDirectory);
 
-                if (File.Exists(writablePath))
+                if (IsFilePresentStrict(writablePath))
                     return writablePath;
 
                 var legacyPath = string.IsNullOrWhiteSpace(modDir)
                     ? null
                     : Path.Combine(modDir, "config.json");
 
-                if (!string.IsNullOrWhiteSpace(legacyPath) && File.Exists(legacyPath))
+                if (!string.IsNullOrWhiteSpace(legacyPath) && IsFilePresentStrict(legacyPath))
                 {
                     File.Copy(legacyPath, writablePath, false);
                     Log.Info(
@@ -76,6 +76,26 @@ namespace CityTimelineMod.Config
             }
 
             return writablePath;
+        }
+
+        private static bool IsFilePresentStrict(string path)
+        {
+            try
+            {
+                var attributes = File.GetAttributes(path);
+                if ((attributes & FileAttributes.Directory) != 0)
+                    throw new IOException("Expected a configuration file but found a directory: " + path);
+
+                return true;
+            }
+            catch (FileNotFoundException)
+            {
+                return false;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return false;
+            }
         }
 
         internal static string GetBundledDefaultConfigPath(string modDir)

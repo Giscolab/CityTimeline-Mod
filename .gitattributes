@@ -1,2 +1,20 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Normalize repository text in the index and keep cross-platform sources LF.
+* text=auto eol=lf
+
+# Windows command scripts keep their native line endings.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Never run line-ending conversion on binary assets or build artifacts.
+*.png binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.dll binary
+*.pdb binary
+*.zip binary

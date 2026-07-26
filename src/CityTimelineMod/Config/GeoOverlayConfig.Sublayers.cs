@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace CityTimelineMod.Config
@@ -25,14 +26,30 @@ namespace CityTimelineMod.Config
         private void LoadOverlaySublayerSettings(JObject root)
         {
             OverlaySublayerVisibility.Clear();
-            var settings = root != null ? root["overlaySublayers"] as JObject : null;
-            if (settings == null)
+            var token = GetToken(root, "overlaySublayers");
+            if (token == null)
                 return;
+
+            var settings = token as JObject;
+            if (settings == null)
+                throw new JsonSerializationException(
+                    "Config value 'overlaySublayers' must be an object; found " +
+                    token.Type + "."
+                );
 
             foreach (var property in settings.Properties())
             {
-                if (property.Value != null && property.Value.Type == JTokenType.Boolean)
-                    OverlaySublayerVisibility[property.Name] = property.Value.Value<bool>();
+                if (property.Value == null || property.Value.Type != JTokenType.Boolean)
+                {
+                    throw new JsonSerializationException(
+                        "Config value 'overlaySublayers." + property.Name +
+                        "' must be boolean; found " +
+                        (property.Value == null ? "missing" : property.Value.Type.ToString()) +
+                        "."
+                    );
+                }
+
+                OverlaySublayerVisibility[property.Name] = property.Value.Value<bool>();
             }
         }
 
