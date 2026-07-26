@@ -16,29 +16,50 @@ namespace CityTimelineMod
             // This IMGUI controller is legacy. Keeping Install as a cleanup-only
             // compatibility entry point prevents older bootstrap code from
             // recreating it during a hot reload.
-            Uninstall();
-            Log.Info("Legacy CityTimelineMod runtime controller remains disabled.");
+            if (Uninstall())
+            {
+                Log.Info("Legacy CityTimelineMod runtime controller remains disabled.");
+            }
+            else
+            {
+                Log.Error(
+                    "Legacy CityTimelineMod runtime controller cleanup remains pending."
+                );
+            }
         }
 
-        internal static void Uninstall()
+        internal static bool Uninstall()
         {
             var roots = new Dictionary<int, GameObject>();
+            var complete = true;
 
             try
             {
                 var controllers = Resources.FindObjectsOfTypeAll<CityTimelineRuntimeController>();
                 foreach (var controller in controllers)
                 {
-                    if (controller != null &&
-                        controller.gameObject != null &&
-                        controller.gameObject.scene.IsValid())
+                    try
                     {
-                        roots[controller.gameObject.GetInstanceID()] = controller.gameObject;
+                        if (controller != null &&
+                            controller.gameObject != null &&
+                            controller.gameObject.scene.IsValid())
+                        {
+                            roots[controller.gameObject.GetInstanceID()] = controller.gameObject;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        complete = false;
+                        Log.Error(
+                            "Legacy CityTimelineMod runtime controller instance " +
+                            "inspection failed: " + ex
+                        );
                     }
                 }
             }
             catch (Exception ex)
             {
+                complete = false;
                 Log.Error("Legacy CityTimelineMod runtime controller component discovery failed: " + ex);
             }
 
@@ -47,29 +68,41 @@ namespace CityTimelineMod
                 var gameObjects = Resources.FindObjectsOfTypeAll<GameObject>();
                 foreach (var gameObject in gameObjects)
                 {
-                    if (gameObject == null || !gameObject.scene.IsValid())
-                        continue;
+                    try
+                    {
+                        if (gameObject == null || !gameObject.scene.IsValid())
+                            continue;
 
-                    var isCurrentRoot = string.Equals(
-                        gameObject.name,
-                        RootName,
-                        StringComparison.Ordinal
-                    );
-                    var isDisposedRoot = gameObject.name != null &&
-                        gameObject.name.StartsWith(
-                            RootName + "_Disposed_",
+                        var isCurrentRoot = string.Equals(
+                            gameObject.name,
+                            RootName,
                             StringComparison.Ordinal
                         );
+                        var isDisposedRoot = gameObject.name != null &&
+                            gameObject.name.StartsWith(
+                                RootName + "_Disposed_",
+                                StringComparison.Ordinal
+                            );
 
-                    if ((isCurrentRoot || isDisposedRoot) &&
-                        HasCtmControllerComponent(gameObject))
+                        if ((isCurrentRoot || isDisposedRoot) &&
+                            HasCtmControllerComponent(gameObject))
+                        {
+                            roots[gameObject.GetInstanceID()] = gameObject;
+                        }
+                    }
+                    catch (Exception ex)
                     {
-                        roots[gameObject.GetInstanceID()] = gameObject;
+                        complete = false;
+                        Log.Error(
+                            "Legacy CityTimelineMod runtime controller root " +
+                            "inspection failed: " + ex
+                        );
                     }
                 }
             }
             catch (Exception ex)
             {
+                complete = false;
                 Log.Error("Legacy CityTimelineMod runtime controller root discovery failed: " + ex);
             }
 
@@ -89,9 +122,12 @@ namespace CityTimelineMod
                 }
                 catch (Exception ex)
                 {
+                    complete = false;
                     Log.Error("Legacy CityTimelineMod runtime controller teardown failed: " + ex);
                 }
             }
+
+            return complete;
         }
 
         private static bool HasCtmControllerComponent(GameObject root)
