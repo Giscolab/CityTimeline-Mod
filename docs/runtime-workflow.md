@@ -4,10 +4,10 @@ Cette page documente le workflow runtime local actuel de `CityTimelineMod` pour 
 
 ## Configuration lue au runtime
 
-Le jeu lit la configuration runtime déployée dans le dossier local du mod :
+Le mod lit et écrit la configuration utilisateur persistante suivante :
 
 ```text
-%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\CityTimelineMod\config.json
+%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\ModsSettings\CityTimelineMod\config.json
 ```
 
 Le fichier `resources/defaults/config.json` du dépôt sert de valeur par défaut versionnée. Le workflow local courant distingue donc :
@@ -15,14 +15,16 @@ Le fichier `resources/defaults/config.json` du dépôt sert de valeur par défau
 | Élément | Rôle |
 | --- | --- |
 | `repo/resources/defaults/config.json` | Configuration par défaut suivie par Git. |
-| `runtime/config.json` | Configuration réellement lue par CS2 au chargement du mod. |
-| `scripts/deploy-local.ps1` | Déploie le mod localement et préserve la configuration runtime existante. |
+| `%USERPROFILE%/AppData/LocalLow/Colossal Order/Cities Skylines II/ModsSettings/CityTimelineMod/config.json` | Configuration utilisateur réellement lue et écrite au chargement du mod. |
+| `scripts/deploy.ps1` | Déploie les artefacts du dépôt sans écraser la configuration utilisateur sous `ModsSettings`. |
 
 ## Interrupteurs runtime
 
 | Clé | Effet |
 | --- | --- |
 | `modEnabled` | Active ou désactive le mod complet au prochain chargement du mod. Si la valeur change pendant que CS2 tourne, redémarrer le jeu ou recharger le mod pour appliquer proprement l'état global. |
+| `largeMapEnabled` | Active le module expérimental LargeMap au prochain chargement. La valeur par défaut est `false`. |
+| `playableWorldEnabled` | Active le module expérimental PlayableWorld au prochain chargement. La valeur par défaut est `false`; le module dépend de LargeMap. |
 | `showOverlayHud` | Affiche ou masque seulement le HUD debug. Cette clé ne désactive pas le mod, les données, ni le rendu principal. |
 | `verboseOverlayLogs` | Contrôle les logs détaillés de l'overlay. `false` garde les logs runtime plus courts ; `true` active davantage de détails utiles pour diagnostiquer le rendu et les reconstructions. |
 
@@ -30,32 +32,30 @@ Le fichier `resources/defaults/config.json` du dépôt sert de valeur par défau
 
 | Composant | Rôle actuel |
 | --- | --- |
-| `CityTimelineRuntimeController` | Contrôleur global local de développement. Il lit l'état runtime, expose les bascules locales de développement et centralise les actions globales comme l'activation ou la désactivation via `modEnabled`. |
+| `CityTimelineUISystem` | Système CoHTML actif. Il expose les bindings du HUD et respecte le gate runtime du snapshot de démarrage. |
 | `GeoDebugOverlay` | Overlay de debug et de calibration séparé. Il gère le rendu de contrôle, le HUD de debug/calibration et les reconstructions live de l'overlay. |
+| `CityTimelineRuntimeController` | Composant historique non réactivé. Le bootstrap supprime seulement les anciennes instances éventuellement laissées par un hot reload. |
 
-`CityTimelineRuntimeController` et `GeoDebugOverlay` ne représentent pas la même responsabilité :
+Le bootstrap produit un snapshot strict unique avant d'ouvrir le gate runtime :
 
-- `CityTimelineRuntimeController` pilote l'état runtime global local du mod ;
-- `GeoDebugOverlay` pilote l'affichage de debug, la calibration visuelle et les contrôles live de l'overlay.
+- `CityTimelineUISystem` publie les bindings CoHTML seulement lorsque le gate est ouvert ;
+- `GeoDebugOverlay` pilote l'affichage, la calibration visuelle et les reconstructions live ;
+- `CityTimelineRuntimeController` n'est pas réinstallé.
 
 ## Outils locaux
 
 | Script | Usage |
 | --- | --- |
-| `scripts/runtime/audit-runtime.ps1` | Audit runtime local. Par défaut, il inspecte l'état Git, les fichiers runtime, `mod.json`, les configurations repo/runtime, le bundle GeoJSON et les logs. Avec `-Build`, il lance aussi une compilation pendant l'audit. |
-| `scripts/runtime/set-runtime-enabled.ps1` | Toggle CLI de `modEnabled` dans le `config.json` runtime déployé. Le changement s'applique proprement au prochain chargement du mod. |
+| `scripts/deploy.ps1` | Déploiement local explicite. À utiliser seulement lorsqu'un déploiement dans le dossier live du jeu est voulu. |
 
 Exemples :
 
 ```powershell
-.\scripts\runtime\audit-runtime.ps1
-.\scripts\runtime\audit-runtime.ps1 -Build
-.\scripts\runtime\set-runtime-enabled.ps1 -Enabled $false
-.\scripts\runtime\set-runtime-enabled.ps1 -Enabled $true
+.\scripts\deploy.ps1
 ```
 
 ## Limites actuelles
 
-L'intégration aux Options officielles CS2 existe, mais elle n'est pas encore l'unique source d'état. Les Options, le fichier `config.json`, les scripts locaux et les HUD de développement peuvent encore agir sur des chemins concurrents.
+Les Options officielles et les HUD écrivent le même `config.json` sous `ModsSettings`; le démarrage produit ensuite un snapshot strict unique. `modEnabled`, `largeMapEnabled` et `playableWorldEnabled` restent des décisions de cycle de vie appliquées au prochain chargement du mod.
 
 Le workflow runtime local ne repose pas sur de la reflection DLL pour charger ou détourner le mod, et ne met en place aucun contournement de Smart App Control. Les actions prévues restent dans le cadre du déploiement local du mod, de la configuration runtime et des outils de diagnostic du dépôt.

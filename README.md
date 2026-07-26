@@ -2,7 +2,7 @@
 
 Mod de développement pour Cities: Skylines II.
 
-Il charge un bundle GeoJSON déjà généré, affiche ses couches sur la carte du jeu, aide à régler le calage terrain et permet de tester un import manuel limité de routes.
+Il charge un bundle GeoJSON déjà généré, affiche ses couches sur la carte du jeu, aide à régler le calage terrain et peut activer explicitement les modules expérimentaux LargeMap 57,344 km et PlayableWorld. L’ancien import runtime automatique des routes n’est pas inclus dans l’assembly distribué.
 
 Le mod ne génère pas les données et ne télécharge rien. Le bundle GeoJSON doit être préparé avant de lancer le jeu.
 
@@ -43,10 +43,10 @@ Le script compile le mod, compile l’UI, puis déploie les fichiers dans :
 Le fichier réellement lu par le jeu est :
 
 ```text
-%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\Mods\CityTimelineMod\config.json
+%USERPROFILE%\AppData\LocalLow\Colossal Order\Cities Skylines II\ModsSettings\CityTimelineMod\config.json
 ```
 
-Le déploiement conserve ce `config.json` runtime s’il existe déjà.
+Le `config.json` placé avec le mod est uniquement la valeur par défaut et la source de migration d’une ancienne installation. Le fichier sous `ModsSettings` est l’état utilisateur réellement lu et écrit ; les builds et packages ne doivent jamais l’écraser.
 
 ## Bundle GeoJSON
 
@@ -88,51 +88,45 @@ Configuration via catalogue :
 
 ## Utilisation
 
-- `Alt + H` : ouvrir ou fermer le HUD principal.
-- `Alt + T` : ouvrir ou fermer le mini contrôleur.
+- `Alt + H` : ouvrir ou fermer le HUD IMGUI de rendu et de calage.
+- `Alt + Z` par défaut, ou le bouton `CTM` : ouvrir ou fermer le HUD React/CoHTML.
 - `Appliquer / reconstruire` : reconstruire l’overlay après un changement.
 - `Sauvegarder visuels` : écrire les réglages dans le `config.json` runtime.
 - `Recharger visuels` : relire le `config.json` runtime.
 
-L’import de routes est expérimental. Commencer avec un petit budget, par exemple `runtimeRoadImportMaxSegments: 5`, puis augmenter progressivement.
+L’ancien import runtime des routes est exclu du build. Les modules expérimentaux
+LargeMap et PlayableWorld sont désactivés par défaut et ne sont appliqués qu’au
+prochain chargement après activation explicite de `largeMapEnabled` et
+`playableWorldEnabled`.
 
 ## Commandes utiles
 
 Build C# seul :
 
 ```powershell
-dotnet build .\src\CityTimelineMod\CityTimelineMod.csproj -c Debug
+$isolatedMods = Join-Path (Resolve-Path .) "src\CityTimelineMod\obj\debug-staging"
+dotnet build .\src\CityTimelineMod\CityTimelineMod.csproj `
+  -c Debug `
+  -p:LocalModsPath="$isolatedMods"
 ```
+
+Le projet CS2 déploie automatiquement après compilation. Fournir un
+`LocalModsPath` isolé évite donc de remplacer le mod live pendant un simple
+contrôle de build.
 
 Build UI seul :
 
 ```powershell
 cd .\src\CityTimelineMod.UI
-npm install
-npm run build
+npm.cmd ci
+npm.cmd run build
 ```
 
-Activer ou désactiver le mod :
+Les options officielles ou le fichier suivant pilotent le prochain démarrage :
 
 ```powershell
-.\scripts\runtime\set-runtime-enabled.ps1 -Enabled $true
-.\scripts\runtime\set-runtime-enabled.ps1 -Enabled $false
-```
-
-Changer le preset d’overlay :
-
-```powershell
-.\scripts\runtime\set-overlay-preset.ps1 -Preset all
-.\scripts\runtime\set-overlay-preset.ps1 -Preset roads
-.\scripts\runtime\set-overlay-preset.ps1 -Preset water
-.\scripts\runtime\set-overlay-preset.ps1 -Preset zoning
-.\scripts\runtime\set-overlay-preset.ps1 -Preset off
-```
-
-Audit runtime :
-
-```powershell
-.\scripts\runtime\audit-runtime.ps1
+$config = "$env:USERPROFILE\AppData\LocalLow\Colossal Order\Cities Skylines II\ModsSettings\CityTimelineMod\config.json"
+Get-Content -LiteralPath $config
 ```
 
 ## Logs
@@ -140,7 +134,7 @@ Audit runtime :
 ```powershell
 $log = "$env:USERPROFILE\AppData\LocalLow\Colossal Order\Cities Skylines II\Player.log"
 Get-Content $log -Wait -Tail 700 |
-  Select-String "\[RoadImport\]|\[RoadTopology\]|\[RoadImportDiag\]|Exception|Error"
+  Select-String "CityTimelineMod|LargeMap|PlayableWorld|Exception|Error"
 ```
 
 Documentation plus détaillée : `docs/`.
