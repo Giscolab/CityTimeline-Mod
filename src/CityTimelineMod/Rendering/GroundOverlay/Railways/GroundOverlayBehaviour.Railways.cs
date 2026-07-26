@@ -187,10 +187,10 @@ namespace CityTimelineMod.Rendering
             if (!_railwaySettingsSavePending || Time.realtimeSinceStartup < _railwaySettingsSaveDeadline)
                 return;
 
-            _railwaySettingsSavePending = false;
+            if (_config == null || !_config.SaveVisualSettingsToConfig())
+                return;
 
-            if (_config != null)
-                _config.SaveVisualSettingsToConfig();
+            _railwaySettingsSavePending = false;
 
             if (_railwayRebuildPending)
             {
@@ -205,14 +205,7 @@ namespace CityTimelineMod.Rendering
 
         private void OnDestroy()
         {
-            if (_railwaySettingsSavePending && _config != null)
-            {
-                _railwaySettingsSavePending = false;
-                _config.SaveVisualSettingsToConfig();
-            }
-
-            _railwayRebuildPending = false;
-            _railwayRebuildReason = null;
+            TeardownOverlayResources();
         }
 
         private static string NormalizeRailwaySettingKey(string key)

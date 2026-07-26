@@ -124,8 +124,19 @@ export const cohtmlHudVisible$ = bindValue<boolean>(
   false,
 );
 
+export const runtimeAvailable$ = bindValue<boolean>(
+  "CityTimelineMod",
+  "runtimeAvailable",
+  false,
+);
+
 export function CityTimelineHUDButton() {
+  const runtimeAvailable = useValue(runtimeAvailable$);
   const visible = useValue(cohtmlHudVisible$);
+
+  if (!runtimeAvailable) {
+    return null;
+  }
 
   return (
     <Button
@@ -141,9 +152,10 @@ export function CityTimelineHUDButton() {
 }
 
 export function CityTimelineHUDHost() {
+  const runtimeAvailable = useValue(runtimeAvailable$);
   const visible = useValue(cohtmlHudVisible$);
 
-  if (!visible) {
+  if (!runtimeAvailable || !visible) {
     return null;
   }
 

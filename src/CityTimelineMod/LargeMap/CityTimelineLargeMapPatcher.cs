@@ -6,81 +6,99 @@ namespace CityTimelineMod.LargeMap
     internal static class CityTimelineLargeMapPatcher
     {
         private const string HarmonyId = "CityTimelineMod.LargeMap";
+
         private static Harmony _harmony;
-        private static bool _installed;
 
-        internal static void Install()
+        internal static bool Install(bool authorized)
         {
-            if (_installed)
-                return;
+            CityTimelineLargeMapState.Disable();
+            var cleanupComplete = RemoveOwnedPatches("blocked install cleanup");
+            _harmony = null;
 
-            if (!CityTimelineLargeMapState.Enabled)
-            {
-                Util.Log.Info("[LargeMap] disabled.");
-                return;
-            }
+            Util.Log.Error(
+                "[LargeMap] install blocked for Lot 1; no LargeMap patch was installed. " +
+                "authorized=" + authorized +
+                ", runtimeEnabled=" + Mod.RuntimeEnabled +
+                ", cleanupComplete=" + cleanupComplete + "."
+            );
 
-            try
-            {
-                _harmony = new Harmony(HarmonyId);
-
-                _harmony
-                    .CreateClassProcessor(typeof(LargeMapTerrainSystemPatches))
-                    .Patch();
-
-                LargeMapCellMapSystemPatches.Apply(_harmony);
-                LargeMapUnifiedWorldPatches.Apply(_harmony);
-
-                _installed = true;
-
-                Util.Log.Info(
-                    "[LargeMap] unified 57 km solution installed. " +
-                    "coreValue=" + CityTimelineLargeMapState.CoreValue +
-                    ", mapSizeMeters=" +
-                    CityTimelineLargeMapState.MapSizeMeters
-                );
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    if (_harmony != null)
-                        _harmony.UnpatchAll(HarmonyId);
-                }
-                catch
-                {
-                }
-
-                _harmony = null;
-                _installed = false;
-
-                Util.Log.Error(
-                    "[LargeMap] install failed; all LargeMap patches rolled back: " +
-                    ex
-                );
-            }
+            return false;
         }
 
-        internal static void Uninstall()
+        internal static bool Uninstall()
         {
-            if (!_installed)
-                return;
+            CityTimelineLargeMapState.Disable();
 
+            var rollbackComplete = RemoveOwnedPatches("uninstall");
+            _harmony = null;
+
+            if (rollbackComplete)
+                Util.Log.Info("[LargeMap] uninstalled.");
+            else
+                Util.Log.Error("[LargeMap] uninstall incomplete: owned Harmony patches remain or could not be verified.");
+
+            return rollbackComplete;
+        }
+
+        private static bool RemoveOwnedPatches(string operation)
+        {
             try
             {
-                if (_harmony != null)
-                    _harmony.UnpatchAll(HarmonyId);
-
-                Util.Log.Info("[LargeMap] uninstalled.");
+                var harmony = _harmony ?? new Harmony(HarmonyId);
+                harmony.UnpatchAll(HarmonyId);
             }
             catch (Exception ex)
             {
-                Util.Log.Error("[LargeMap] uninstall failed: " + ex);
+                Util.Log.Error("[LargeMap] " + operation + " UnpatchAll failed: " + ex);
             }
-            finally
+
+            if (!TryCountOwnedPatchedMethods(out var remaining))
             {
-                _installed = false;
-                _harmony = null;
+                Util.Log.Error("[LargeMap] " + operation + " owner verification failed.");
+                return false;
+            }
+
+            if (remaining != 0)
+            {
+                Util.Log.Error(
+                    "[LargeMap] " + operation +
+                    " left owned patched methods=" + remaining + "."
+                );
+                return false;
+            }
+
+            return true;
+        }
+
+        private static bool TryCountOwnedPatchedMethods(out int count)
+        {
+            count = 0;
+
+            try
+            {
+                foreach (var method in Harmony.GetAllPatchedMethods())
+                {
+                    var patchInfo = Harmony.GetPatchInfo(method);
+                    if (patchInfo == null)
+                        continue;
+
+                    foreach (var owner in patchInfo.Owners)
+                    {
+                        if (string.Equals(owner, HarmonyId, StringComparison.Ordinal))
+                        {
+                            count++;
+                            break;
+                        }
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Util.Log.Error("[LargeMap] Harmony owner inspection failed: " + ex);
+                count = 0;
+                return false;
             }
         }
     }

@@ -142,31 +142,112 @@ namespace CityTimelineMod.Rendering
         private void ClearOverlayChildren()
         {
             var children = new List<GameObject>();
+            var failed = false;
 
             for (var i = 0; i < transform.childCount; i++)
                 children.Add(transform.GetChild(i).gameObject);
 
             foreach (var child in children)
             {
-                // Meshes created by OverlayMeshFlusher are native Unity objects;
-                // destroying only the GameObject does not release them promptly.
-                // Built-in primitive meshes (for example "Cube") are shared and
-                // deliberately excluded by the generated "_mesh" suffix.
-                var filters = child.GetComponentsInChildren<MeshFilter>(true);
-                foreach (var filter in filters)
+                var childComplete = true;
+                Batching.OverlayOwnedMesh[] ownerships;
+
+                try
                 {
+                    // Every generated batch mesh carries an ownership component.
+                    ownerships = child.GetComponentsInChildren<Batching.OverlayOwnedMesh>(true);
+                }
+                catch (System.Exception ex)
+                {
+                    childComplete = false;
+                    ownerships = new Batching.OverlayOwnedMesh[0];
+                    Log.Error("GroundOverlay calibration: mesh ownership discovery failed for " + child.name + ". " + ex);
+                }
+
+                for (var i = 0; i < ownerships.Length; i++)
+                {
+                    var ownership = ownerships[i];
+                    if (ownership == null)
+                        continue;
+
+                    try
+                    {
+                        var filter = ownership.GetComponent<MeshFilter>();
+                        ownership.DestroyOwnedMesh();
+
+                        if (filter != null)
+                            filter.sharedMesh = null;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        childComplete = false;
+                        Log.Error("GroundOverlay calibration: owned mesh cleanup failed for " + child.name + ". " + ex);
+                    }
+                }
+
+                MeshFilter[] filters;
+                try
+                {
+                    // Compatibility cleanup for meshes created by an older
+                    // CityTimelineMod instance before the ownership component existed.
+                    filters = child.GetComponentsInChildren<MeshFilter>(true);
+                }
+                catch (System.Exception ex)
+                {
+                    childComplete = false;
+                    filters = new MeshFilter[0];
+                    Log.Error("GroundOverlay calibration: mesh filter discovery failed for " + child.name + ". " + ex);
+                }
+
+                for (var i = 0; i < filters.Length; i++)
+                {
+                    var filter = filters[i];
                     var mesh = filter != null ? filter.sharedMesh : null;
                     if (mesh == null || string.IsNullOrEmpty(mesh.name) || !mesh.name.EndsWith("_mesh"))
                         continue;
 
-                    filter.sharedMesh = null;
-                    UnityEngine.Object.Destroy(mesh);
+                    try
+                    {
+                        UnityEngine.Object.Destroy(mesh);
+                        filter.sharedMesh = null;
+                    }
+                    catch (System.Exception ex)
+                    {
+                        childComplete = false;
+                        Log.Error("GroundOverlay calibration: legacy mesh cleanup failed for " + child.name + ". " + ex);
+                    }
                 }
 
-                UnityEngine.Object.Destroy(child);
+                if (!childComplete)
+                {
+                    failed = true;
+                    try
+                    {
+                        child.SetActive(false);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        Log.Error("GroundOverlay calibration: failed child could not be disabled. " + ex);
+                    }
+
+                    continue;
+                }
+
+                try
+                {
+                    UnityEngine.Object.Destroy(child);
+                }
+                catch (System.Exception ex)
+                {
+                    failed = true;
+                    Log.Error("GroundOverlay calibration: child destruction failed for " + child.name + ". " + ex);
+                }
             }
 
-            Log.Info("GroundOverlay calibration: cleared children=" + children.Count);
+            Log.Info("GroundOverlay calibration: processed children=" + children.Count);
+
+            if (failed)
+                throw new System.InvalidOperationException("One or more overlay children or meshes could not be destroyed.");
         }
 
         private bool CreateOrientedWaterCube(

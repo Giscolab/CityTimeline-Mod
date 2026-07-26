@@ -43,6 +43,7 @@ namespace CityTimelineMod.Rendering
         private static Texture2D _hudTexButton;
         private static Texture2D _hudTexButtonHover;
         private static Texture2D _hudTexButtonActive;
+        private static GUISkin _hudSkin;
 
         private static GUIStyle _hudTabStyle;
         private static GUIStyle _hudTabActiveStyle;
@@ -76,11 +77,23 @@ namespace CityTimelineMod.Rendering
 
         private static Texture2D CreateHudTexture(Color color)
         {
-            var texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
-            texture.hideFlags = HideFlags.HideAndDontSave;
-            texture.SetPixel(0, 0, color);
-            texture.Apply(false, true);
-            return texture;
+            Texture2D texture = null;
+
+            try
+            {
+                texture = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+                texture.hideFlags = HideFlags.HideAndDontSave;
+                texture.SetPixel(0, 0, color);
+                texture.Apply(false, true);
+                return texture;
+            }
+            catch
+            {
+                if (texture != null)
+                    UnityEngine.Object.Destroy(texture);
+
+                throw;
+            }
         }
 
         private static void EnsureHudTextures()
@@ -94,6 +107,66 @@ namespace CityTimelineMod.Rendering
             _hudTexButton = CreateHudTexture(HudBgButton);
             _hudTexButtonHover = CreateHudTexture(HudBgButtonHover);
             _hudTexButtonActive = CreateHudTexture(HudBgButtonActive);
+        }
+
+        private static void DestroyHudResources()
+        {
+            var failed = false;
+
+            _hudTabStyle = null;
+            _hudTabActiveStyle = null;
+            _hudPanelStyle = null;
+            _hudSectionStyle = null;
+            _hudFooterStyle = null;
+            _hudSubblockStyle = null;
+            _hudMeterStyle = null;
+            _hudSwatchLabelStyle = null;
+            _hudLegendHeaderStyle = null;
+
+            try
+            {
+                if (_hudSkin != null)
+                    UnityEngine.Object.Destroy(_hudSkin);
+
+                _hudSkin = null;
+            }
+            catch (Exception ex)
+            {
+                failed = true;
+                Log.Error("GroundOverlay HUD: failed to destroy private GUI skin. " + ex);
+            }
+
+            // A retained skin still owns style references to the textures.
+            // Retry the skin first instead of destroying textures underneath it.
+            if (_hudSkin != null)
+                throw new InvalidOperationException("The private GUI skin could not be destroyed.");
+
+            failed |= !DestroyHudTexture(ref _hudTexWindow);
+            failed |= !DestroyHudTexture(ref _hudTexPanel);
+            failed |= !DestroyHudTexture(ref _hudTexSection);
+            failed |= !DestroyHudTexture(ref _hudTexButton);
+            failed |= !DestroyHudTexture(ref _hudTexButtonHover);
+            failed |= !DestroyHudTexture(ref _hudTexButtonActive);
+
+            if (failed)
+                throw new InvalidOperationException("One or more owned HUD resources could not be destroyed.");
+        }
+
+        private static bool DestroyHudTexture(ref Texture2D texture)
+        {
+            try
+            {
+                if (texture != null)
+                    UnityEngine.Object.Destroy(texture);
+
+                texture = null;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GroundOverlay HUD: failed to destroy owned texture. " + ex);
+                return false;
+            }
         }
 
         private static void ApplyHudStyleState(
@@ -274,6 +347,19 @@ namespace CityTimelineMod.Rendering
             EnsureHudStyles();
         }
 
+        private static GUISkin EnsurePrivateHudSkin(GUISkin source)
+        {
+            if (_hudSkin != null)
+                return _hudSkin;
+
+            if (source == null)
+                return null;
+
+            _hudSkin = UnityEngine.Object.Instantiate(source);
+            _hudSkin.hideFlags = HideFlags.HideAndDontSave;
+            return _hudSkin;
+        }
+
 
         private void NormalizeControlPanelRect()
         {
@@ -343,30 +429,45 @@ namespace CityTimelineMod.Rendering
 
         private void OnGUI()
         {
-            if (_config == null || !_created || !_config.ShowOverlayHud)
+            if (!Mod.RuntimeEnabled || _overlayTeardownRequested ||
+                _config == null || !_created || !_config.ShowOverlayHud)
                 return;
 
-            if (!_controlPanelLogOnce)
+            var previousSkin = GUI.skin;
+            var privateSkin = EnsurePrivateHudSkin(previousSkin);
+            if (privateSkin == null)
+                return;
+
+            try
             {
-                _controlPanelLogOnce = true;
-                Log.Info("GroundOverlay HUD panel: opened.");
+                GUI.skin = privateSkin;
+
+                if (!_controlPanelLogOnce)
+                {
+                    _controlPanelLogOnce = true;
+                    Log.Info("GroundOverlay HUD panel: opened.");
+                }
+
+                ApplyControlPanelGuiSkin();
+                NormalizeControlPanelRect();
+
+                RefreshControlPanelMouseCapture();
+
+                _controlPanelRect = GUI.ModalWindow(
+                    93014,
+                    _controlPanelRect,
+                    DrawControlPanelWindow,
+                    "CityTimelineMod - Panneau HUD"
+                );
+
+                RefreshControlPanelMouseCapture();
+                ConsumeMouseEventsInsideControlPanel();
             }
-
-            ApplyControlPanelGuiSkin();
-            NormalizeControlPanelRect();
-
-            RefreshControlPanelMouseCapture();
-
-            _controlPanelRect = GUI.ModalWindow(
-                93014,
-                _controlPanelRect,
-                DrawControlPanelWindow,
-                "CityTimelineMod - Panneau HUD"
-            );
-
-            RefreshControlPanelMouseCapture();
-            ConsumeMouseEventsInsideControlPanel();
-			}
+            finally
+            {
+                GUI.skin = previousSkin;
+            }
+		}
 
 
         private void DrawControlPanelWindow(int windowId)
@@ -1435,25 +1536,31 @@ namespace CityTimelineMod.Rendering
 
             if (GUILayout.Button("Sauvegarder visuels", GUILayout.Height(28f)))
             {
-                _config.SaveVisualSettingsToConfig();
-                _visualSettingsDirty = false;
-                _visualSettingsStatusMessage = "Visuels sauvegardés dans config.json.";
-                Log.Info("GroundOverlay HUD panel: visual settings saved from HUD.");
+                if (_config.SaveVisualSettingsToConfig())
+                {
+                    _visualSettingsDirty = false;
+                    _visualSettingsStatusMessage = "Visuels sauvegardés dans config.json.";
+                    Log.Info("GroundOverlay HUD panel: visual settings saved from HUD.");
+                }
+                else
+                {
+                    _visualSettingsStatusMessage = "Échec de sauvegarde des visuels.";
+                    Log.Error("GroundOverlay HUD panel: visual settings save failed.");
+                }
             }
 
-            if (GUILayout.Button("Recharger visuels", GUILayout.Height(28f)))
+            if (GUILayout.Button("Réappliquer session", GUILayout.Height(28f)))
             {
-                _config.LoadVisualSettingsFromConfig();
                 SyncVisibilityStateFromConfig();
                 SyncModernLayerStateFromConfig();
                 _visualSettingsDirty = false;
-                _visualSettingsStatusMessage = "Visuels rechargés depuis config.json.";
+                _visualSettingsStatusMessage = "Snapshot runtime réappliqué.";
                 _controlPanelRebuildPending = false;
 
-                Log.Info("GroundOverlay HUD panel: visual settings reloaded from config.");
+                Log.Info("GroundOverlay HUD panel: runtime snapshot reapplied without re-reading config.json.");
 
-                ApplyOverlayRebuildSafetyGuard("HUD reload visual settings");
-                RequestOverlayRebuild("HUD reload visual settings", true);
+                ApplyOverlayRebuildSafetyGuard("HUD reapply runtime snapshot");
+                RequestOverlayRebuild("HUD reapply runtime snapshot", true);
             }
 
             GUILayout.EndHorizontal();

@@ -18,47 +18,112 @@ namespace CityTimelineMod
     {
         private static bool _ran = false;
 
-        internal static void RunOnce()
+        internal static GeoOverlayConfig LoadRuntimeConfigSnapshot()
         {
-            if (_ran)
-                return;
+            var modDir = ResolveModDirectory();
+            EnsureBundledConfig(modDir);
+            return GeoOverlayConfig.Load(modDir);
+        }
 
-            _ran = true;
-            LoadAndInstallActiveBundle();
+        internal static bool RunOnce(GeoOverlayConfig config)
+        {
+            if (!Mod.RuntimeEnabled)
+            {
+                Log.Info("GeoBundleBootstrap: runtime gate is closed; bootstrap skipped.");
+                return false;
+            }
+
+            if (_ran && GeoDebugOverlay.IsInstalled)
+                return true;
+
+            _ran = false;
+            var installed = LoadAndInstallActiveBundle(config);
+            _ran = installed && GeoDebugOverlay.IsInstalled;
+            return _ran;
+        }
+
+        internal static void Reset()
+        {
+            _ran = false;
         }
 
         internal static void ReloadActiveBundle(string activeBundleId)
         {
+            if (!Mod.RuntimeEnabled)
+            {
+                Log.Info("GeoBundleBootstrap: runtime gate is closed; reload skipped.");
+                return;
+            }
+
             try
             {
                 var modDir = ResolveModDirectory();
                 EnsureBundledConfig(modDir);
 
-                if (!UpdateActiveBundleIdInConfig(modDir, activeBundleId))
+                var config = Mod.RuntimeConfig;
+                if (config == null || !config.IsReliable)
+                {
+                    Log.Error("GeoBundleBootstrap: reload blocked because the runtime snapshot is unavailable.");
+                    return;
+                }
+
+                _ran = false;
+                if (!GeoDebugOverlay.Uninstall())
+                {
+                    Log.Error("GeoBundleBootstrap: reload blocked until stale overlay teardown succeeds.");
+                    return;
+                }
+
+                string canonicalId;
+                if (!UpdateActiveBundleIdInConfig(
+                    modDir,
+                    config.BundlesRoot,
+                    activeBundleId,
+                    out canonicalId
+                ))
                     return;
 
+                config.UseBundleIndex = true;
+                config.ActiveBundleId = canonicalId;
+
                 Log.Info("GeoBundleBootstrap: reload requested activeBundleId=" + activeBundleId);
-                LoadAndInstallActiveBundle();
+                _ran = LoadAndInstallActiveBundle(config) && GeoDebugOverlay.IsInstalled;
             }
             catch (Exception ex)
             {
+                _ran = false;
                 Log.Error("GeoBundleBootstrap: reload failed. " + ex);
             }
         }
 
-        private static void LoadAndInstallActiveBundle()
+        private static bool LoadAndInstallActiveBundle(GeoOverlayConfig config)
         {
+            if (!Mod.RuntimeEnabled)
+                return false;
+
             try
             {
                 var modDir = ResolveModDirectory();
-                EnsureBundledConfig(modDir);
 
-                var config = GeoOverlayConfig.Load(modDir);
+                if (config == null || !config.IsReliable)
+                {
+                    Log.Error("GeoBundleBootstrap: unreliable config; overlay bootstrap blocked.");
+                    return false;
+                }
 
                 if (!config.ModEnabled)
                 {
                     Log.Info("CityTimelineMod disabled by config: modEnabled=false. Overlay bootstrap skipped.");
-                    return;
+                    return false;
+                }
+
+                if (!config.PrepareBundle(modDir))
+                {
+                    Log.Error(
+                        "GeoBundleBootstrap: active bundle preparation failed; " +
+                        "the runtime configuration remains reliable but no overlay will be installed."
+                    );
+                    return false;
                 }
 
                 string geojsonRoot;
@@ -73,20 +138,20 @@ namespace CityTimelineMod
                                 ? "unknown bundle resolution error."
                                 : config.BundleIndexResolutionError)
                         );
-                        return;
+                        return false;
                     }
 
                     if (string.IsNullOrWhiteSpace(config.PackPath))
                     {
                         Log.Error("GeoBundleBootstrap: validated indexed bundle has no GeoJSON packPath.");
-                        return;
+                        return false;
                     }
 
                     var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
                     if (!Directory.Exists(candidateGeojsonRoot))
                     {
                         Log.Error("GeoBundleBootstrap: validated indexed GeoJSON folder disappeared: " + candidateGeojsonRoot);
-                        return;
+                        return false;
                     }
 
                     geojsonRoot = candidateGeojsonRoot;
@@ -131,19 +196,19 @@ namespace CityTimelineMod
                 if (!File.Exists(lines))
                 {
                     Log.Error("GeoBundleBootstrap: required water lines file not found: " + lines);
-                    return;
+                    return false;
                 }
 
                 if (!File.Exists(areas))
                 {
                     Log.Error("GeoBundleBootstrap: required water areas file not found: " + areas);
-                    return;
+                    return false;
                 }
 
                 if (!File.Exists(zoning))
                 {
                     Log.Error("GeoBundleBootstrap: required zoning file not found: " + zoning);
-                    return;
+                    return false;
                 }
 
                 var lineStats = GeoJson.AnalyzeLines(lines);
@@ -282,7 +347,7 @@ namespace CityTimelineMod
                 Log.Info("Total zoning polygons loaded: " + zoningPolygons.Count);
                 LogZoningSummary(zoningPolygons);
 
-                GeoDebugOverlay.Install(
+                return GeoDebugOverlay.Install(
                     renderWaterLineGeometries,
                     renderWaterAreaOutlines,
                     renderRoadGeometries,
@@ -299,13 +364,34 @@ namespace CityTimelineMod
             catch (Exception ex)
             {
                 Log.Error(ex.ToString());
+                return false;
             }
         }
 
         private static void EnsureBundledConfig(string modDir)
         {
             Directory.CreateDirectory(modDir);
-            ExtractBundledFile("config.json", Path.Combine(modDir, "config.json"));
+            var configPath = Path.Combine(modDir, "config.json");
+
+            try
+            {
+                var attributes = File.GetAttributes(configPath);
+                if ((attributes & FileAttributes.Directory) != 0)
+                    throw new IOException("Expected config.json but found a directory: " + configPath);
+
+                // An existing empty or malformed file is user/runtime state and
+                // must reach the strict parser. Never silently replace it with
+                // the embedded default.
+                return;
+            }
+            catch (FileNotFoundException)
+            {
+            }
+            catch (DirectoryNotFoundException)
+            {
+            }
+
+            ExtractBundledFile("config.json", configPath);
         }
 
         private static void EnsureBundledLegacyGeojson(string targetRoot)
@@ -364,53 +450,64 @@ namespace CityTimelineMod
             Log.Info("GeoBundleBootstrap: extracted bundled file: " + outputPath);
         }
 
-        private static bool UpdateActiveBundleIdInConfig(string modDir, string activeBundleId)
+        private static bool UpdateActiveBundleIdInConfig(
+            string modDir,
+            string configuredBundlesRoot,
+            string activeBundleId,
+            out string updatedCanonicalId
+        )
         {
+            updatedCanonicalId = "";
+
             if (string.IsNullOrWhiteSpace(activeBundleId))
             {
                 Log.Error("GeoBundleBootstrap: cannot reload empty activeBundleId.");
                 return false;
             }
 
-            var configPath = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
-
-            if (!File.Exists(configPath))
-            {
-                Log.Error("GeoBundleBootstrap: config.json not found: " + configPath);
-                return false;
-            }
-
             try
             {
-                var root = JObject.Parse(File.ReadAllText(configPath));
-                var configuredBundlesRoot = root["bundlesRoot"] != null
-                    ? root["bundlesRoot"].ToString()
-                    : "data/exports/bundles";
+                var configPath = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
+                string canonicalId = null;
+                JObject ignoredRoot;
+                string updateError;
 
-                string canonicalId;
-                string pointerError;
-                if (!BundleResolver.TryUpdateActiveBundlePointer(
-                    configuredBundlesRoot,
-                    modDir,
-                    activeBundleId,
-                    out canonicalId,
-                    out pointerError))
+                if (!GeoOverlayConfig.TryUpdateRuntimeConfigFile(
+                    configPath,
+                    root =>
+                    {
+                        var snapshotBundlesRoot = string.IsNullOrWhiteSpace(configuredBundlesRoot)
+                            ? "data/exports/bundles"
+                            : configuredBundlesRoot;
+
+                        string pointerError;
+                        if (!BundleResolver.TryUpdateActiveBundlePointer(
+                            snapshotBundlesRoot,
+                            modDir,
+                            activeBundleId,
+                            out canonicalId,
+                            out pointerError))
+                        {
+                            throw new InvalidOperationException(
+                                "Active bundle selection rejected. " + pointerError
+                            );
+                        }
+
+                        root["useBundleIndex"] = true;
+                        // Keep this field for older indexes; bundle_index.json
+                        // remains the authoritative pointer.
+                        root["activeBundleId"] = canonicalId;
+                    },
+                    out ignoredRoot,
+                    out updateError
+                ))
                 {
-                    Log.Error("GeoBundleBootstrap: active bundle selection rejected. " + pointerError);
+                    Log.Error("GeoBundleBootstrap: failed to update activeBundleId in config. " + updateError);
                     return false;
                 }
 
-                root["useBundleIndex"] = true;
-                // Garde ce champ pour la compatibilite avec les anciens index. Le
-                // pointeur bundle_index.json mis a jour ci-dessus reste prioritaire.
-                root["activeBundleId"] = canonicalId;
-
-                File.WriteAllText(
-                    configPath,
-                    root.ToString(Newtonsoft.Json.Formatting.Indented),
-                    new System.Text.UTF8Encoding(false)
-                );
                 Log.Info("GeoBundleBootstrap: config activeBundleId saved=" + canonicalId);
+                updatedCanonicalId = canonicalId;
                 return true;
             }
             catch (Exception ex)

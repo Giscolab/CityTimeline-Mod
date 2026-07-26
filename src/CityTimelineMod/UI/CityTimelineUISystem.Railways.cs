@@ -65,24 +65,24 @@ namespace CityTimelineMod.UI
                 "Aucune donnée ferroviaire disponible dans ce bundle."
             );
 
-            AddBinding(_railwayAvailableBinding);
-            AddBinding(_railwayVisibleBinding);
-            AddBinding(_railwayOpacityBinding);
-            AddBinding(_railwayThicknessBinding);
-            AddBinding(_railwayTrainVisibleBinding);
-            AddBinding(_railwayTramVisibleBinding);
-            AddBinding(_railwayLightRailVisibleBinding);
-            AddBinding(_railwaySubwayVisibleBinding);
-            AddBinding(_railwayServiceVisibleBinding);
-            AddBinding(_railwayTunnelsVisibleBinding);
-            AddBinding(_railwayTrainCountBinding);
-            AddBinding(_railwayTramCountBinding);
-            AddBinding(_railwayLightRailCountBinding);
-            AddBinding(_railwaySubwayCountBinding);
-            AddBinding(_railwayServiceCountBinding);
-            AddBinding(_railwayTunnelCountBinding);
-            AddBinding(_railwayTotalCountBinding);
-            AddBinding(_railwayStatusBinding);
+            AddRuntimeBinding(_railwayAvailableBinding);
+            AddRuntimeBinding(_railwayVisibleBinding);
+            AddRuntimeBinding(_railwayOpacityBinding);
+            AddRuntimeBinding(_railwayThicknessBinding);
+            AddRuntimeBinding(_railwayTrainVisibleBinding);
+            AddRuntimeBinding(_railwayTramVisibleBinding);
+            AddRuntimeBinding(_railwayLightRailVisibleBinding);
+            AddRuntimeBinding(_railwaySubwayVisibleBinding);
+            AddRuntimeBinding(_railwayServiceVisibleBinding);
+            AddRuntimeBinding(_railwayTunnelsVisibleBinding);
+            AddRuntimeBinding(_railwayTrainCountBinding);
+            AddRuntimeBinding(_railwayTramCountBinding);
+            AddRuntimeBinding(_railwayLightRailCountBinding);
+            AddRuntimeBinding(_railwaySubwayCountBinding);
+            AddRuntimeBinding(_railwayServiceCountBinding);
+            AddRuntimeBinding(_railwayTunnelCountBinding);
+            AddRuntimeBinding(_railwayTotalCountBinding);
+            AddRuntimeBinding(_railwayStatusBinding);
 
             _setRailwayVisibleBinding = CreateRailwayBooleanTrigger("setRailwayVisible", "visible");
             _setRailwayTrainVisibleBinding = CreateRailwayBooleanTrigger("setRailwayTrainVisible", "trainVisible");
@@ -103,15 +103,15 @@ namespace CityTimelineMod.UI
                 value => SetRailwayFloat("thickness", value)
             );
 
-            AddBinding(_setRailwayVisibleBinding);
-            AddBinding(_setRailwayOpacityBinding);
-            AddBinding(_setRailwayThicknessBinding);
-            AddBinding(_setRailwayTrainVisibleBinding);
-            AddBinding(_setRailwayTramVisibleBinding);
-            AddBinding(_setRailwayLightRailVisibleBinding);
-            AddBinding(_setRailwaySubwayVisibleBinding);
-            AddBinding(_setRailwayServiceVisibleBinding);
-            AddBinding(_setRailwayTunnelsVisibleBinding);
+            AddRuntimeBinding(_setRailwayVisibleBinding);
+            AddRuntimeBinding(_setRailwayOpacityBinding);
+            AddRuntimeBinding(_setRailwayThicknessBinding);
+            AddRuntimeBinding(_setRailwayTrainVisibleBinding);
+            AddRuntimeBinding(_setRailwayTramVisibleBinding);
+            AddRuntimeBinding(_setRailwayLightRailVisibleBinding);
+            AddRuntimeBinding(_setRailwaySubwayVisibleBinding);
+            AddRuntimeBinding(_setRailwayServiceVisibleBinding);
+            AddRuntimeBinding(_setRailwayTunnelsVisibleBinding);
 
             SyncRailwayBindings();
         }
@@ -127,18 +127,27 @@ namespace CityTimelineMod.UI
 
         private void SetRailwayBoolean(string configKey, bool value)
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             GeoDebugOverlay.SetRailwayBoolean(configKey, value);
             SyncRailwayBindings();
         }
 
         private void SetRailwayFloat(string configKey, float value)
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             GeoDebugOverlay.SetRailwayFloat(configKey, value);
             SyncRailwayBindings();
         }
 
         protected override void OnUpdate()
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             base.OnUpdate();
 
             // Keep CoHTML completely idle while the panel is closed.  The old
@@ -158,6 +167,9 @@ namespace CityTimelineMod.UI
 
         private void SyncRailwayBindings()
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             var state = GeoDebugOverlay.GetRailwayHudSnapshot();
 
             if (state == null)

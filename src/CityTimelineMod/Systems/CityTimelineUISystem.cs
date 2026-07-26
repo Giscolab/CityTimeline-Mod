@@ -1,5 +1,7 @@
+using System;
 using Colossal.UI.Binding;
 using Game.Input;
+using Game.SceneFlow;
 using Game.UI;
 using UnityEngine.InputSystem;
 using CityTimelineMod.Util;
@@ -25,73 +27,95 @@ namespace CityTimelineMod.Systems
         protected override void OnCreate()
         {
             base.OnCreate();
-
-            _visibleBinding = new ValueBinding<bool>(
-                BindingGroup,
-                "cohtmlHudVisible",
-                false
-            );
-
-            _toggleBinding = new TriggerBinding(
-                BindingGroup,
-                "toggleCohtmlHud",
-                ToggleHud
-            );
-
-            _closeBinding = new TriggerBinding(
-                BindingGroup,
-                "closeCohtmlHud",
-                CloseHud
-            );
-
-            AddBinding(_visibleBinding);
-            AddBinding(_toggleBinding);
-            AddBinding(_closeBinding);
-
-            if (
-                Mod.Settings == null ||
-                !InputManager.instance.TryFindAction(
-                    Mod.Settings.KeyBindingToggleCohtmlHud,
-                    out _toggleAction
-                ) ||
-                _toggleAction == null
-            )
-            {
-                Log.Error(
-                    "Action Alt+Z du HUD CoHTML introuvable."
-                );
-
-                return;
-            }
-
-            _toggleAction.onInteraction +=
-                OnToggleActionInteraction;
-
-            _toggleAction.shouldBeEnabled = true;
-
-            /*
-             * Aucun OnUpdate par frame n'est nécessaire.
-             * Les changements proviennent des bindings et
-             * de l'événement ProxyAction.
-             */
-            Enabled = false;
-
-            Log.Info(
-                "Système UI CoHTML créé. Action Alt+Z activée."
-            );
+            DeactivateForMigration();
+            Log.Info("Legacy CityTimelineMod UI system kept inactive for migration.");
         }
 
         protected override void OnDestroy()
         {
-            if (_toggleAction != null)
-            {
-                _toggleAction.onInteraction -=
-                    OnToggleActionInteraction;
+            DeactivateForMigration();
+            base.OnDestroy();
+        }
 
-                _toggleAction.shouldBeEnabled = false;
+        internal void DeactivateForMigration()
+        {
+            Enabled = false;
+
+            try
+            {
+                if (!CityTimelineMod.UI.CityTimelineUISystem.HasActiveRuntimeGate() &&
+                    _visibleBinding != null &&
+                    _visibleBinding.value)
+                {
+                    _visibleBinding.Update(false);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Legacy CityTimelineMod HUD close failed: " + ex);
             }
 
-            base.OnDestroy();
+            if (_toggleAction != null)
+            {
+                var callbackDetached = false;
+                var actionReleased = false;
+                try
+                {
+                    // Event removal is idempotent and removes this instance's
+                    // exact callback without disturbing the modern system.
+                    _toggleAction.onInteraction -= OnToggleActionInteraction;
+                    callbackDetached = true;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Legacy CityTimelineMod input detach failed: " + ex);
+                }
+
+                try
+                {
+                    if (!CityTimelineMod.UI.CityTimelineUISystem.OwnsRuntimeAction(_toggleAction))
+                        _toggleAction.shouldBeEnabled = false;
+                    actionReleased = callbackDetached;
+                }
+                catch (Exception ex)
+                {
+                    Log.Error("Legacy CityTimelineMod input disable failed: " + ex);
+                }
+
+                if (actionReleased)
+                    _toggleAction = null;
+            }
+
+            if (TryRemoveBinding(_visibleBinding))
+                _visibleBinding = null;
+            if (TryRemoveBinding(_toggleBinding))
+                _toggleBinding = null;
+            if (TryRemoveBinding(_closeBinding))
+                _closeBinding = null;
+        }
+
+        private static bool TryRemoveBinding(IBinding binding)
+        {
+            if (binding == null)
+                return true;
+
+            try
+            {
+                var gameManager = GameManager.instance;
+                var registry = gameManager == null || gameManager.userInterface == null
+                    ? null
+                    : gameManager.userInterface.bindings;
+                if (registry == null)
+                    return false;
+
+                registry.RemoveBinding(binding);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Legacy CityTimelineMod binding detach failed: " + ex);
+                return false;
+            }
         }
 
         private void OnToggleActionInteraction(
@@ -99,6 +123,9 @@ namespace CityTimelineMod.Systems
             InputActionPhase phase
         )
         {
+            if (!Mod.RuntimeEnabled || !Enabled)
+                return;
+
             if (phase != InputActionPhase.Performed)
             {
                 return;
@@ -117,6 +144,9 @@ namespace CityTimelineMod.Systems
 
         private void ToggleHud()
         {
+            if (!Mod.RuntimeEnabled || !Enabled || _visibleBinding == null)
+                return;
+
             bool next = !_visibleBinding.value;
 
             _visibleBinding.Update(next);
@@ -128,7 +158,7 @@ namespace CityTimelineMod.Systems
 
         private void CloseHud()
         {
-            if (!_visibleBinding.value)
+            if (!Mod.RuntimeEnabled || !Enabled || _visibleBinding == null || !_visibleBinding.value)
             {
                 return;
             }

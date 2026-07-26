@@ -32,14 +32,17 @@ namespace CityTimelineMod.UI
                 payload => ApplyServiceFloatPayload(payload)
             );
 
-            AddBinding(_bundleStatsJsonBinding);
-            AddBinding(_setServiceVisibleBinding);
-            AddBinding(_setServiceOpacityBinding);
+            AddRuntimeBinding(_bundleStatsJsonBinding);
+            AddRuntimeBinding(_setServiceVisibleBinding);
+            AddRuntimeBinding(_setServiceOpacityBinding);
             SyncStatisticsBindings();
         }
 
         private void ApplyServiceBooleanPayload(string payload)
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             string key;
             JToken value;
             if (!TryReadServicePayload(payload, out key, out value) || value.Type != JTokenType.Boolean)
@@ -51,6 +54,9 @@ namespace CityTimelineMod.UI
 
         private void ApplyServiceFloatPayload(string payload)
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             string key;
             JToken value;
             if (!TryReadServicePayload(payload, out key, out value) ||
@@ -87,6 +93,9 @@ namespace CityTimelineMod.UI
 
         private void SyncStatisticsBindings()
         {
+            if (!RuntimeCallbacksAllowed)
+                return;
+
             var json = GeoDebugOverlay.GetBundleHudSnapshotJson();
             var next = string.IsNullOrWhiteSpace(json) ? "{}" : json;
             if (string.Equals(next, _lastBundleStatsJson, System.StringComparison.Ordinal))

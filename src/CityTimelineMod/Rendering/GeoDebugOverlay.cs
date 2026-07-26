@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using CityTimelineMod.Config;
 using CityTimelineMod.Bundles;
 using CityTimelineMod.Geometry;
@@ -23,42 +24,56 @@ namespace CityTimelineMod.Rendering
     internal static class GeoDebugOverlay
     {
         private const string RootName = "CityTimelineMod_GroundOverlay";
+        private const string OverlayComponentFullName =
+            "CityTimelineMod.Rendering.GroundOverlayBehaviour";
+        private const string OwnedMaterialPrefix =
+            "CityTimelineMod_OverlayMaterial_";
+        private static GameObject _root;
 
-        internal static void Install(List<List<GeoPoint>> lines, GeoOverlayConfig config)
+        internal static bool IsInstalled
         {
-            Install(lines, new List<List<GeoPoint>>(), new List<List<GeoPoint>>(), config);
+            get
+            {
+                var overlay = GetCurrentOverlay();
+                return overlay != null && overlay.IsOperational;
+            }
         }
 
-        internal static void Install(
+        internal static bool Install(List<List<GeoPoint>> lines, GeoOverlayConfig config)
+        {
+            return Install(lines, new List<List<GeoPoint>>(), new List<List<GeoPoint>>(), config);
+        }
+
+        internal static bool Install(
             List<List<GeoPoint>> waterLines,
             List<List<GeoPoint>> roadLines,
             GeoOverlayConfig config
         )
         {
-            Install(waterLines, new List<List<GeoPoint>>(), roadLines, config);
+            return Install(waterLines, new List<List<GeoPoint>>(), roadLines, config);
         }
 
-        internal static void Install(
+        internal static bool Install(
             List<List<GeoPoint>> waterLines,
             List<List<GeoPoint>> waterAreaOutlines,
             List<List<GeoPoint>> roadLines,
             GeoOverlayConfig config
         )
         {
-            Install(waterLines, waterAreaOutlines, ConvertRoadLines(roadLines), config);
+            return Install(waterLines, waterAreaOutlines, ConvertRoadLines(roadLines), config);
         }
 
-        internal static void Install(
+        internal static bool Install(
             List<List<GeoPoint>> waterLines,
             List<List<GeoPoint>> waterAreaOutlines,
             List<GeoRoadLine> roadLines,
             GeoOverlayConfig config
         )
         {
-            Install(waterLines, waterAreaOutlines, roadLines, new List<GeoZoningPolygon>(), config);
+            return Install(waterLines, waterAreaOutlines, roadLines, new List<GeoZoningPolygon>(), config);
         }
 
-        internal static void Install(
+        internal static bool Install(
             List<List<GeoPoint>> waterLines,
             List<List<GeoPoint>> waterAreaOutlines,
             List<GeoRoadLine> roadLines,
@@ -66,7 +81,7 @@ namespace CityTimelineMod.Rendering
             GeoOverlayConfig config
         )
         {
-            Install(
+            return Install(
                 waterLines,
                 waterAreaOutlines,
                 roadLines,
@@ -81,7 +96,7 @@ namespace CityTimelineMod.Rendering
             );
         }
 
-        internal static void Install(
+        internal static bool Install(
             List<List<GeoPoint>> waterLines,
             List<List<GeoPoint>> waterAreaOutlines,
             List<GeoRoadLine> roadLines,
@@ -95,38 +110,382 @@ namespace CityTimelineMod.Rendering
             GeoOverlayConfig config
         )
         {
-            var existing = GameObject.Find(RootName);
-            if (existing != null)
-                UnityEngine.Object.Destroy(existing);
+            if (!Mod.RuntimeEnabled || config == null)
+            {
+                Log.Info("GroundOverlay: install blocked because the runtime gate is closed.");
+                return false;
+            }
 
-            var root = new GameObject(RootName);
-            UnityEngine.Object.DontDestroyOnLoad(root);
+            if (!Uninstall())
+            {
+                Log.Error("GroundOverlay: install blocked because a stale CTM overlay could not be fully torn down.");
+                return false;
+            }
 
-            var overlay = root.AddComponent<GroundOverlayBehaviour>();
-            overlay.Setup(
-                waterLines,
-                waterAreaOutlines,
-                roadLines,
-                zoningPolygons,
-                servicePoints,
-                serviceLoadResult,
-                bundleHudSnapshot,
-                railwayLines,
-                railwayAvailable,
-                railwayStatus,
-                config
-            );
+            GameObject root = null;
 
-            Log.Info("GroundOverlay: installed HARD visible segment overlay.");
+            try
+            {
+                root = new GameObject(RootName);
+                _root = root;
+                UnityEngine.Object.DontDestroyOnLoad(root);
+
+                var overlay = root.AddComponent<GroundOverlayBehaviour>();
+                overlay.Setup(
+                    waterLines,
+                    waterAreaOutlines,
+                    roadLines,
+                    zoningPolygons,
+                    servicePoints,
+                    serviceLoadResult,
+                    bundleHudSnapshot,
+                    railwayLines,
+                    railwayAvailable,
+                    railwayStatus,
+                    config
+                );
+
+                if (!overlay.TryCreateOverlayNow() || !overlay.IsOperational)
+                    throw new InvalidOperationException("Ground overlay creation did not reach an operational state.");
+
+                Log.Info("GroundOverlay: installed HARD visible segment overlay.");
+                return true;
+            }
+            catch
+            {
+                if (root != null && !DestroyOverlayRoot(root))
+                    Log.Error("GroundOverlay: failed installation root retained for teardown retry.");
+
+                _root = null;
+                throw;
+            }
         }
 
-        internal static void ApplyRuntimeConfigChange(string configKey)
+        internal static bool Uninstall()
         {
-            var existing = GameObject.Find(RootName);
-            if (existing == null)
+            var current = _root;
+            _root = null;
+
+            var roots = new List<GameObject>();
+            var instanceIds = new HashSet<int>();
+            var complete = true;
+
+            if (current != null && instanceIds.Add(current.GetInstanceID()))
+                roots.Add(current);
+
+            // Resources.FindObjectsOfTypeAll includes inactive objects and
+            // DontDestroyOnLoad roots that survived a hot/domain reload.
+            try
+            {
+                var overlays = Resources.FindObjectsOfTypeAll<GroundOverlayBehaviour>();
+                for (var i = 0; i < overlays.Length; i++)
+                {
+                    var overlay = overlays[i];
+                    var root = overlay != null ? overlay.gameObject : null;
+
+                    if (root != null &&
+                        root.scene.IsValid() &&
+                        instanceIds.Add(root.GetInstanceID()))
+                    {
+                        roots.Add(root);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                complete = false;
+                Log.Error("GroundOverlay: current component discovery failed. " + ex);
+            }
+
+            // A domain/hot reload can leave a component whose old managed type
+            // identity is no longer assignable to the current generic type.
+            // The exact CTM root marker covers that case while scene validity
+            // prevents touching prefab/assets owned elsewhere.
+            try
+            {
+                var sceneObjects = Resources.FindObjectsOfTypeAll<GameObject>();
+                for (var i = 0; i < sceneObjects.Length; i++)
+                {
+                    var root = sceneObjects[i];
+                    if (root == null || !root.scene.IsValid())
+                        continue;
+
+                    var isCurrentRoot = string.Equals(root.name, RootName, StringComparison.Ordinal);
+                    var isDisposedRoot = root.name != null &&
+                        root.name.StartsWith(RootName + "_Disposed_", StringComparison.Ordinal);
+
+                    if ((isCurrentRoot || isDisposedRoot) &&
+                        HasCtmComponent(root, OverlayComponentFullName) &&
+                        instanceIds.Add(root.GetInstanceID()))
+                    {
+                        roots.Add(root);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                complete = false;
+                Log.Error("GroundOverlay: prior-assembly root discovery failed. " + ex);
+            }
+
+            for (var i = 0; i < roots.Count; i++)
+            {
+                try
+                {
+                    if (!DestroyOverlayRoot(roots[i]))
+                        complete = false;
+                }
+                catch (Exception ex)
+                {
+                    complete = false;
+                    Log.Error("GroundOverlay: root teardown failed; remaining roots will still be processed. " + ex);
+                }
+            }
+
+            return complete;
+        }
+
+        private static bool DestroyOverlayRoot(GameObject root)
+        {
+            if (root == null)
+                return true;
+
+            // Disable and mark ownership before deferred Unity destruction so
+            // no Update/OnGUI callback can revive this root.
+            try
+            {
+                root.SetActive(false);
+                root.name = RootName + "_Disposed_" + root.GetInstanceID();
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GroundOverlay: root could not be disabled/marked; destruction blocked. " + ex);
+                return false;
+            }
+
+            try
+            {
+                var overlay = root.GetComponent<GroundOverlayBehaviour>();
+                if (overlay != null && !overlay.TeardownOverlayResources())
+                {
+                    Log.Error("GroundOverlay: teardown incomplete; inactive root retained for retry.");
+                    return false;
+                }
+
+                if (overlay == null && !TryTeardownPriorAssemblyOverlay(root))
+                {
+                    Log.Error("GroundOverlay: prior-assembly teardown incomplete; inactive root retained for retry.");
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GroundOverlay: resource teardown failed; inactive root retained for retry. " + ex);
+                return false;
+            }
+
+            if (!DestroyResidualRootResources(root))
+            {
+                Log.Error("GroundOverlay: residual cleanup incomplete; inactive root retained for retry.");
+                return false;
+            }
+
+            try
+            {
+                UnityEngine.Object.Destroy(root);
+                Log.Info("GroundOverlay: uninstalled.");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GroundOverlay: root destruction failed; inactive root retained for retry. " + ex);
+                return false;
+            }
+        }
+
+        private static bool DestroyResidualRootResources(GameObject root)
+        {
+            var complete = true;
+            var destroyedMaterials = new HashSet<int>();
+            Renderer[] renderers;
+
+            try
+            {
+                renderers = root.GetComponentsInChildren<Renderer>(true);
+            }
+            catch (Exception ex)
+            {
+                complete = false;
+                renderers = new Renderer[0];
+                Log.Error("GroundOverlay: residual renderer discovery failed. " + ex);
+            }
+
+            for (var i = 0; i < renderers.Length; i++)
+            {
+                var renderer = renderers[i];
+                if (renderer == null)
+                    continue;
+
+                try
+                {
+                    var filter = renderer.GetComponent<MeshFilter>();
+                    var mesh = filter != null ? filter.sharedMesh : null;
+                    var ownsBatchMaterials = mesh != null &&
+                        !string.IsNullOrEmpty(mesh.name) &&
+                        mesh.name.EndsWith("_mesh", StringComparison.Ordinal);
+
+                    var materials = renderer.sharedMaterials;
+                    var retained = new List<Material>();
+                    for (var j = 0; j < materials.Length; j++)
+                    {
+                        var material = materials[j];
+                        if (material == null)
+                            continue;
+
+                        var isNamedCtmMaterial = material.name != null &&
+                            material.name.StartsWith(OwnedMaterialPrefix, StringComparison.Ordinal);
+                        if (!isNamedCtmMaterial && !ownsBatchMaterials)
+                        {
+                            retained.Add(material);
+                            continue;
+                        }
+
+                        try
+                        {
+                            if (destroyedMaterials.Add(material.GetInstanceID()))
+                                UnityEngine.Object.Destroy(material);
+                        }
+                        catch (Exception ex)
+                        {
+                            complete = false;
+                            retained.Add(material);
+                            Log.Error("GroundOverlay: residual material cleanup failed. " + ex);
+                        }
+                    }
+
+                    renderer.sharedMaterials = retained.ToArray();
+                }
+                catch (Exception ex)
+                {
+                    complete = false;
+                    Log.Error("GroundOverlay: residual renderer cleanup failed. " + ex);
+                }
+            }
+
+            MeshFilter[] filters;
+            try
+            {
+                filters = root.GetComponentsInChildren<MeshFilter>(true);
+            }
+            catch (Exception ex)
+            {
+                complete = false;
+                filters = new MeshFilter[0];
+                Log.Error("GroundOverlay: residual mesh discovery failed. " + ex);
+            }
+
+            for (var i = 0; i < filters.Length; i++)
+            {
+                var filter = filters[i];
+                var mesh = filter != null ? filter.sharedMesh : null;
+                if (mesh == null ||
+                    string.IsNullOrEmpty(mesh.name) ||
+                    !mesh.name.EndsWith("_mesh", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    UnityEngine.Object.Destroy(mesh);
+                    filter.sharedMesh = null;
+                }
+                catch (Exception ex)
+                {
+                    complete = false;
+                    Log.Error("GroundOverlay: residual mesh cleanup failed. " + ex);
+                }
+            }
+
+            return complete;
+        }
+
+        private static bool TryTeardownPriorAssemblyOverlay(GameObject root)
+        {
+            var components = root.GetComponents<Component>();
+            for (var i = 0; i < components.Length; i++)
+            {
+                var component = components[i];
+                if (!IsCtmComponent(component, OverlayComponentFullName))
+                    continue;
+
+                var method = component.GetType().GetMethod(
+                    "TeardownOverlayResources",
+                    BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    Type.EmptyTypes,
+                    null
+                );
+                if (method == null)
+                    return true;
+
+                var result = method.Invoke(component, null);
+                return method.ReturnType != typeof(bool) || (result is bool value && value);
+            }
+
+            return true;
+        }
+
+        private static bool HasCtmComponent(GameObject root, string fullName)
+        {
+            if (root == null)
+                return false;
+
+            var components = root.GetComponents<Component>();
+            for (var i = 0; i < components.Length; i++)
+            {
+                if (IsCtmComponent(components[i], fullName))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsCtmComponent(Component component, string fullName)
+        {
+            if (component == null)
+                return false;
+
+            var type = component.GetType();
+            return string.Equals(type.FullName, fullName, StringComparison.Ordinal) &&
+                string.Equals(
+                    type.Assembly.GetName().Name,
+                    typeof(Mod).Assembly.GetName().Name,
+                    StringComparison.Ordinal
+                );
+        }
+
+        private static GroundOverlayBehaviour GetCurrentOverlay()
+        {
+            if (_root == null || !_root.activeSelf)
+                return null;
+
+            return _root.GetComponent<GroundOverlayBehaviour>();
+        }
+
+        internal static void ApplyRuntimeConfigChange(string configKey, object value)
+        {
+            if (!Mod.RuntimeEnabled)
                 return;
 
-            var overlay = existing.GetComponent<GroundOverlayBehaviour>();
+            var runtimeConfig = Mod.RuntimeConfig;
+            if (runtimeConfig == null)
+            {
+                Log.Error("GroundOverlay: runtime snapshot unavailable for " + configKey + ".");
+                return;
+            }
+
+            var overlay = GetCurrentOverlay();
             if (overlay == null)
                 return;
 
@@ -135,11 +494,10 @@ namespace CityTimelineMod.Rendering
 
         internal static RailwayHudSnapshot GetRailwayHudSnapshot()
         {
-            var existing = GameObject.Find(RootName);
-            if (existing == null)
+            if (!Mod.RuntimeEnabled)
                 return RailwayHudSnapshot.Unavailable("Overlay ferroviaire non initialisé.");
 
-            var overlay = existing.GetComponent<GroundOverlayBehaviour>();
+            var overlay = GetCurrentOverlay();
             return overlay != null
                 ? overlay.GetRailwayHudSnapshot()
                 : RailwayHudSnapshot.Unavailable("Overlay ferroviaire non initialisé.");
@@ -147,29 +505,37 @@ namespace CityTimelineMod.Rendering
 
         internal static bool SetRailwayBoolean(string key, bool value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetRailwayBoolean(key, value);
         }
 
         internal static bool SetRailwayFloat(string key, float value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetRailwayFloat(key, value);
         }
 
         internal static string GetBundleHudSnapshotJson()
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return "{}";
+
+            var overlay = GetCurrentOverlay();
             return overlay != null ? overlay.GetBundleHudSnapshotJson() : "{}";
         }
 
         internal static OverlayLayerHudSnapshot GetOverlayLayerHudSnapshot()
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return OverlayLayerHudSnapshot.Unavailable();
+
+            var overlay = GetCurrentOverlay();
             return overlay != null
                 ? overlay.GetOverlayLayerHudSnapshot()
                 : OverlayLayerHudSnapshot.Unavailable();
@@ -177,43 +543,55 @@ namespace CityTimelineMod.Rendering
 
         internal static bool SetOverlayLayerBoolean(string key, bool value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetOverlayLayerBoolean(key, value);
         }
 
         internal static bool SetOverlayLayerFloat(string key, float value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetOverlayLayerFloat(key, value);
         }
 
         internal static string GetOverlaySublayersJson()
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return "{}";
+
+            var overlay = GetCurrentOverlay();
             return overlay != null ? overlay.GetOverlaySublayersJson() : "{}";
         }
 
         internal static bool SetOverlaySublayerVisible(string key, bool value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetOverlaySublayerVisible(key, value);
         }
 
         internal static bool SetServiceBoolean(string key, bool value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetServiceBoolean(key, value);
         }
 
         internal static bool SetServiceFloat(string key, float value)
         {
-            var existing = GameObject.Find(RootName);
-            var overlay = existing != null ? existing.GetComponent<GroundOverlayBehaviour>() : null;
+            if (!Mod.RuntimeEnabled)
+                return false;
+
+            var overlay = GetCurrentOverlay();
             return overlay != null && overlay.SetServiceFloat(key, value);
         }
         internal static List<GeoRoadLine> ConvertRoadLines(List<List<GeoPoint>> lines)
@@ -369,6 +747,9 @@ namespace CityTimelineMod.Rendering
             GeoOverlayConfig config
         )
         {
+            _overlayTeardownRequested = false;
+            _overlayTeardownInProgress = false;
+            _overlayTeardownComplete = false;
             _waterLines = waterLines ?? new List<List<GeoPoint>>();
             _waterAreaOutlines = waterAreaOutlines ?? new List<List<GeoPoint>>();
             _roadLines = roadLines ?? new List<GeoRoadLine>();
@@ -412,18 +793,48 @@ namespace CityTimelineMod.Rendering
             InitializeBundleHudSnapshot(bundleHudSnapshot);
         }
 
+        internal bool IsOperational
+        {
+            get
+            {
+                return _created && !_overlayTeardownRequested && _config != null && Mod.RuntimeEnabled;
+            }
+        }
+
+        internal bool TryCreateOverlayNow()
+        {
+            if (IsOperational)
+                return true;
+
+            if (!Mod.RuntimeEnabled || _overlayTeardownRequested || _config == null)
+                return false;
+
+            try
+            {
+                CreateOverlayWithTiming("initial");
+                _created = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _created = false;
+                GeoBundleBootstrap.Reset();
+                Log.Error("GroundOverlay: initial creation failed; bootstrap remains retryable. " + ex);
+                throw;
+            }
+        }
+
         internal void ApplyRuntimeConfigChange(string configKey)
         {
-            if (_config == null)
+            if (!Mod.RuntimeEnabled || _overlayTeardownRequested || _config == null)
                 return;
 
             try
             {
-                _config.LoadVisualSettingsFromConfig();
                 SyncVisibilityStateFromConfig();
 
                 _visualSettingsDirty = false;
-                _visualSettingsStatusMessage = "Options CS2 appliquées depuis config.json.";
+                _visualSettingsStatusMessage = "Options CS2 appliquées au snapshot runtime.";
                 _controlPanelRebuildPending = false;
 
                 if (RequiresOverlayRebuildForConfigKey(configKey))
@@ -445,21 +856,65 @@ namespace CityTimelineMod.Rendering
 
         private void Update()
         {
-            if (!_created)
-            {
-                _created = true;
-                CreateOverlayWithTiming("initial");
+            if (!RuntimeCallbackCanContinue(false))
                 return;
-            }
 
-            HandleCalibrationInput();
-            HandleOverlayVisibilityInput();
-            HandlePendingBundleReload();
-            UpdateProgressiveOverlayRebuild();
-            UpdatePendingOverlayRebuildRequests();
-            UpdatePendingRailwaySettingsSave();
-            UpdateRoadLabelBillboards();
-            UpdateOverlayHud();
+            try
+            {
+                if (!_created)
+                {
+                    TryCreateOverlayNow();
+                    return;
+                }
+
+                HandleCalibrationInput();
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                HandleOverlayVisibilityInput();
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                HandlePendingBundleReload();
+
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                UpdateProgressiveOverlayRebuild();
+
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                UpdatePendingOverlayRebuildRequests();
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                UpdatePendingRailwaySettingsSave();
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                UpdateRoadLabelBillboards();
+                if (!RuntimeCallbackCanContinue())
+                    return;
+
+                UpdateOverlayHud();
+            }
+            catch (Exception ex)
+            {
+                _created = false;
+                Log.Error("GroundOverlay: runtime update failed; overlay will be torn down and retry enabled. " + ex);
+                GeoBundleBootstrap.Reset();
+                GeoDebugOverlay.Uninstall();
+            }
+        }
+
+        private bool RuntimeCallbackCanContinue(bool requireCreated = true)
+        {
+            return Mod.RuntimeEnabled &&
+                !_overlayTeardownRequested &&
+                (!requireCreated || _created) &&
+                gameObject != null &&
+                gameObject.activeInHierarchy;
         }
 
 

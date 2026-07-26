@@ -12,22 +12,29 @@ namespace CityTimelineMod.Config
         internal static GeoOverlayConfig Load(string modDir)
         {
             var config = new GeoOverlayConfig();
-            var path = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
-            config.ConfigPath = path;
-
-            if (!File.Exists(path))
-            {
-                Log.Info("GeoOverlayConfig: config.json not found. Using defaults.");
-                return config;
-            }
+            string path = null;
 
             try
             {
-                var json = File.ReadAllText(path);
-                var root = JObject.Parse(json);
+                path = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
+                config.ConfigPath = path;
+
+                JObject root;
+                bool exists;
+                string readError;
+                if (!TryReadRuntimeConfigRoot(path, out root, out exists, out readError))
+                    throw new IOException("Failed to read runtime config: " + readError);
+
+                if (!exists)
+                {
+                    Log.Info("GeoOverlayConfig: config.json not found. Using defaults.");
+                    return config;
+                }
 
                 config.UseGeoJsonCenter = GetBool(root, "useGeoJsonCenter", config.UseGeoJsonCenter);
                 config.ModEnabled = GetBool(root, "modEnabled", config.ModEnabled);
+                config.LargeMapEnabled = GetBool(root, "largeMapEnabled", config.LargeMapEnabled);
+                config.PlayableWorldEnabled = GetBool(root, "playableWorldEnabled", config.PlayableWorldEnabled);
                 config.OriginLon = GetDouble(root, "originLon", config.OriginLon);
                 config.OriginLat = GetDouble(root, "originLat", config.OriginLat);
                 config.PackPath = GetString(root, "packPath", config.PackPath);
@@ -157,7 +164,7 @@ config.RoadSegmentHeight = GetFloat(root, "roadSegmentHeight", config.RoadSegmen
 config.PathSegmentWidth = GetFloat(root, "pathSegmentWidth", config.PathSegmentWidth);
 config.PathSegmentHeight = GetFloat(root, "pathSegmentHeight", config.PathSegmentHeight);
 config.MaxRoadSegmentsDebug = GetInt(root, "maxRoadSegmentsDebug", config.MaxRoadSegmentsDebug);
-config.MaxPathSegmentsDebug = root["maxPathSegmentsDebug"] != null
+config.MaxPathSegmentsDebug = GetToken(root, "maxPathSegmentsDebug") != null
     ? GetInt(root, "maxPathSegmentsDebug", config.MaxPathSegmentsDebug)
     : config.MaxRoadSegmentsDebug;
 config.MinimumRoadDebugTier = GetInt(root, "minimumRoadDebugTier", config.MinimumRoadDebugTier);
@@ -409,7 +416,7 @@ config.RoadSemanticFilterMode = NormalizeRoadSemanticFilterMode(config.RoadSeman
 
 if (!config.ModEnabled)
 {
-    Log.Info("GeoOverlayConfig: modEnabled=false. Skipping overlay profile and bundle manifest.");
+    Log.Info("GeoOverlayConfig: modEnabled=false. Skipping overlay profile.");
     Log.Info("GeoOverlayConfig: loaded " + path);
     return config;
 }
@@ -422,27 +429,6 @@ else
 {
     ApplyOverlayProfile(config);
 }
-
-                var resolvedBundleManifestPath = BundleResolver.ResolveManifestPath(config, modDir);
-
-                if (!string.IsNullOrWhiteSpace(resolvedBundleManifestPath))
-                {
-                    config.BundleManifestPath = resolvedBundleManifestPath;
-                    // Ne jamais reutiliser un packPath persiste provenant d'un autre
-                    // bundle. Le manifest valide selectionne ci-dessus est l'unique
-                    // source du payload actif.
-                    config.PackPath = null;
-                    ApplyBundleManifest(config, modDir);
-                }
-                else if (config.UseBundleIndex)
-                {
-                    // En mode catalogue, une resolution invalide doit rester visible
-                    // comme telle. Conserver ces anciennes valeurs ferait charger en
-                    // silence un bundle legacy ou precedemment actif.
-                    config.BundleManifestPath = null;
-                    config.PackPath = null;
-                    config.ActiveBundleRoot = null;
-                }
 
                 Log.Info("GeoOverlayConfig: loaded " + path);
                 Log.Info("GeoOverlayConfig: packPath=" + (string.IsNullOrWhiteSpace(config.PackPath) ? "(empty)" : config.PackPath));
@@ -582,10 +568,67 @@ Log.Info(
             }
             catch (Exception ex)
             {
-                Log.Error("GeoOverlayConfig: failed to load config.json. Using defaults. " + ex);
+                config = new GeoOverlayConfig
+                {
+                    ConfigPath = path,
+                    ModEnabled = false,
+                    LargeMapEnabled = false,
+                    PlayableWorldEnabled = false,
+                    IsReliable = false,
+                    ReliabilityError = ex.ToString()
+                };
+                Log.Error("GeoOverlayConfig: failed to load config.json. Runtime overlay startup is blocked. " + ex);
             }
 
             return config;
+        }
+
+        internal bool PrepareBundle(string modDir)
+        {
+            if (!IsReliable || !ModEnabled)
+            {
+                Log.Info("GeoOverlayConfig: bundle preparation skipped because runtime config is disabled or unreliable.");
+                return false;
+            }
+
+            try
+            {
+                var resolvedBundleManifestPath = BundleResolver.ResolveManifestPath(this, modDir);
+
+                if (!string.IsNullOrWhiteSpace(resolvedBundleManifestPath))
+                {
+                    BundleManifestPath = resolvedBundleManifestPath;
+                    // Never reuse a persisted packPath from another bundle. The
+                    // validated manifest is the only authority for indexed bundles.
+                    PackPath = null;
+                    var applied = ApplyBundleManifest(this, modDir);
+                    if (!applied)
+                    {
+                        BundleIndexResolutionSucceeded = false;
+                        BundleIndexResolutionError = "Bundle manifest could not be applied.";
+                    }
+
+                    return applied;
+                }
+
+                if (UseBundleIndex)
+                {
+                    BundleManifestPath = null;
+                    PackPath = null;
+                    ActiveBundleRoot = null;
+                    return false;
+                }
+
+                // Legacy mode may intentionally rely on packPath alone.
+                return true;
+            }
+            catch (Exception ex)
+            {
+                BundleIndexResolutionSucceeded = false;
+                BundleIndexResolutionError = ex.Message;
+                Log.Error("GeoOverlayConfig: failed to prepare bundle. " + ex);
+                return false;
+            }
         }
 
         private static void ClampRuntimeRoadImportSettings(GeoOverlayConfig config)
@@ -892,21 +935,12 @@ Log.Info(
                 return;
             }
 
-            try
-            {
-                JObject root;
-
-                if (File.Exists(ConfigPath))
+            JObject ignoredRoot;
+            string updateError;
+            if (!TryUpdateRuntimeConfigFile(
+                ConfigPath,
+                root =>
                 {
-                    var json = File.ReadAllText(ConfigPath);
-                    root = JObject.Parse(json);
-                }
-                else
-                {
-                    root = new JObject();
-                }
-
-                root["modEnabled"] = ModEnabled;
                 root["worldOriginX"] = WorldOriginX;
                 root["worldOriginZ"] = WorldOriginZ;
                 root["worldScale"] = WorldScale;
@@ -1044,48 +1078,42 @@ Log.Info(
                 if (!string.IsNullOrWhiteSpace(PackPath))
                     root["packPath"] = PackPath;
 
-                File.WriteAllText(ConfigPath, root.ToString(), System.Text.Encoding.UTF8);
-
-                Log.Info(
-                    "GeoOverlayConfig: calibration saved. " +
-                    "worldOriginX=" + WorldOriginX +
-                    ", worldOriginZ=" + WorldOriginZ +
-                    ", worldScale=" + WorldScale +
-                    ", overlayRotationDegrees=" + OverlayRotationDegrees +
-                    ", overlayScaleX=" + OverlayScaleX +
-                    ", overlayScaleZ=" + OverlayScaleZ +
-                    ", flipX=" + FlipX +
-                    ", flipZ=" + FlipZ
-                );
-            }
-            catch (Exception ex)
+                },
+                out ignoredRoot,
+                out updateError
+            ))
             {
-                Log.Error("GeoOverlayConfig: failed to save calibration. " + ex);
+                Log.Error("GeoOverlayConfig: failed to save calibration. " + updateError);
+                return;
             }
+
+            Log.Info(
+                "GeoOverlayConfig: calibration saved. " +
+                "worldOriginX=" + WorldOriginX +
+                ", worldOriginZ=" + WorldOriginZ +
+                ", worldScale=" + WorldScale +
+                ", overlayRotationDegrees=" + OverlayRotationDegrees +
+                ", overlayScaleX=" + OverlayScaleX +
+                ", overlayScaleZ=" + OverlayScaleZ +
+                ", flipX=" + FlipX +
+                ", flipZ=" + FlipZ
+            );
         }
 
-        internal void SaveVisualSettingsToConfig()
+        internal bool SaveVisualSettingsToConfig()
         {
             if (string.IsNullOrWhiteSpace(ConfigPath))
             {
                 Log.Error("GeoOverlayConfig: cannot save visual settings. ConfigPath is empty.");
-                return;
+                return false;
             }
 
-            try
-            {
-                JObject root;
-
-                if (File.Exists(ConfigPath))
+            JObject ignoredRoot;
+            string updateError;
+            if (!TryUpdateRuntimeConfigFile(
+                ConfigPath,
+                root =>
                 {
-                    var json = File.ReadAllText(ConfigPath);
-                    root = JObject.Parse(json);
-                }
-                else
-                {
-                    root = new JObject();
-                }
-
                 root["renderWaterLines"] = RenderWaterLines;
                 root["renderWaterAreas"] = RenderWaterAreas;
                 root["renderWaterAreaOutlines"] = RenderWaterAreaOutlines;
@@ -1200,157 +1228,18 @@ Log.Info(
                 root["runtimeRoadImportBatchSize"] = RuntimeRoadImportBatchSize;
                 root["runtimeRoadImportPipelineMode"] = RuntimeRoadImportPipelineMode;
 
-                File.WriteAllText(
-                    ConfigPath,
-                    root.ToString(),
-                    new System.Text.UTF8Encoding(false)
-                );
-
-                Log.Info("GeoOverlayConfig: visual settings saved.");
-            }
-            catch (Exception ex)
+                },
+                out ignoredRoot,
+                out updateError
+            ))
             {
-                Log.Error("GeoOverlayConfig: failed to save visual settings. " + ex);
+                Log.Error("GeoOverlayConfig: failed to save visual settings. " + updateError);
+                return false;
             }
+
+            Log.Info("GeoOverlayConfig: visual settings saved.");
+            return true;
         }
 
-        internal void LoadVisualSettingsFromConfig()
-        {
-            if (string.IsNullOrWhiteSpace(ConfigPath))
-            {
-                Log.Error("GeoOverlayConfig: cannot load visual settings. ConfigPath is empty.");
-                return;
-            }
-
-            if (!File.Exists(ConfigPath))
-            {
-                Log.Error("GeoOverlayConfig: cannot load visual settings. File not found: " + ConfigPath);
-                return;
-            }
-
-            try
-            {
-                var json = File.ReadAllText(ConfigPath);
-                var root = JObject.Parse(json);
-
-                RenderWaterLines = GetBool(root, "renderWaterLines", RenderWaterLines);
-                RenderWaterAreas = GetBool(root, "renderWaterAreas", RenderWaterAreas);
-                RenderWaterAreaOutlines = GetBool(root, "renderWaterAreaOutlines", RenderWaterAreaOutlines);
-                RenderWaterAreaFillMeshes = GetBool(root, "renderWaterAreaFillMeshes", RenderWaterAreaFillMeshes);
-
-                RenderRoads = GetBool(root, "renderRoads", RenderRoads);
-                RenderPaths = GetBool(root, "renderPaths", RenderPaths);
-                LoadRailwaySettings(root);
-                LoadServiceSettings(root);
-                LoadOverlaySublayerSettings(root);
-                RenderZoning = GetBool(root, "renderZoning", RenderZoning);
-                RenderMapBounds = GetBool(root, "renderMapBounds", RenderMapBounds);
-                VerboseOverlayLogs = GetBool(root, "verboseOverlayLogs", VerboseOverlayLogs);
-
-                RoadGeometrySource = GetString(root, "roadGeometrySource", RoadGeometrySource);
-                RoadHighwayFilter = GetString(root, "roadHighwayFilter", RoadHighwayFilter);
-                PathHighwayFilter = GetString(root, "pathHighwayFilter", PathHighwayFilter);
-                MinimumRoadDebugTier = GetInt(root, "minimumRoadDebugTier", MinimumRoadDebugTier);
-
-                ZoningDebugFilterZone = GetString(root, "zoningDebugFilterZone", ZoningDebugFilterZone);
-                ZoningDebugFilterCs2Contains = GetString(root, "zoningDebugFilterCs2Contains", ZoningDebugFilterCs2Contains);
-                ZoningDebugFilterMaterialKey = GetString(root, "zoningDebugFilterMaterialKey", ZoningDebugFilterMaterialKey);
-
-                ZoningAlpha = GetFloat(root, "zoningAlpha", ZoningAlpha);
-                RoadAlpha = GetFloat(root, "roadAlpha", RoadAlpha);
-                PathAlpha = GetFloat(root, "pathAlpha", PathAlpha);
-                WaterLineAlpha = GetFloat(root, "waterLineAlpha", WaterLineAlpha);
-                WaterAreaOutlineAlpha = GetFloat(root, "waterAreaOutlineAlpha", WaterAreaOutlineAlpha);
-                WaterAreaFillAlpha = GetFloat(root, "waterAreaFillAlpha", WaterAreaFillAlpha);
-                MapBoundsAlpha = GetFloat(root, "mapBoundsAlpha", MapBoundsAlpha);
-
-                GroundMargin = GetFloat(root, "groundMargin", GroundMargin);
-                ZoningFillYOffset = GetFloat(root, "zoningFillYOffset", ZoningFillYOffset);
-                RoadYOffset = GetFloat(root, "roadYOffset", RoadYOffset);
-                PathYOffset = GetFloat(root, "pathYOffset", PathYOffset);
-                WaterLineYOffset = GetFloat(root, "waterLineYOffset", WaterLineYOffset);
-                WaterAreaOutlineYOffset = GetFloat(root, "waterAreaOutlineYOffset", WaterAreaOutlineYOffset);
-                WaterAreaFillYOffset = GetFloat(root, "waterAreaFillYOffset", WaterAreaFillYOffset);
-                MapBoundsYOffset = GetFloat(root, "mapBoundsYOffset", MapBoundsYOffset);
-
-                MaxZoningFillMeshesDebug = GetInt(root, "maxZoningFillMeshesDebug", MaxZoningFillMeshesDebug);
-                MaxRoadSegmentsDebug = GetInt(root, "maxRoadSegmentsDebug", MaxRoadSegmentsDebug);
-                MaxPathSegmentsDebug = root["maxPathSegmentsDebug"] != null
-                    ? GetInt(root, "maxPathSegmentsDebug", MaxPathSegmentsDebug)
-                    : MaxRoadSegmentsDebug;
-                MaxWaterSegmentsDebug = GetInt(root, "maxWaterSegmentsDebug", MaxWaterSegmentsDebug);
-                MaxWaterAreaFillMeshesDebug = GetInt(root, "maxWaterAreaFillMeshesDebug", MaxWaterAreaFillMeshesDebug);
-                MaxRenderedSegments = GetInt(root, "maxRenderedSegments", MaxRenderedSegments);
-                PointStride = GetInt(root, "pointStride", PointStride);
-
-                RenderEverything = GetBool(root, "renderEverything", RenderEverything);
-                RenderAllRoadSegments = GetBool(root, "renderAllRoadSegments", RenderAllRoadSegments);
-                RenderAllPathSegments = GetBool(root, "renderAllPathSegments", RenderAllPathSegments);
-                RenderAllZoningPolygons = GetBool(root, "renderAllZoningPolygons", RenderAllZoningPolygons);
-                RenderAllWaterSegments = GetBool(root, "renderAllWaterSegments", RenderAllWaterSegments);
-                RenderAllWaterAreaFills = GetBool(root, "renderAllWaterAreaFills", RenderAllWaterAreaFills);
-
-                UseLaneWidthScaling = GetBool(root, "useLaneWidthScaling", UseLaneWidthScaling);
-                LaneWidthScaleFactor = GetFloat(root, "laneWidthScaleFactor", LaneWidthScaleFactor);
-                HighlightOneWayRoads = GetBool(root, "highlightOneWayRoads", HighlightOneWayRoads);
-                HighlightBridges = GetBool(root, "highlightBridges", HighlightBridges);
-                HighlightTunnels = GetBool(root, "highlightTunnels", HighlightTunnels);
-                HighlightRoundabouts = GetBool(root, "highlightRoundabouts", HighlightRoundabouts);
-                RoadRenderMode = NormalizeRoadRenderMode(GetString(root, "roadRenderMode", RoadRenderMode));
-                PathRenderMode = NormalizeRoadRenderMode(GetString(root, "pathRenderMode", PathRenderMode));
-                RibbonYOffset = GetFloat(root, "ribbonYOffset", RibbonYOffset);
-                EnableRoadSpatialChunking = GetBool(root, "enableRoadSpatialChunking", EnableRoadSpatialChunking);
-                RoadChunkSizeMeters = GetFloat(root, "roadChunkSizeMeters", RoadChunkSizeMeters);
-                EnableProgressiveOverlayRebuild = GetBool(root, "enableProgressiveOverlayRebuild", EnableProgressiveOverlayRebuild);
-                RoadChunksPerFrame = GetInt(root, "roadChunksPerFrame", RoadChunksPerFrame);
-                PathChunksPerFrame = GetInt(root, "pathChunksPerFrame", PathChunksPerFrame);
-
-                RenderRoadDirectionArrows = GetBool(root, "renderRoadDirectionArrows", RenderRoadDirectionArrows);
-                RenderAllRoadArrows = GetBool(root, "renderAllRoadArrows", RenderAllRoadArrows);
-                RoadArrowSpacingMeters = GetFloat(root, "roadArrowSpacingMeters", RoadArrowSpacingMeters);
-                RoadArrowSize = GetFloat(root, "roadArrowSize", RoadArrowSize);
-                RoadArrowYOffset = GetFloat(root, "roadArrowYOffset", RoadArrowYOffset);
-                RoadArrowMaxCount = GetInt(root, "roadArrowMaxCount", RoadArrowMaxCount);
-
-                RenderRoadLabels = GetBool(root, "renderRoadLabels", RenderRoadLabels);
-                RenderAllRoadLabels = GetBool(root, "renderAllRoadLabels", RenderAllRoadLabels);
-                RoadLabelMaxCount = GetInt(root, "roadLabelMaxCount", RoadLabelMaxCount);
-                RoadLabelMinTier = GetInt(root, "roadLabelMinTier", RoadLabelMinTier);
-                RoadLabelMaxDistance = GetFloat(root, "roadLabelMaxDistance", RoadLabelMaxDistance);
-                RoadLabelYOffset = GetFloat(root, "roadLabelYOffset", RoadLabelYOffset);
-                RoadLabelFontSize = GetInt(root, "roadLabelFontSize", RoadLabelFontSize);
-                DeduplicateRoadLabels = GetBool(root, "deduplicateRoadLabels", DeduplicateRoadLabels);
-                RoadSemanticFilterMode = NormalizeRoadSemanticFilterMode(GetString(root, "roadSemanticFilterMode", RoadSemanticFilterMode));
-                RuntimeRoadImportEnabled = GetBool(root, "runtimeRoadImportEnabled", RuntimeRoadImportEnabled);
-                RuntimeRoadImportRunOnce = GetBool(root, "runtimeRoadImportRunOnce", RuntimeRoadImportRunOnce);
-                RuntimeRoadImportMaxSegments = GetInt(root, "runtimeRoadImportMaxSegments", RuntimeRoadImportMaxSegments);
-                RuntimeRoadImportStride = GetInt(root, "runtimeRoadImportStride", RuntimeRoadImportStride);
-                RuntimeRoadImportMinSegmentLengthMeters = GetFloat(root, "runtimeRoadImportMinSegmentLengthMeters", RuntimeRoadImportMinSegmentLengthMeters);
-                RuntimeRoadImportSnapToleranceMeters = GetFloat(root, "runtimeRoadImportSnapToleranceMeters", RuntimeRoadImportSnapToleranceMeters);
-                RuntimeRoadImportYOffset = GetFloat(root, "runtimeRoadImportYOffset", RuntimeRoadImportYOffset);
-                RuntimeRoadImportIncludeBridgeTunnel = GetBool(root, "runtimeRoadImportIncludeBridgeTunnel", RuntimeRoadImportIncludeBridgeTunnel);
-                RuntimeRoadImportSourceFilter = GetString(root, "runtimeRoadImportSourceFilter", RuntimeRoadImportSourceFilter);
-                RuntimeRoadImportHighwayFilter = GetString(root, "runtimeRoadImportHighwayFilter", RuntimeRoadImportHighwayFilter);
-                RuntimeRoadImportStageFilter = GetString(root, "runtimeRoadImportStageFilter", RuntimeRoadImportStageFilter);
-                RuntimeRoadImportShowProgressInHud = GetBool(root, "runtimeRoadImportShowProgressInHud", RuntimeRoadImportShowProgressInHud);
-                RuntimeRoadImportVerboseSelectionLogs = GetBool(root, "runtimeRoadImportVerboseSelectionLogs", RuntimeRoadImportVerboseSelectionLogs);
-                RuntimeRoadImportSelectionMode = GetString(root, "runtimeRoadImportSelectionMode", RuntimeRoadImportSelectionMode);
-                RuntimeRoadImportDistanceBucketMeters = GetFloat(root, "runtimeRoadImportDistanceBucketMeters", RuntimeRoadImportDistanceBucketMeters);
-                RuntimeRoadImportPriorityWeight = GetFloat(root, "runtimeRoadImportPriorityWeight", RuntimeRoadImportPriorityWeight);
-                RuntimeRoadImportSkipParkingAisles = GetBool(root, "runtimeRoadImportSkipParkingAisles", RuntimeRoadImportSkipParkingAisles);
-                RuntimeRoadImportSkipClearlyUnpaved = GetBool(root, "runtimeRoadImportSkipClearlyUnpaved", RuntimeRoadImportSkipClearlyUnpaved);
-                RuntimeRoadImportBatchSize = GetInt(root, "runtimeRoadImportBatchSize", RuntimeRoadImportBatchSize);
-                RuntimeRoadImportPipelineMode = GetString(root, "runtimeRoadImportPipelineMode", RuntimeRoadImportPipelineMode);
-
-                ClampRuntimeRoadImportSettings(this);
-                ClampRuntimeVisualSettings();
-
-                Log.Info("GeoOverlayConfig: visual settings loaded.");
-            }
-            catch (Exception ex)
-            {
-                Log.Error("GeoOverlayConfig: failed to load visual settings. " + ex);
-            }
-        }
     }
 }

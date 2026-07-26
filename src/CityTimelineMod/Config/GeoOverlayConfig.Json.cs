@@ -1,4 +1,5 @@
-using System.Globalization;
+using System;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace CityTimelineMod.Config
@@ -7,10 +8,14 @@ namespace CityTimelineMod.Config
     {
         private static string GetString(JObject root, string name, string fallback)
         {
-            var token = root[name];
-            if (token == null) return fallback;
+            var token = GetToken(root, name);
+            if (token == null)
+                return fallback;
 
-            var value = token.ToString();
+            if (token.Type != JTokenType.String)
+                throw WrongType(name, "string", token);
+
+            var value = token.Value<string>();
             if (string.IsNullOrWhiteSpace(value))
                 return fallback;
 
@@ -19,68 +24,85 @@ namespace CityTimelineMod.Config
 
         private static bool GetBool(JObject root, string name, bool fallback)
         {
-            var token = root[name];
-            if (token == null) return fallback;
+            var token = GetToken(root, name);
+            if (token == null)
+                return fallback;
 
-            bool value;
-            if (bool.TryParse(token.ToString(), out value))
-                return value;
+            if (token.Type != JTokenType.Boolean)
+                throw WrongType(name, "boolean", token);
 
-            return fallback;
+            return token.Value<bool>();
         }
 
         private static float GetFloat(JObject root, string name, float fallback)
         {
-            var token = root[name];
-            if (token == null || token.Type == JTokenType.Null)
+            var token = GetToken(root, name);
+            if (token == null)
                 return fallback;
 
-            if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
-                return token.Value<float>();
+            if (token.Type != JTokenType.Float && token.Type != JTokenType.Integer)
+                throw WrongType(name, "number", token);
 
-            float value;
-            var raw = token.ToString();
+            var value = token.Value<float>();
+            if (float.IsNaN(value) || float.IsInfinity(value))
+                throw new JsonSerializationException(
+                    "Config value '" + name + "' must be a finite number."
+                );
 
-            if (float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-                return value;
-
-            if (float.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out value))
-                return value;
-
-            return fallback;
+            return value;
         }
 
         private static double GetDouble(JObject root, string name, double fallback)
         {
-            var token = root[name];
-            if (token == null || token.Type == JTokenType.Null)
+            var token = GetToken(root, name);
+            if (token == null)
                 return fallback;
 
-            if (token.Type == JTokenType.Float || token.Type == JTokenType.Integer)
-                return token.Value<double>();
+            if (token.Type != JTokenType.Float && token.Type != JTokenType.Integer)
+                throw WrongType(name, "number", token);
 
-            double value;
-            var raw = token.ToString();
+            var value = token.Value<double>();
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new JsonSerializationException(
+                    "Config value '" + name + "' must be a finite number."
+                );
 
-            if (double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out value))
-                return value;
-
-            if (double.TryParse(raw, NumberStyles.Float, CultureInfo.CurrentCulture, out value))
-                return value;
-
-            return fallback;
+            return value;
         }
 
         private static int GetInt(JObject root, string name, int fallback)
         {
-            var token = root[name];
-            if (token == null) return fallback;
+            var token = GetToken(root, name);
+            if (token == null)
+                return fallback;
 
-            int value;
-            if (int.TryParse(token.ToString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
-                return value;
+            if (token.Type != JTokenType.Integer)
+                throw WrongType(name, "integer", token);
 
-            return fallback;
+            return token.Value<int>();
+        }
+
+        private static JToken GetToken(JObject root, string name)
+        {
+            if (root == null || string.IsNullOrWhiteSpace(name))
+                return null;
+
+            JToken token;
+            return root.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out token)
+                ? token
+                : null;
+        }
+
+        private static JsonSerializationException WrongType(
+            string name,
+            string expected,
+            JToken token
+        )
+        {
+            return new JsonSerializationException(
+                "Config value '" + name + "' must be " + expected +
+                "; found " + (token == null ? "missing" : token.Type.ToString()) + "."
+            );
         }
     }
 }

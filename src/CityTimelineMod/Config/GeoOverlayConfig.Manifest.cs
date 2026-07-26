@@ -8,7 +8,7 @@ namespace CityTimelineMod.Config
 {
     internal sealed partial class GeoOverlayConfig
     {
-        private static void ApplyBundleManifest(GeoOverlayConfig config, string modDir)
+        private static bool ApplyBundleManifest(GeoOverlayConfig config, string modDir)
         {
             try
             {
@@ -18,7 +18,7 @@ namespace CityTimelineMod.Config
                 if (!File.Exists(manifestPath))
                 {
                     Log.Error("GeoOverlayConfig: bundle manifest not found: " + manifestPath);
-                    return;
+                    return false;
                 }
 
                 var manifestJson = File.ReadAllText(manifestPath);
@@ -132,10 +132,12 @@ namespace CityTimelineMod.Config
                     ", worldScale=" + config.WorldScale +
                     ", packPath=" + (string.IsNullOrWhiteSpace(config.PackPath) ? "(empty)" : config.PackPath)
                 );
+                return !string.IsNullOrWhiteSpace(config.PackPath);
             }
             catch (Exception ex)
             {
                 Log.Error("GeoOverlayConfig: failed to apply bundle manifest. " + ex);
+                return false;
             }
         }
 

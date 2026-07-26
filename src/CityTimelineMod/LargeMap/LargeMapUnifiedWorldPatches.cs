@@ -15,7 +15,13 @@ namespace CityTimelineMod.LargeMap
     {
         internal static void Apply(Harmony harmony)
         {
-            PatchClass(harmony, typeof(UnifiedWorldmapImportPatch));
+            // ReplaceWorldHeightmap cannot be made atomic with the available
+            // TerrainSystem API: DestroyWorldMap mutates first and no complete
+            // rollback is proven. Keep the vanilla method unpatched in Lot 1.
+            Util.Log.Info(
+                "[LargeMap] UnifiedWorldmapImportPatch explicitly disabled: " +
+                "destructive worldmap rollback is not proven."
+            );
             PatchClass(harmony, typeof(LargeMapTileScalePatch));
             PatchClass(harmony, typeof(LargeMapAirwayScalePatch));
             LargeMapWaterMapSizePatches.Apply(harmony);
@@ -29,63 +35,20 @@ namespace CityTimelineMod.LargeMap
     }
 
     /*
-     * En mode terrain unique, l'import officiel « worldmap » devient
-     * volontairement un import de heightmap principale. Le backdrop
-     * existant est supprimé avant la copie afin de maintenir baseLod=0.
+     * Deliberately not installed by LargeMapUnifiedWorldPatches.Apply.
+     * The previous implementation destroyed the worldmap before all later
+     * mutations could be proven safe and returned false even after exceptions,
+     * preventing the vanilla fallback. Lot 1 keeps the prefix inert.
      */
     [HarmonyPatch(typeof(TerrainSystem), nameof(TerrainSystem.ReplaceWorldHeightmap))]
     internal static class UnifiedWorldmapImportPatch
     {
-        private static readonly MethodInfo DestroyWorldMapMethod =
-            AccessTools.Method(typeof(TerrainSystem), "DestroyWorldMap");
-
         [HarmonyPrefix]
-        private static bool Prefix(TerrainSystem __instance, Texture2D inMap)
+        private static bool Prefix()
         {
-            if (!CityTimelineLargeMapState.Enabled)
-                return true;
-
-            try
-            {
-                if (DestroyWorldMapMethod == null)
-                {
-                    throw new MissingMethodException(
-                        "TerrainSystem.DestroyWorldMap"
-                    );
-                }
-
-                DestroyWorldMapMethod.Invoke(__instance, null);
-
-                if (inMap != null)
-                {
-                    __instance.ReplaceHeightmap(inMap);
-
-                    Util.Log.Info(
-                        "[LargeMap] imported worldmap promoted to the " +
-                        "single 57 km primary heightmap."
-                    );
-                }
-                else
-                {
-                    __instance.SetTerrainProperties(
-                        __instance.heightScaleOffset
-                    );
-
-                    Util.Log.Info(
-                        "[LargeMap] backdrop removed; primary terrain retained."
-                    );
-                }
-            }
-            catch (Exception ex)
-            {
-                Util.Log.Error(
-                    "[LargeMap] unified worldmap import failed: " + ex
-                );
-            }
-
-            // Ne jamais laisser l'implémentation vanilla recréer un backdrop
-            // en mode terrain unique.
-            return false;
+            // This method intentionally performs no validation-dependent
+            // mutation. If it is ever patched accidentally, vanilla always runs.
+            return true;
         }
     }
 
