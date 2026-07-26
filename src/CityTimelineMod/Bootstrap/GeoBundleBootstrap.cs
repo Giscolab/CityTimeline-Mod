@@ -17,12 +17,23 @@ namespace CityTimelineMod
     internal static class GeoBundleBootstrap
     {
         private static bool _ran = false;
+        private static readonly object RuntimeBaselineSync = new object();
+        private static GeoOverlayConfig _bundleReloadBaseline;
 
         internal static GeoOverlayConfig LoadRuntimeConfigSnapshot()
         {
             var modDir = ResolveModDirectory();
             EnsureBundledConfig(modDir);
-            return GeoOverlayConfig.Load(modDir);
+            var snapshot = GeoOverlayConfig.Load(modDir);
+
+            lock (RuntimeBaselineSync)
+            {
+                _bundleReloadBaseline = snapshot != null && snapshot.IsReliable
+                    ? snapshot.CreateBundleReloadBaseline()
+                    : null;
+            }
+
+            return snapshot;
         }
 
         internal static bool RunOnce(GeoOverlayConfig config)
@@ -42,9 +53,33 @@ namespace CityTimelineMod
             return _ran;
         }
 
-        internal static void Reset()
+        internal static void Reset(bool releaseRuntimeBaseline = false)
         {
             _ran = false;
+
+            if (!releaseRuntimeBaseline)
+                return;
+
+            lock (RuntimeBaselineSync)
+                _bundleReloadBaseline = null;
+        }
+
+        internal static bool UpdateBundleReloadBaselineAfterStrictVisualReload(
+            GeoOverlayConfig strictVisualSnapshot)
+        {
+            if (strictVisualSnapshot == null || !strictVisualSnapshot.IsReliable)
+            {
+                Log.Error(
+                    "GeoBundleBootstrap: strict visual reload did not provide a reliable bundle baseline."
+                );
+                return false;
+            }
+
+            var refreshedBaseline = strictVisualSnapshot.CreateBundleReloadBaseline();
+            lock (RuntimeBaselineSync)
+                _bundleReloadBaseline = refreshedBaseline;
+
+            return true;
         }
 
         internal static void ReloadActiveBundle(string activeBundleId)
@@ -55,49 +90,117 @@ namespace CityTimelineMod
                 return;
             }
 
+            GeoOverlayConfig config = null;
+            GeoOverlayConfig previousBundleState = null;
+            BundleSelectionFileState persistedSelection = null;
+            var overlaySwapStarted = false;
+
             try
             {
                 var modDir = ResolveModDirectory();
                 EnsureBundledConfig(modDir);
 
-                var config = Mod.RuntimeConfig;
+                config = Mod.RuntimeConfig;
                 if (config == null || !config.IsReliable)
                 {
                     Log.Error("GeoBundleBootstrap: reload blocked because the runtime snapshot is unavailable.");
                     return;
                 }
 
-                _ran = false;
-                if (!GeoDebugOverlay.Uninstall())
-                {
-                    Log.Error("GeoBundleBootstrap: reload blocked until stale overlay teardown succeeds.");
-                    return;
-                }
-
+                GeoOverlayConfig candidateConfig;
+                BundleOverlayPayload candidatePayload;
                 string canonicalId;
-                if (!UpdateActiveBundleIdInConfig(
+                string bundleIndexPath;
+                if (!TryPrepareBundleReloadCandidate(
                     modDir,
-                    config.BundlesRoot,
+                    config,
                     activeBundleId,
-                    out canonicalId
+                    out candidateConfig,
+                    out canonicalId,
+                    out bundleIndexPath
                 ))
                     return;
 
-                config.UseBundleIndex = true;
-                config.ActiveBundleId = canonicalId;
+                // Parsing every required/optional source happens while the old
+                // overlay is still alive.  Only the final Install call may tear
+                // it down.
+                if (!TryLoadActiveBundle(candidateConfig, out candidatePayload, false))
+                {
+                    Log.Error("GeoBundleBootstrap: candidate bundle rejected; current overlay kept active.");
+                    return;
+                }
+
+                if (!TryPersistActiveBundleSelection(
+                    modDir,
+                    config.BundlesRoot,
+                    canonicalId,
+                    bundleIndexPath,
+                    out persistedSelection
+                ))
+                {
+                    Log.Error("GeoBundleBootstrap: candidate persistence failed; current overlay kept active.");
+                    return;
+                }
+
+                previousBundleState = config.CloneForBundleReload();
+                config.ApplyPreparedBundleStateFrom(candidateConfig);
 
                 Log.Info("GeoBundleBootstrap: reload requested activeBundleId=" + activeBundleId);
-                _ran = LoadAndInstallActiveBundle(config) && GeoDebugOverlay.IsInstalled;
+                overlaySwapStarted = true;
+                if (InstallLoadedBundle(candidatePayload, config) && GeoDebugOverlay.IsInstalled)
+                {
+                    _ran = true;
+                    Log.Info("GeoBundleBootstrap: bundle reload committed activeBundleId=" + canonicalId);
+                    return;
+                }
+
+                throw new InvalidOperationException("The candidate overlay was not operational after installation.");
             }
             catch (Exception ex)
             {
-                _ran = false;
                 Log.Error("GeoBundleBootstrap: reload failed. " + ex);
+
+                if (persistedSelection != null && !RestoreActiveBundleSelection(persistedSelection))
+                {
+                    Log.Error(
+                        "GeoBundleBootstrap: failed reload left bundle selection rollback unverified; " +
+                        "the next startup must revalidate config.json and bundle_index.json."
+                    );
+                }
+
+                if (config != null && previousBundleState != null)
+                    config.ApplyPreparedBundleStateFrom(previousBundleState);
+
+                if (overlaySwapStarted && config != null)
+                {
+                    BundleOverlayPayload previousPayload;
+                    var restored = TryLoadActiveBundle(config, out previousPayload, false) &&
+                        InstallLoadedBundle(previousPayload, config) &&
+                        GeoDebugOverlay.IsInstalled;
+                    _ran = restored;
+                    Log.Info("GeoBundleBootstrap: previous overlay restore after failed reload=" + restored);
+                }
+                else
+                {
+                    _ran = GeoDebugOverlay.IsInstalled;
+                }
             }
         }
 
         private static bool LoadAndInstallActiveBundle(GeoOverlayConfig config)
         {
+            BundleOverlayPayload payload;
+            return TryLoadActiveBundle(config, out payload, true) && InstallLoadedBundle(payload, config);
+        }
+
+        private static bool TryLoadActiveBundle(
+            GeoOverlayConfig config,
+            out BundleOverlayPayload payload,
+            bool prepareBundle
+        )
+        {
+            payload = null;
+
             if (!Mod.RuntimeEnabled)
                 return false;
 
@@ -117,7 +220,7 @@ namespace CityTimelineMod
                     return false;
                 }
 
-                if (!config.PrepareBundle(modDir))
+                if (prepareBundle && !config.PrepareBundle(modDir))
                 {
                     Log.Error(
                         "GeoBundleBootstrap: active bundle preparation failed; " +
@@ -347,7 +450,7 @@ namespace CityTimelineMod
                 Log.Info("Total zoning polygons loaded: " + zoningPolygons.Count);
                 LogZoningSummary(zoningPolygons);
 
-                return GeoDebugOverlay.Install(
+                payload = new BundleOverlayPayload(
                     renderWaterLineGeometries,
                     renderWaterAreaOutlines,
                     renderRoadGeometries,
@@ -357,15 +460,35 @@ namespace CityTimelineMod
                     bundleHudSnapshot,
                     railwayGeometries,
                     railwayAvailable,
-                    railwayStatus,
-                    config
+                    railwayStatus
                 );
+                return true;
             }
             catch (Exception ex)
             {
                 Log.Error(ex.ToString());
                 return false;
             }
+        }
+
+        private static bool InstallLoadedBundle(BundleOverlayPayload payload, GeoOverlayConfig config)
+        {
+            if (payload == null || config == null || !Mod.RuntimeEnabled)
+                return false;
+
+            return GeoDebugOverlay.Install(
+                payload.WaterLines,
+                payload.WaterAreaOutlines,
+                payload.RoadLines,
+                payload.ZoningPolygons,
+                payload.ServicePoints,
+                payload.ServiceLoadResult,
+                payload.BundleHudSnapshot,
+                payload.RailwayLines,
+                payload.RailwayAvailable,
+                payload.RailwayStatus,
+                config
+            );
         }
 
         private static void EnsureBundledConfig(string modDir)
@@ -450,70 +573,396 @@ namespace CityTimelineMod
             Log.Info("GeoBundleBootstrap: extracted bundled file: " + outputPath);
         }
 
-        private static bool UpdateActiveBundleIdInConfig(
+        private static bool TryPrepareBundleReloadCandidate(
             string modDir,
-            string configuredBundlesRoot,
-            string activeBundleId,
-            out string updatedCanonicalId
+            GeoOverlayConfig runtimeConfig,
+            string requestedId,
+            out GeoOverlayConfig candidate,
+            out string canonicalId,
+            out string indexPath
         )
         {
-            updatedCanonicalId = "";
+            candidate = null;
+            canonicalId = null;
+            indexPath = null;
 
-            if (string.IsNullOrWhiteSpace(activeBundleId))
+            if (runtimeConfig == null || string.IsNullOrWhiteSpace(requestedId))
             {
-                Log.Error("GeoBundleBootstrap: cannot reload empty activeBundleId.");
+                Log.Error("GeoBundleBootstrap: cannot prepare an empty bundle selection.");
                 return false;
             }
 
             try
             {
-                var configPath = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
-                string canonicalId = null;
-                JObject ignoredRoot;
-                string updateError;
-
-                if (!GeoOverlayConfig.TryUpdateRuntimeConfigFile(
-                    configPath,
-                    root =>
-                    {
-                        var snapshotBundlesRoot = string.IsNullOrWhiteSpace(configuredBundlesRoot)
-                            ? "data/exports/bundles"
-                            : configuredBundlesRoot;
-
-                        string pointerError;
-                        if (!BundleResolver.TryUpdateActiveBundlePointer(
-                            snapshotBundlesRoot,
-                            modDir,
-                            activeBundleId,
-                            out canonicalId,
-                            out pointerError))
-                        {
-                            throw new InvalidOperationException(
-                                "Active bundle selection rejected. " + pointerError
-                            );
-                        }
-
-                        root["useBundleIndex"] = true;
-                        // Keep this field for older indexes; bundle_index.json
-                        // remains the authoritative pointer.
-                        root["activeBundleId"] = canonicalId;
-                    },
-                    out ignoredRoot,
-                    out updateError
-                ))
+                var configuredRoot = string.IsNullOrWhiteSpace(runtimeConfig.BundlesRoot)
+                    ? "data/exports/bundles"
+                    : runtimeConfig.BundlesRoot;
+                var bundlesRoot = BundleResolver.ResolveBundlesRootPath(configuredRoot, modDir);
+                indexPath = Path.Combine(bundlesRoot, "bundle_index.json");
+                var indexRoot = JObject.Parse(File.ReadAllText(indexPath));
+                var bundles = indexRoot["bundles"] as JArray;
+                if (bundles == null)
                 {
-                    Log.Error("GeoBundleBootstrap: failed to update activeBundleId in config. " + updateError);
+                    Log.Error("GeoBundleBootstrap: bundle_index.json has no bundles array.");
                     return false;
                 }
 
-                Log.Info("GeoBundleBootstrap: config activeBundleId saved=" + canonicalId);
-                updatedCanonicalId = canonicalId;
+                JObject selected = null;
+                foreach (var token in bundles)
+                {
+                    var entry = token as JObject;
+                    if (entry != null && string.Equals(
+                        ReadIndexString(entry, "id"),
+                        requestedId.Trim(),
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+                    {
+                        selected = entry;
+                        break;
+                    }
+                }
+
+                if (selected == null)
+                {
+                    Log.Error("GeoBundleBootstrap: bundle not found in index: " + requestedId);
+                    return false;
+                }
+
+                string manifestPath;
+                string bundleRoot;
+                string validationError;
+                if (!BundleResolver.TryValidateEntry(
+                    bundlesRoot,
+                    selected,
+                    out manifestPath,
+                    out bundleRoot,
+                    out validationError
+                ))
+                {
+                    Log.Error("GeoBundleBootstrap: candidate bundle is invalid. " + validationError);
+                    return false;
+                }
+
+                canonicalId = ReadIndexString(selected, "id").Trim();
+
+                GeoOverlayConfig fallbackBaseline;
+                lock (RuntimeBaselineSync)
+                    fallbackBaseline = _bundleReloadBaseline;
+
+                if (fallbackBaseline == null || !fallbackBaseline.IsReliable)
+                {
+                    Log.Error(
+                        "GeoBundleBootstrap: candidate preparation blocked because the strict config " +
+                        "fallback snapshot is unavailable or invalid."
+                    );
+                    return false;
+                }
+
+                candidate = runtimeConfig.CloneForBundleReloadCandidate(fallbackBaseline);
+                candidate.UseBundleIndex = false;
+                candidate.BundleManifestPath = manifestPath;
+                candidate.PackPath = null;
+                BundleResolver.ApplyIndexMetadata(candidate, selected);
+
+                if (!candidate.PrepareBundle(modDir))
+                {
+                    candidate = null;
+                    return false;
+                }
+
+                candidate.UseBundleIndex = true;
+                candidate.ResolvedBundlesRoot = bundlesRoot;
+                candidate.ActiveBundleRoot = bundleRoot;
+                candidate.ActiveBundleId = canonicalId;
+                candidate.BundleIndexResolutionSucceeded = true;
+                candidate.BundleIndexResolutionError = null;
                 return true;
             }
             catch (Exception ex)
             {
-                Log.Error("GeoBundleBootstrap: failed to update activeBundleId in config. " + ex);
+                candidate = null;
+                Log.Error("GeoBundleBootstrap: candidate preparation failed. " + ex);
                 return false;
+            }
+        }
+
+        private static bool TryPersistActiveBundleSelection(
+            string modDir,
+            string configuredBundlesRoot,
+            string canonicalId,
+            string indexPath,
+            out BundleSelectionFileState state
+        )
+        {
+            state = null;
+            var configPath = CityTimelineConfigStorage.ResolveWritableConfigPath(modDir);
+            BundleSelectionFileState captured;
+            if (!TryCaptureActiveBundleSelection(configPath, indexPath, out captured))
+                return false;
+
+            JObject ignoredRoot;
+            string updateError;
+            if (!GeoOverlayConfig.TryUpdateRuntimeConfigFile(
+                configPath,
+                root =>
+                {
+                    root["useBundleIndex"] = true;
+                    root["activeBundleId"] = canonicalId;
+                },
+                out ignoredRoot,
+                out updateError
+            ))
+            {
+                Log.Error("GeoBundleBootstrap: failed to persist bundle selection in config.json. " + updateError);
+                return false;
+            }
+
+            string configVerificationError;
+            if (!VerifyPersistedConfigSelection(
+                configPath,
+                canonicalId,
+                out configVerificationError
+            ))
+            {
+                Log.Error(
+                    "GeoBundleBootstrap: config.json bundle selection verification failed. " +
+                    configVerificationError
+                );
+                if (!RestoreActiveBundleSelection(captured))
+                {
+                    Log.Error(
+                        "GeoBundleBootstrap: config verification rollback could not be verified; " +
+                        "config.json and bundle_index.json require startup revalidation."
+                    );
+                }
+                return false;
+            }
+
+            string persistedCanonicalId;
+            string pointerError;
+            var bundlesRoot = string.IsNullOrWhiteSpace(configuredBundlesRoot)
+                ? "data/exports/bundles"
+                : configuredBundlesRoot;
+            if (!BundleResolver.TryUpdateActiveBundlePointer(
+                bundlesRoot,
+                modDir,
+                canonicalId,
+                out persistedCanonicalId,
+                out pointerError
+            ) || !string.Equals(persistedCanonicalId, canonicalId, StringComparison.Ordinal))
+            {
+                Log.Error("GeoBundleBootstrap: failed to persist bundle_index.json. " + pointerError);
+                if (!RestoreActiveBundleSelection(captured))
+                {
+                    Log.Error(
+                        "GeoBundleBootstrap: persistence failure rollback could not be verified; " +
+                        "config.json and bundle_index.json require startup revalidation."
+                    );
+                }
+                return false;
+            }
+
+            state = captured;
+            Log.Info("GeoBundleBootstrap: bundle selection persisted coherently activeBundleId=" + canonicalId);
+            return true;
+        }
+
+        private static bool TryCaptureActiveBundleSelection(
+            string configPath,
+            string indexPath,
+            out BundleSelectionFileState state
+        )
+        {
+            state = null;
+
+            try
+            {
+                state = new BundleSelectionFileState(
+                    configPath,
+                    File.Exists(configPath),
+                    File.Exists(configPath) ? File.ReadAllBytes(configPath) : null,
+                    indexPath,
+                    File.Exists(indexPath),
+                    File.Exists(indexPath) ? File.ReadAllBytes(indexPath) : null
+                );
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GeoBundleBootstrap: failed to snapshot bundle selection files. " + ex);
+                return false;
+            }
+        }
+
+        private static bool RestoreActiveBundleSelection(BundleSelectionFileState state)
+        {
+            if (state == null)
+                return true;
+
+            var indexRestored = RestoreSelectionFile(
+                state.IndexPath,
+                state.IndexExisted,
+                state.IndexContents
+            );
+            var configRestored = RestoreSelectionFile(
+                state.ConfigPath,
+                state.ConfigExisted,
+                state.ConfigContents
+            );
+            var restored = indexRestored && configRestored;
+            Log.Info("GeoBundleBootstrap: bundle selection rollback complete=" + restored);
+            return restored;
+        }
+
+        private static bool RestoreSelectionFile(string path, bool existed, byte[] contents)
+        {
+            try
+            {
+                if (existed)
+                {
+                    string restoreError;
+                    if (!GeoOverlayConfig.TryWriteBytesAtomically(path, contents, out restoreError))
+                    {
+                        Log.Error(
+                            "GeoBundleBootstrap: atomic selection rollback failed for " + path + ". " +
+                            restoreError
+                        );
+                        return false;
+                    }
+                }
+                else if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+
+                if (File.Exists(path) != existed)
+                    throw new IOException("Selection rollback existence verification failed for " + path);
+
+                if (existed && !GeoOverlayConfig.ByteArraysEqual(contents, File.ReadAllBytes(path)))
+                    throw new IOException("Selection rollback content verification failed for " + path);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GeoBundleBootstrap: failed to restore selection file " + path + ". " + ex);
+                return false;
+            }
+        }
+
+        private static bool VerifyPersistedConfigSelection(
+            string configPath,
+            string canonicalId,
+            out string error
+        )
+        {
+            error = null;
+
+            try
+            {
+                var root = JObject.Parse(File.ReadAllText(configPath));
+                JToken useBundleIndexToken;
+                if (!root.TryGetValue(
+                    "useBundleIndex",
+                    StringComparison.OrdinalIgnoreCase,
+                    out useBundleIndexToken
+                ) || useBundleIndexToken.Type != JTokenType.Boolean ||
+                    !useBundleIndexToken.Value<bool>())
+                {
+                    error = "useBundleIndex=true was not persisted.";
+                    return false;
+                }
+
+                if (!string.Equals(
+                    ReadIndexString(root, "activeBundleId"),
+                    canonicalId,
+                    StringComparison.Ordinal
+                ))
+                {
+                    error = "activeBundleId was not persisted exactly.";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.ToString();
+                return false;
+            }
+        }
+
+        private static string ReadIndexString(JObject root, string name)
+        {
+            JToken token;
+            return root != null && root.TryGetValue(name, StringComparison.OrdinalIgnoreCase, out token)
+                ? (token == null ? "" : token.ToString())
+                : "";
+        }
+
+        private sealed class BundleSelectionFileState
+        {
+            internal readonly string ConfigPath;
+            internal readonly bool ConfigExisted;
+            internal readonly byte[] ConfigContents;
+            internal readonly string IndexPath;
+            internal readonly bool IndexExisted;
+            internal readonly byte[] IndexContents;
+
+            internal BundleSelectionFileState(
+                string configPath,
+                bool configExisted,
+                byte[] configContents,
+                string indexPath,
+                bool indexExisted,
+                byte[] indexContents
+            )
+            {
+                ConfigPath = configPath;
+                ConfigExisted = configExisted;
+                ConfigContents = configContents;
+                IndexPath = indexPath;
+                IndexExisted = indexExisted;
+                IndexContents = indexContents;
+            }
+        }
+
+        private sealed class BundleOverlayPayload
+        {
+            internal readonly List<List<GeoPoint>> WaterLines;
+            internal readonly List<List<GeoPoint>> WaterAreaOutlines;
+            internal readonly List<GeoRoadLine> RoadLines;
+            internal readonly List<GeoZoningPolygon> ZoningPolygons;
+            internal readonly List<GeoServicePoint> ServicePoints;
+            internal readonly ServiceGeoJsonLoadResult ServiceLoadResult;
+            internal readonly BundleHudSnapshot BundleHudSnapshot;
+            internal readonly List<GeoRailwayLine> RailwayLines;
+            internal readonly bool RailwayAvailable;
+            internal readonly string RailwayStatus;
+
+            internal BundleOverlayPayload(
+                List<List<GeoPoint>> waterLines,
+                List<List<GeoPoint>> waterAreaOutlines,
+                List<GeoRoadLine> roadLines,
+                List<GeoZoningPolygon> zoningPolygons,
+                List<GeoServicePoint> servicePoints,
+                ServiceGeoJsonLoadResult serviceLoadResult,
+                BundleHudSnapshot bundleHudSnapshot,
+                List<GeoRailwayLine> railwayLines,
+                bool railwayAvailable,
+                string railwayStatus
+            )
+            {
+                WaterLines = waterLines;
+                WaterAreaOutlines = waterAreaOutlines;
+                RoadLines = roadLines;
+                ZoningPolygons = zoningPolygons;
+                ServicePoints = servicePoints;
+                ServiceLoadResult = serviceLoadResult;
+                BundleHudSnapshot = bundleHudSnapshot;
+                RailwayLines = railwayLines;
+                RailwayAvailable = railwayAvailable;
+                RailwayStatus = railwayStatus;
             }
         }
 

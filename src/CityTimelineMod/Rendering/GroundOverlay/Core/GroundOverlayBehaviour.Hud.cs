@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CityTimelineMod.Bundles;
+using CityTimelineMod.Config;
 using CityTimelineMod.Rendering.Railways;
 using CityTimelineMod.Rendering.Roads;
 using CityTimelineMod.Rendering.Statistics;
@@ -1549,18 +1550,45 @@ namespace CityTimelineMod.Rendering
                 }
             }
 
-            if (GUILayout.Button("Réappliquer session", GUILayout.Height(28f)))
+            if (GUILayout.Button("Recharger visuels", GUILayout.Height(28f)))
             {
-                SyncVisibilityStateFromConfig();
-                SyncModernLayerStateFromConfig();
-                _visualSettingsDirty = false;
-                _visualSettingsStatusMessage = "Snapshot runtime réappliqué.";
-                _controlPanelRebuildPending = false;
+                string reloadError;
+                GeoOverlayConfig refreshedBundleBaseline;
+                if (_config.TryReloadVisualSettingsFromConfig(
+                    out reloadError,
+                    out refreshedBundleBaseline))
+                {
+                    if (!GeoBundleBootstrap.UpdateBundleReloadBaselineAfterStrictVisualReload(
+                        refreshedBundleBaseline))
+                    {
+                        _visualSettingsStatusMessage =
+                            "Visuels rechargés, mais baseline bundle indisponible.";
+                        Log.Error(
+                            "GroundOverlay HUD panel: strict visual reload could not refresh " +
+                            "the bundle fallback baseline."
+                        );
+                        return;
+                    }
 
-                Log.Info("GroundOverlay HUD panel: runtime snapshot reapplied without re-reading config.json.");
+                    if (Mod.Settings != null && Mod.RuntimeConfig != null)
+                        Mod.Settings.ApplyRuntimeVisualSnapshot(Mod.RuntimeConfig);
 
-                ApplyOverlayRebuildSafetyGuard("HUD reapply runtime snapshot");
-                RequestOverlayRebuild("HUD reapply runtime snapshot", true);
+                    SyncVisibilityStateFromConfig();
+                    SyncModernLayerStateFromConfig();
+                    _visualSettingsDirty = false;
+                    _visualSettingsStatusMessage = "Visuels rechargés depuis config.json.";
+                    _controlPanelRebuildPending = false;
+
+                    Log.Info("GroundOverlay HUD panel: visual settings reloaded through strict config loader.");
+
+                    ApplyOverlayRebuildSafetyGuard("HUD reload visual settings");
+                    RequestOverlayRebuild("HUD reload visual settings", true);
+                }
+                else
+                {
+                    _visualSettingsStatusMessage = "Config invalide : visuels inchangés.";
+                    Log.Error("GroundOverlay HUD panel: strict visual reload rejected. " + reloadError);
+                }
             }
 
             GUILayout.EndHorizontal();

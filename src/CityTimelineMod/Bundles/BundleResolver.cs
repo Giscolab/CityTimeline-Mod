@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Text;
 using CityTimelineMod.Config;
 using CityTimelineMod.Util;
 using Newtonsoft.Json;
@@ -191,11 +190,24 @@ namespace CityTimelineMod.Bundles
 
                 canonicalId = ReadString(selected, "id").Trim();
                 root["activeBundleId"] = canonicalId;
-                File.WriteAllText(
+                string writeError;
+                if (!GeoOverlayConfig.TryWriteUtf8TextAtomically(
                     indexPath,
                     root.ToString(Formatting.Indented),
-                    new UTF8Encoding(false)
-                );
+                    out writeError
+                ))
+                {
+                    error = "failed to atomically update bundle_index.json: " + writeError;
+                    return false;
+                }
+
+                var persistedRoot = JObject.Parse(File.ReadAllText(indexPath));
+                var persistedId = ReadString(persistedRoot, "activeBundleId");
+                if (!string.Equals(persistedId, canonicalId, StringComparison.Ordinal))
+                {
+                    error = "bundle_index.json verification failed after atomic update.";
+                    return false;
+                }
 
                 Log.Info("BundleResolver: bundle_index activeBundleId saved=" + canonicalId);
                 return true;
@@ -386,7 +398,7 @@ namespace CityTimelineMod.Bundles
                    id.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
         }
 
-        private static void ApplyIndexMetadata(GeoOverlayConfig config, JObject entry)
+        internal static void ApplyIndexMetadata(GeoOverlayConfig config, JObject entry)
         {
             config.ActiveBundleId = ReadString(entry, "id");
             config.ActiveBundleDisplayName = ReadString(entry, "displayName");
