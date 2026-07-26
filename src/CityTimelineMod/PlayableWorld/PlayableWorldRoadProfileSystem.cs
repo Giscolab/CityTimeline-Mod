@@ -25,6 +25,7 @@ namespace CityTimelineMod.PlayableWorld
     {
         private TerrainSystem _terrainSystem;
         private EntityQuery _courseQuery;
+        private bool _runtimeActive;
 
         protected override void OnCreate()
         {
@@ -38,17 +39,66 @@ namespace CityTimelineMod.PlayableWorld
                 ComponentType.ReadOnly<CreationDefinition>()
             );
 
+            _runtimeActive = false;
+            Enabled = false;
+
             Util.Log.Info(
                 "[PlayableWorld] network-profile system created."
             );
         }
 
+        protected override void OnDestroy()
+        {
+            DeactivateForRuntime();
+            base.OnDestroy();
+        }
+
+        internal bool ActivateForRuntime()
+        {
+            if (_runtimeActive && CanActivateForCurrentWorld())
+            {
+                Enabled = true;
+                return true;
+            }
+
+            _runtimeActive = false;
+            Enabled = false;
+
+            if (!CanActivateForCurrentWorld())
+            {
+                Util.Log.Error(
+                    "[PlayableWorld] network-profile activation blocked: " +
+                    "runtime, module, or World authorization is unavailable."
+                );
+                return false;
+            }
+
+            _runtimeActive = true;
+            Enabled = true;
+
+            Util.Log.Info(
+                "[PlayableWorld] network-profile system activated for World sequence=" +
+                World.SequenceNumber + "."
+            );
+
+            return true;
+        }
+
+        internal void DeactivateForRuntime()
+        {
+            _runtimeActive = false;
+            Enabled = false;
+        }
+
         protected override void OnUpdate()
         {
-            if (!PlayableWorldState.Enabled)
+            if (_runtimeActive && !CanMutateCurrentWorld())
+            {
+                DeactivateForRuntime();
                 return;
+            }
 
-            if (!PlayableWorldState.Initialized)
+            if (!CanMutateCurrentWorld())
                 return;
 
             if (_courseQuery.IsEmptyIgnoreFilter)
@@ -195,6 +245,12 @@ namespace CityTimelineMod.PlayableWorld
                         ref terrainData
                     );
 
+                    // All expensive work above is local. Recheck immediately
+                    // before the only ECS mutation so a stale World instance
+                    // cannot publish a course after the runtime gate closes.
+                    if (!CanMutateCurrentWorld())
+                        return;
+
                     EntityManager.SetComponentData(
                         entities[i],
                         course
@@ -221,6 +277,30 @@ namespace CityTimelineMod.PlayableWorld
                     changedTracks
                 );
             }
+        }
+
+        private bool CanMutateCurrentWorld()
+        {
+            return
+                _runtimeActive &&
+                Mod.IsActiveRuntimeWorld(World) &&
+                PlayableWorldState.Enabled &&
+                PlayableWorldState.Initialized &&
+                World != null &&
+                World.IsCreated &&
+                World.SequenceNumber == PlayableWorldState.ActiveWorldSequence;
+        }
+
+        private bool CanActivateForCurrentWorld()
+        {
+            return
+                Mod.RuntimeEnabled &&
+                Mod.IsActiveRuntimeWorld(World) &&
+                PlayableWorldState.Installed &&
+                PlayableWorldState.HasActiveWorld &&
+                World != null &&
+                World.IsCreated &&
+                World.SequenceNumber == PlayableWorldState.ActiveWorldSequence;
         }
 
         private static bool TouchesBackdrop(

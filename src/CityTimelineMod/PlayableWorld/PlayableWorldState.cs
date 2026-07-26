@@ -1,4 +1,5 @@
 using Colossal.Mathematics;
+using CityTimelineMod.LargeMap;
 using Unity.Mathematics;
 
 namespace CityTimelineMod.PlayableWorld
@@ -18,6 +19,7 @@ namespace CityTimelineMod.PlayableWorld
             get
             {
                 return Mod.RuntimeEnabled &&
+                    CityTimelineLargeMapState.Enabled &&
                     Installed &&
                     Initialized &&
                     HasActiveWorld;
@@ -46,7 +48,8 @@ namespace CityTimelineMod.PlayableWorld
             if (!Mod.RuntimeEnabled ||
                 !Installed ||
                 !HasActiveWorld ||
-                worldSequence != ActiveWorldSequence)
+                worldSequence != ActiveWorldSequence ||
+                !CityTimelineLargeMapState.Enabled)
             {
                 return false;
             }
@@ -65,6 +68,21 @@ namespace CityTimelineMod.PlayableWorld
                 ResetBounds();
                 Util.Log.Error(
                     "[PlayableWorld] rejected invalid world bounds: offset=" +
+                    worldOffset + ", size=" + worldSize + "."
+                );
+                return false;
+            }
+
+            var expectedHalf = CityTimelineLargeMapState.HalfMapSizeMetersFloat;
+            var expectedSize = CityTimelineLargeMapState.MapSizeMetersFloat;
+            if (math.abs(worldOffset.x + expectedHalf) > 1f ||
+                math.abs(worldOffset.y + expectedHalf) > 1f ||
+                math.abs(worldSize.x - expectedSize) > 1f ||
+                math.abs(worldSize.y - expectedSize) > 1f)
+            {
+                ResetBounds();
+                Util.Log.Error(
+                    "[PlayableWorld] rejected non-LargeMap bounds: offset=" +
                     worldOffset + ", size=" + worldSize + "."
                 );
                 return false;
