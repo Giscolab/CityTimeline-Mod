@@ -1,6 +1,6 @@
 # deploy.ps1 — safe deploy for CityTimelineMod (net48)
-# Runtime truth: AppData config.json
-# Repository default config is resources\defaults\config.json.
+# Runtime user configuration lives under ModsSettings and is read-only here.
+# The mod-root config.json is only a legacy/default migration seed.
 
 $ErrorActionPreference = "Stop"
 
@@ -37,12 +37,28 @@ if ([string]::IsNullOrWhiteSpace($userProfile)) {
     throw "Cannot resolve Windows user profile path."
 }
 
-$localModsRoot = Join-Path $userProfile "AppData\LocalLow\Colossal Order\Cities Skylines II\Mods"
+$gameUserDataRoot = Join-Path $userProfile "AppData\LocalLow\Colossal Order\Cities Skylines II"
+$localModsRoot = Join-Path $gameUserDataRoot "Mods"
 $dst = Join-Path $localModsRoot "CityTimelineMod"
 $legacyUiDst = Join-Path $localModsRoot "CityTimelineModUI"
 
 $repoConfig = Join-Path $resourcesRoot "defaults\config.json"
-$appConfig = Join-Path $dst "config.json"
+$legacyConfig = Join-Path $dst "config.json"
+$runtimeConfig = Join-Path $gameUserDataRoot "ModsSettings\CityTimelineMod\config.json"
+$runtimeConfigHash = $null
+
+if (Test-Path -LiteralPath $runtimeConfig) {
+    if (!(Test-Path -LiteralPath $runtimeConfig -PathType Leaf)) {
+        throw "Expected the runtime user config to be a file: $runtimeConfig"
+    }
+
+    $runtimeConfigHash = (Get-FileHash -LiteralPath $runtimeConfig -Algorithm SHA256).Hash
+    [Console]::WriteLine("Runtime user config detected and protected (read-only): $runtimeConfig")
+}
+else {
+    [Console]::WriteLine("Runtime user config is absent: $runtimeConfig")
+    [Console]::WriteLine("CityTimelineMod will create it at runtime; deploy.ps1 will not create or modify it.")
+}
 
 function Assert-UnderPath {
     param(
@@ -165,6 +181,7 @@ finally {
 $requiredGeneratedUIFiles = @(
     (Join-Path $uiOut "CityTimelineMod.mjs"),
     (Join-Path $uiOut "CityTimelineMod.css"),
+    (Join-Path $uiOut "CityTimelineMod.mjs.LICENSE.txt"),
     (Join-Path $uiOut "fonts\overpass.ttf")
 )
 
@@ -175,7 +192,8 @@ foreach ($requiredGeneratedUIFile in $requiredGeneratedUIFiles) {
 }
 
 # 3) Ensure destination exists.
-# IMPORTANT: do NOT delete $dst, because AppData config.json is the runtime truth.
+# IMPORTANT: do not delete $dst; its config.json is the legacy/default migration seed.
+# The authoritative runtime user config is under ModsSettings and is never touched here.
 New-Item -ItemType Directory -Force -Path $dst | Out-Null
 
 # RealMap is the source of truth. Deploy the complete catalog, not only the
@@ -254,21 +272,25 @@ if (Test-Path $srcData) {
 # 7) Deploy the single CS2 UI module to the code mod root.
 Copy-Item -Force (Join-Path $uiOut "CityTimelineMod.mjs") (Join-Path $dst "CityTimelineMod.mjs")
 Copy-Item -Force (Join-Path $uiOut "CityTimelineMod.css") (Join-Path $dst "CityTimelineMod.css")
+Copy-Item -Force (Join-Path $uiOut "CityTimelineMod.mjs.LICENSE.txt") (Join-Path $dst "CityTimelineMod.mjs.LICENSE.txt")
 
 $dstFonts = Join-Path $dst "fonts"
 New-Item -ItemType Directory -Force -Path $dstFonts | Out-Null
 Copy-Item -Force (Join-Path $uiOut "fonts\overpass.ttf") (Join-Path $dstFonts "overpass.ttf")
 
 # 8) Config policy.
-# AppData config.json is authoritative at runtime.
-# The repository default is a read-only initialization template.
-if (-not (Test-Path -LiteralPath $appConfig) -and (Test-Path -LiteralPath $repoConfig)) {
-    Copy-Item -Force $repoConfig $appConfig
+# The mod-root config.json is only a legacy/default migration seed.
+# Runtime owns ModsSettings\CityTimelineMod\config.json and deploy.ps1 never writes it.
+if (-not (Test-Path -LiteralPath $legacyConfig) -and (Test-Path -LiteralPath $repoConfig)) {
+    Copy-Item -Force $repoConfig $legacyConfig
+    [Console]::WriteLine("Created legacy/default config migration seed: $legacyConfig")
 }
-elseif (-not (Test-Path -LiteralPath $appConfig)) {
-    throw "No config.json found in AppData or repository defaults. Cannot deploy safely."
+elseif (-not (Test-Path -LiteralPath $legacyConfig)) {
+    throw "No legacy/default config migration seed or repository default was found. Cannot deploy safely."
 }
-# else: AppData config already exists, keep it (runtime truth).
+else {
+    [Console]::WriteLine("Preserved legacy/default config migration seed: $legacyConfig")
+}
 
 # 9) Deploy the code mod manifest from the repository source of truth.
 if (!(Test-Path -LiteralPath $repoManifest)) {
@@ -290,6 +312,7 @@ $requiredFiles = @(
     (Join-Path $dst "data\legacy-geojson\zoning_polygons.geojson"),
     (Join-Path $dst "CityTimelineMod.mjs"),
     (Join-Path $dst "CityTimelineMod.css"),
+    (Join-Path $dst "CityTimelineMod.mjs.LICENSE.txt"),
     (Join-Path $dst "fonts\overpass.ttf")
 )
 
@@ -321,6 +344,19 @@ foreach ($forbiddenPath in $forbiddenPaths) {
     if (Test-Path -LiteralPath $forbiddenPath) {
         throw "Deployment validation failed. Obsolete UI artifact still exists: $forbiddenPath"
     }
+}
+
+if ($null -ne $runtimeConfigHash) {
+    if (!(Test-Path -LiteralPath $runtimeConfig -PathType Leaf)) {
+        throw "Runtime user config disappeared during deployment: $runtimeConfig"
+    }
+
+    $runtimeConfigHashAfter = (Get-FileHash -LiteralPath $runtimeConfig -Algorithm SHA256).Hash
+    if ($runtimeConfigHashAfter -ne $runtimeConfigHash) {
+        throw "Runtime user config changed during deployment: $runtimeConfig"
+    }
+
+    [Console]::WriteLine("Runtime user config preserved byte-for-byte: $runtimeConfig")
 }
 
 # 11) Clean temp files only.

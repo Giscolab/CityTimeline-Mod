@@ -9,6 +9,9 @@
     <PackagingRoot>$(RepositoryRoot)\packaging</PackagingRoot>
     <UiOutputRoot>$(RepositoryRoot)\src\CityTimelineMod.UI\dist</UiOutputRoot>
     <GameManagedRoot>C:\Program Files (x86)\Steam\steamapps\common\Cities Skylines II\Cities2_Data\Managed</GameManagedRoot>
+    <CityTimelineCleanPublish Condition="'$(CityTimelineCleanPublish)' == ''">false</CityTimelineCleanPublish>
+    <CityTimelinePublishStagingRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\obj\publish-staging'))</CityTimelinePublishStagingRoot>
+    <CityTimelineDeployBackup>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\obj\deploy-runtime-backup'))</CityTimelineDeployBackup>
   </PropertyGroup>
 
   <Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
@@ -71,13 +74,27 @@
   <!--
     DeployWIP supplied by the CS2 toolchain deletes $(DeployDir) before copying
     the new build. RealMap publishes runtime-owned bundles directly below that
-    directory, so preserve them (and the user's runtime config) across every
-    IDE/dotnet deployment. data\bundles is the pre-index-layout location and is
-    migrated once to the canonical data\exports\bundles location.
+    local deployment directory, so preserve them and the legacy migration
+    config across local IDE/dotnet deployments. The writable ModsSettings config
+    lives outside DeployDir and is never part of this preservation path.
   -->
-  <Target Name="PreserveCityTimelineRuntimeData" BeforeTargets="DeployWIP">
+  <Target Name="PrepareCityTimelineCleanPublishStaging"
+          BeforeTargets="DeployWIP"
+          Condition="'$(CityTimelineCleanPublish)' == 'true'">
     <PropertyGroup>
-      <CityTimelineDeployBackup>$(BaseIntermediateOutputPath)deploy-runtime-backup</CityTimelineDeployBackup>
+      <CityTimelineExpectedCleanDeployDir>$([System.IO.Path]::GetFullPath('$(CityTimelinePublishStagingRoot)\$(TargetName)'))</CityTimelineExpectedCleanDeployDir>
+      <CityTimelineActualCleanDeployDir>$([System.IO.Path]::GetFullPath('$(DeployDir)'))</CityTimelineActualCleanDeployDir>
+    </PropertyGroup>
+
+    <Error Condition="'$(CityTimelineActualCleanDeployDir)' != '$(CityTimelineExpectedCleanDeployDir)'"
+           Text="CityTimelineMod clean publication is restricted to $(CityTimelineExpectedCleanDeployDir), not $(CityTimelineActualCleanDeployDir)." />
+    <RemoveDir Directories="$(CityTimelinePublishStagingRoot)" />
+  </Target>
+
+  <Target Name="PreserveCityTimelineRuntimeData"
+          BeforeTargets="DeployWIP"
+          Condition="'$(CityTimelineCleanPublish)' != 'true'">
+    <PropertyGroup>
       <CityTimelineCanonicalBundles>$(DeployDir)\data\exports\bundles</CityTimelineCanonicalBundles>
       <CityTimelineLegacyBundles>$(DeployDir)\data\bundles</CityTimelineLegacyBundles>
       <CityTimelineRuntimeBundlesRoot Condition="Exists('$(CityTimelineCanonicalBundles)\bundle_index.json')">$(CityTimelineCanonicalBundles)</CityTimelineRuntimeBundlesRoot>
@@ -108,6 +125,8 @@
       <CityTimelineDataFiles Include="$(ResourcesRoot)\legacy-geojson\**\*.*" />
       <CityTimelineUiRootFiles Include="$(UiOutputRoot)\CityTimelineMod.mjs" Condition="Exists('$(UiOutputRoot)\CityTimelineMod.mjs')" />
       <CityTimelineUiRootFiles Include="$(UiOutputRoot)\CityTimelineMod.css" Condition="Exists('$(UiOutputRoot)\CityTimelineMod.css')" />
+      <CityTimelineUiLicenseFile Include="$(UiOutputRoot)\CityTimelineMod.mjs.LICENSE.txt"
+                                 Condition="Exists('$(UiOutputRoot)\CityTimelineMod.mjs.LICENSE.txt')" />
       <CityTimelineUiFontFiles Include="$(UiOutputRoot)\fonts\**\*.*" Condition="Exists('$(UiOutputRoot)\fonts')" />
     </ItemGroup>
 
@@ -123,11 +142,18 @@
           DestinationFiles="@(CityTimelineUiRootFiles->'$(DeployDir)\%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
 
+    <!-- Keep the generated third-party notice as an explicit publication
+         artifact. Its multi-part extension must not depend on generic item
+         metadata transforms used by the other UI root files. -->
+    <Copy SourceFiles="@(CityTimelineUiLicenseFile)"
+          DestinationFiles="@(CityTimelineUiLicenseFile->'$(DeployDir)\CityTimelineMod.mjs.LICENSE.txt')"
+          SkipUnchangedFiles="true" />
+
     <Copy SourceFiles="@(CityTimelineUiFontFiles)"
           DestinationFiles="@(CityTimelineUiFontFiles->'$(DeployDir)\fonts\%(RecursiveDir)%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
 
-    <ItemGroup>
+    <ItemGroup Condition="'$(CityTimelineCleanPublish)' != 'true'">
       <CityTimelinePreservedConfig Include="$(CityTimelineDeployBackup)\config.json"
                                    Condition="Exists('$(CityTimelineDeployBackup)\config.json')" />
       <CityTimelinePreservedBundles Include="$(CityTimelineDeployBackup)\bundles\**\*.*"
@@ -136,13 +162,62 @@
 
     <!-- Restore runtime-owned state after repository defaults have deployed. -->
     <Copy SourceFiles="@(CityTimelinePreservedConfig)"
-          DestinationFiles="@(CityTimelinePreservedConfig->'$(DeployDir)\config.json')" />
+          DestinationFiles="@(CityTimelinePreservedConfig->'$(DeployDir)\config.json')"
+          Condition="'$(CityTimelineCleanPublish)' != 'true'" />
     <Copy SourceFiles="@(CityTimelinePreservedBundles)"
-          DestinationFiles="@(CityTimelinePreservedBundles->'$(DeployDir)\data\exports\bundles\%(RecursiveDir)%(Filename)%(Extension)')" />
+          DestinationFiles="@(CityTimelinePreservedBundles->'$(DeployDir)\data\exports\bundles\%(RecursiveDir)%(Filename)%(Extension)')"
+          Condition="'$(CityTimelineCleanPublish)' != 'true'" />
 
     <Error Condition="!Exists('$(DeployDir)\0Harmony.dll')"
            Text="CityTimelineMod deployment is incomplete: 0Harmony.dll is missing from $(DeployDir)." />
-    <RemoveDir Directories="$(CityTimelineDeployBackup)" />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod.dll')"
+           Text="CityTimelineMod publication staging is incomplete: CityTimelineMod.dll is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod_win_x86_64.dll')"
+           Text="CityTimelineMod publication staging is incomplete: Windows native output is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod_mac_x86_64.bundle')"
+           Text="CityTimelineMod publication staging is incomplete: macOS native output is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod_linux_x86_64.so')"
+           Text="CityTimelineMod publication staging is incomplete: Linux native output is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod.mjs')"
+           Text="CityTimelineMod publication staging is incomplete: CityTimelineMod.mjs is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod.css')"
+           Text="CityTimelineMod publication staging is incomplete: CityTimelineMod.css is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND '@(CityTimelineUiLicenseFile)' == ''"
+           Text="CityTimelineMod publication staging is incomplete: the generated UI license notice is missing from $(UiOutputRoot)." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\CityTimelineMod.mjs.LICENSE.txt')"
+           Text="CityTimelineMod publication staging is incomplete: the generated UI license notice is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\fonts\overpass.ttf')"
+           Text="CityTimelineMod publication staging is incomplete: fonts\overpass.ttf is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\config.json')"
+           Text="CityTimelineMod publication staging is incomplete: root config.json is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND !Exists('$(DeployDir)\mod.json')"
+           Text="CityTimelineMod publication staging is incomplete: root mod.json is missing." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND Exists('$(DeployDir)\data\exports\bundles')"
+           Text="CityTimelineMod publication staging must not contain external bundles: $(DeployDir)\data\exports\bundles." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND Exists('$(DeployDir)\data\bundles')"
+           Text="CityTimelineMod publication staging must not contain legacy external bundles: $(DeployDir)\data\bundles." />
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND Exists('$(DeployDir)\ModsSettings')"
+           Text="CityTimelineMod publication staging must not contain user settings: $(DeployDir)\ModsSettings." />
+
+    <GetFileHash Files="$(ResourcesRoot)\defaults\config.json"
+                 Algorithm="SHA256"
+                 Condition="'$(CityTimelineCleanPublish)' == 'true'">
+      <Output TaskParameter="Items" ItemName="_CityTimelineDefaultConfigHash" />
+    </GetFileHash>
+    <GetFileHash Files="$(DeployDir)\config.json"
+                 Algorithm="SHA256"
+                 Condition="'$(CityTimelineCleanPublish)' == 'true'">
+      <Output TaskParameter="Items" ItemName="_CityTimelineStagedConfigHash" />
+    </GetFileHash>
+    <PropertyGroup Condition="'$(CityTimelineCleanPublish)' == 'true'">
+      <_CityTimelineDefaultConfigHashValue>@(_CityTimelineDefaultConfigHash->'%(FileHash)')</_CityTimelineDefaultConfigHashValue>
+      <_CityTimelineStagedConfigHashValue>@(_CityTimelineStagedConfigHash->'%(FileHash)')</_CityTimelineStagedConfigHashValue>
+    </PropertyGroup>
+    <Error Condition="'$(CityTimelineCleanPublish)' == 'true' AND '$(_CityTimelineDefaultConfigHashValue)' != '$(_CityTimelineStagedConfigHashValue)'"
+           Text="CityTimelineMod publication staging config.json differs from resources\defaults\config.json." />
+
+    <RemoveDir Directories="$(CityTimelineDeployBackup)"
+               Condition="'$(CityTimelineCleanPublish)' != 'true'" />
   </Target>
 
   <!-- DeployWIP snapshots $(OutDir), so Harmony must be present before it runs. -->

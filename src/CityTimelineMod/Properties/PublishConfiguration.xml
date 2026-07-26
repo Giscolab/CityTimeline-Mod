@@ -2,7 +2,7 @@
   <!-- Id vide pour la première création. Après publication, ModPublisher devrait fournir / enregistrer un ModId. -->
   <ModId Value="145499" />
   <DisplayName Value="CityTimelineMod" />
-  <ShortDescription Value="GeoJSON map overlay visualization tool for Cities: Skylines II." />
+  <ShortDescription Value="GeoJSON overlay with optional experimental 57.344 km world and playable-area support." />
   <LongDescription>CityTimelineMod is a Cities: Skylines II mod that displays prepared GeoJSON map data directly in the game world as a visual overlay.
 
 The mod is designed to help compare real-world geographic data with the Cities: Skylines II terrain and map layout. It can render prepared layers such as roads, paths, water lines, water areas, zoning polygons, and map boundary references.
@@ -20,10 +20,11 @@ A compatible bundle may contain:
 
 In-game HUD:
 
-The HUD panel is enabled by default.
+When the mod runtime is enabled, the CTM launcher is available. The IMGUI debug and calibration HUD is closed by default.
 
 Controls:
-- Alt + H: open or close the HUD panel
+- Alt + Z (default binding), or the CTM launcher: open or close the CoHTML HUD
+- Alt + H: open or close the IMGUI debug and calibration HUD
 - Bundle list: shows compatible local bundles when a bundle index is configured
 - Select bundle: choose the bundle to load
 - Apply / Rebuild: rebuild the overlay with the selected bundle and current live values
@@ -38,15 +39,15 @@ Bundle workflow:
 3. Use Apply / Rebuild to load the selected bundle overlay.
 4. The mod displays the prepared GeoJSON layers in the game world.
 
-Terrain and heightmap workflow:
+Terrain, worldmap and playable-area workflow:
 
-A new Cities: Skylines II map starts with the terrain currently loaded in the editor. CityTimelineMod does not automatically replace or import terrain.
+External heightmap and worldmap files are prepared outside the mod and selected through the Cities: Skylines II editor import tools. CityTimelineMod does not download map data or initiate an import automatically.
 
-To use the real topography associated with a selected bundle, import the matching heightmap manually in the Cities: Skylines II Map Editor through the terrain / heightmap import tools.
+The optional experimental LargeMap module extends the terrain/worldmap, MapTiles, CellMaps, water and Airway contracts to a 57.344 km world while an import is performed. The optional PlayableWorld module then extends construction and validation beyond the vanilla playable boundary. Both modules are disabled by default and require an explicit restart-scoped configuration choice.
 
-The heightmap and worldmap files are external bundle assets. They must be created, downloaded, or prepared separately, then selected from the user’s local disk when using the CS2 editor import tools.
+Use these modules only on disposable test saves until the runtime checklist for the installed game version has been completed. Disabling a module or the mod must be tested by returning to the menu and loading a fresh World; never assume an already-mutated World has become vanilla without verification.
 
-The mod helps align and visualize prepared real-world data, but it does not automatically import terrain, generate bundles, or include complete city packs by default.
+The mod keeps complete city bundles external and does not include them in its publication package.
 
 Testing with real bundles:
 
@@ -58,7 +59,7 @@ This repository is used to prepare compatible local map bundles, including GeoJS
 
 Current status:
 
-This mod is a work-in-progress visualization and calibration tool. It does not replace the road-building, zoning, water, terrain, or map-generation systems of the game.
+This mod is a work-in-progress visualization, calibration and experimental large-world tool. It does not automatically place GeoJSON roads, zoning or services. When explicitly enabled, its LargeMap and PlayableWorld modules patch terrain, map-generation, simulation-map and construction-boundary behavior.
 
 WORK IN PROGRESS</LongDescription>
   <Thumbnail Value="Properties/Thumbnail.png" />

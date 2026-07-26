@@ -1,7 +1,7 @@
 {
   "id": "com.giscolab.CityTimelineMod",
   "name": "CityTimelineMod",
-  "description": "Development overlay for real-world CS2 map bundles.",
+  "description": "GeoJSON overlay with optional experimental 57.344 km world and playable-area support.",
   "version": "0.1.2",
   "type": "code",
   "assemblies": [
