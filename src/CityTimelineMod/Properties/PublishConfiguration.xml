@@ -1,0 +1,75 @@
+<Publish>
+  <!-- Id vide pour la première création. Après publication, ModPublisher devrait fournir / enregistrer un ModId. -->
+  <ModId Value="145499" />
+  <DisplayName Value="CityTimelineMod" />
+  <ShortDescription Value="GeoJSON overlay with optional experimental 57.344 km world and playable-area support." />
+  <LongDescription>CityTimelineMod is a Cities: Skylines II mod that displays prepared GeoJSON map data directly in the game world as a visual overlay.
+
+The mod is designed to help compare real-world geographic data with the Cities: Skylines II terrain and map layout. It can render prepared layers such as roads, paths, water lines, water areas, zoning polygons, and map boundary references.
+
+Important: CityTimelineMod is a bundle loader and visualization tool. It does not include complete city bundles by default.
+
+The mod does not download OpenStreetMap data, generate city bundles, or automatically install full map assets. Full bundles are external assets prepared outside the game.
+
+A compatible bundle may contain:
+- GeoJSON layers
+- manifest files
+- bundle index data
+- heightmap PNG files
+- worldmap/reference PNG files
+
+In-game HUD:
+
+When the mod runtime is enabled, the CTM launcher is available. The IMGUI debug and calibration HUD is closed by default.
+
+Controls:
+- Alt + Z (default binding), or the CTM launcher: open or close the CoHTML HUD
+- Alt + H: open or close the IMGUI debug and calibration HUD
+- Bundle list: shows compatible local bundles when a bundle index is configured
+- Select bundle: choose the bundle to load
+- Apply / Rebuild: rebuild the overlay with the selected bundle and current live values
+- Close: hide the HUD panel
+- Layer toggles: enable or disable roads, paths, water lines, water areas, zoning, and map bounds
+- Visual controls: adjust transparency, scale, position, rotation, and height offsets
+
+Bundle workflow:
+
+1. Open the HUD with Alt + H.
+2. Select an available local bundle from the bundle list.
+3. Use Apply / Rebuild to load the selected bundle overlay.
+4. The mod displays the prepared GeoJSON layers in the game world.
+
+Terrain, worldmap and playable-area workflow:
+
+External heightmap and worldmap files are prepared outside the mod and selected through the Cities: Skylines II editor import tools. CityTimelineMod does not download map data or initiate an import automatically.
+
+The experimental LargeMap module extends the terrain/worldmap, MapTiles, CellMaps, water and Airway contracts to a 57.344 km world while an import is performed. LargeMap is enabled by default. The optional PlayableWorld module then extends construction and validation beyond the vanilla playable boundary and remains disabled by default. Both choices are restart-scoped.
+
+Use these modules only on disposable test saves until the runtime checklist for the installed game version has been completed. Disabling a module or the mod must be tested by returning to the menu and loading a fresh World; never assume an already-mutated World has become vanilla without verification.
+
+The mod keeps complete city bundles external and does not include them in its publication package.
+
+Testing with real bundles:
+
+To test CityTimelineMod with real prepared city bundles, download or clone the companion repository:
+
+https://github.com/Giscolab/cs2-realmap-generator
+
+This repository is used to prepare compatible local map bundles, including GeoJSON data and related map assets. The generated bundles are external to CityTimelineMod and must be placed on the user's local disk before they can be selected from the in-game HUD.
+
+Current status:
+
+This mod is a work-in-progress visualization, calibration and experimental large-world tool. It does not automatically place GeoJSON roads, zoning or services. According to their restart-scoped configuration, its LargeMap and PlayableWorld modules patch terrain, map-generation, simulation-map and construction-boundary behavior.
+
+WORK IN PROGRESS</LongDescription>
+  <Thumbnail Value="Properties/Thumbnail.png" />
+  <Screenshot Value="" />
+  <Tag Value="Code Mod" />
+  <ForumLink Value="" />
+  <ModVersion Value="0.1.2" />
+  <GameVersion Value="1.*" />
+  <Dependency Id="" />
+  <RequiredDLC Value="" />
+  <ChangeLog Value="0.1.2: complete online Plaza runtime fix: create writable runtime folder, extract embedded config and bundled GeoJSON fallback data." />
+  <ExternalLink Type="github" Url="https://github.com/Giscolab/CityTimeline-Mod" />
+</Publish>

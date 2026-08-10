@@ -1,0 +1,8 @@
+name: CityTimelineMod CodeQL configuration
+
+paths-ignore:
+  - src/CityTimelineMod/Roads/**
+  - src/CityTimelineMod/Systems/RuntimeRoadToolDriverSystem.cs
+  - src/CityTimelineMod/LargeMap/AirOutsideConnectionRepairSystem.cs
+  - src/CityTimelineMod.UI/dist/**
+  - src/CityTimelineMod.UI/node_modules/**

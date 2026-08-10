@@ -1,0 +1,23 @@
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
+
+[*.cs]
+indent_style = space
+indent_size = 4
+dotnet_sort_system_directives_first = true
+csharp_prefer_braces = true:suggestion
+dotnet_style_readonly_field = true:warning
+dotnet_diagnostic.CA1031.severity = none
+dotnet_diagnostic.IDE0052.severity = warning
+dotnet_diagnostic.CS0649.severity = warning
+
+[*.{ts,tsx,css,json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.{ps1,bat,cmd}]
+end_of_line = crlf

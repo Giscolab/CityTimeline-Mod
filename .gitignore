@@ -1,0 +1,44 @@
+# .NET / CS2 build outputs
+**/bin/
+**/obj/
+Library/
+
+# Frontend dependencies and generated UI
+**/node_modules/
+artifacts/
+
+# Local runtime/deployment copies
+runtime/
+dll appdata/
+dll appdata CityTimelineMod/
+
+# Temporary files
+.tmp/
+*.before
+*.before-*
+*.bak
+*.backup
+*.old
+*.tmp
+*.temp
+*.orig
+*.rej
+*.bak-*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Package manager logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
