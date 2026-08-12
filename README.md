@@ -1,22 +1,10 @@
 # CityTimelineMod
 
-Mod de développement pour Cities: Skylines II.
+Mod de visualisation par injection de coordonnéees geolocalisées pour Cities: Skylines II.
 
-Il charge un bundle GeoJSON déjà généré, affiche ses couches sur la carte du jeu, aide à régler le calage terrain, active par défaut le module expérimental LargeMap 57,344 km et peut activer explicitement PlayableWorld. L’ancien import runtime automatique des routes n’est pas inclus dans l’assembly distribué.
+ce mod charge un bundle GeoJSON déjà généré par le repository realmap_cs 2 (https://github.com/Giscolab/cs2-realmap-generator), il affiche ses couches sur la carte du jeu, aide à régler le calage terrain, active par défaut le module expérimental LargeMap 57,344 km.
 
 Le mod ne génère pas les données et ne télécharge rien. Le bundle GeoJSON doit être préparé avant de lancer le jeu.
-
-## Contenu
-
-```text
-src/CityTimelineMod      backend C# du mod
-src/CityTimelineMod.UI   interface React/TypeScript
-resources/defaults       configuration par défaut
-resources/legacy-geojson données de secours
-packaging                manifeste du mod
-scripts                  build, déploiement, outils runtime
-docs                     documentation complémentaire
-```
 
 ## Prérequis
 
@@ -48,58 +36,16 @@ Le fichier réellement lu par le jeu est :
 
 Le `config.json` placé avec le mod est uniquement la valeur par défaut et la source de migration d’une ancienne installation. Le fichier sous `ModsSettings` est l’état utilisateur réellement lu et écrit ; les builds et packages ne doivent jamais l’écraser.
 
-## Bundle GeoJSON
-
-Structure attendue :
-
-```text
-mon_bundle/
-  manifest.json
-  geojson/
-    water_lines_clipped.geojson
-    water_areas_clipped.geojson
-    zoning_polygons.geojson
-    roads_major_clipped.geojson
-    roads_driveable_clipped.geojson
-    paths.geojson
-```
-
-Configuration directe :
-
-```json
-{
-  "packPath": "C:\\chemin\\vers\\mon_bundle",
-  "bundleManifestPath": "C:\\chemin\\vers\\mon_bundle\\manifest.json",
-  "useBundleIndex": false
-}
-```
-
-Configuration via catalogue :
-
-```json
-{
-  "useBundleIndex": true,
-  "bundlesRoot": "C:\\chemin\\vers\\bundles"
-}
-```
-
-`bundlesRoot` doit contenir un `bundle_index.json`. Le bundle actif est stocké
-dans le champ `activeBundleId` de cet index, qui constitue l’autorité persistée.
-Le même champ dans un ancien `config.json` n’est lu que pour la compatibilité
-avec les index historiques qui ne possédaient pas encore ce pointeur.
-
 ## Utilisation
 
 - `Alt + H` : ouvrir ou fermer le HUD IMGUI de rendu et de calage.
-- `Alt + Z` par défaut, ou le bouton `CTM` : ouvrir ou fermer le HUD React/CoHTML.
+- `Alt + Z` par défaut, ou le bouton `CTM` : ouvrir ou fermer le HUD React/CoHTML. (en cours de construction).
 - `Appliquer / reconstruire` : reconstruire l’overlay après un changement.
 - `Sauvegarder visuels` : écrire les réglages dans le `config.json` runtime.
 - `Recharger visuels` : relire le `config.json` runtime.
 
-L’ancien import runtime des routes est exclu du build. Le module expérimental
-LargeMap est activé par défaut, tandis que PlayableWorld reste désactivé par
-défaut. Les changements de `largeMapEnabled` et `playableWorldEnabled` sont
-appliqués au prochain chargement du mod.
+un systeme de spawn d'import runtime des routes est désactivé car considéré comme un module expérimental
+LargeMap est activé par défaut.
 
 ## Commandes utiles
 
@@ -130,7 +76,7 @@ Les options officielles ou le fichier suivant pilotent le prochain démarrage :
 $config = "$env:USERPROFILE\AppData\LocalLow\Colossal Order\Cities Skylines II\ModsSettings\CityTimelineMod\config.json"
 Get-Content -LiteralPath $config
 ```
-
+[
 ## Logs
 
 ```powershell
@@ -140,3 +86,4 @@ Get-Content $log -Wait -Tail 700 |
 ```
 
 Documentation plus détaillée : `docs/`.
+](https://github.com/Giscolab/cs2-realmap-generator)
