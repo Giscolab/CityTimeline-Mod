@@ -75,18 +75,10 @@ namespace CityTimelineMod.Rendering
             SyncModernLayerStateFromConfig();
         }
 
-        private void HandleOverlayVisibilityInput()
-        {
-            // Nouveau comportement :
-            // Alt+H ouvre/ferme uniquement le panneau HUD interactif.
-            // Les anciens raccourcis F10/F11/F12/Alt+B/Alt+D/etc. sont volontairement neutralisés.
-            if (Input.GetKeyDown(KeyCode.H) && IsSaveOverlayVisualsModifierDown())
-            {
-                _config.ShowOverlayHud = !_config.ShowOverlayHud;
-                _controlPanelLogOnce = false;
-                Log.Info("GroundOverlay HUD panel: visible=" + _config.ShowOverlayHud);
-            }
-        }
+private void HandleOverlayVisibilityInput()
+{
+    // Alt+H is owned by CityTimelineUISystem.
+}
 
         private static bool IsSaveOverlayVisualsModifierDown()
         {

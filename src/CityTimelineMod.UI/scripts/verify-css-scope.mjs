@@ -11,7 +11,7 @@ const stylesheetPath = path.resolve(
 );
 const stylesheet = readFileSync(stylesheetPath, "utf8");
 
-if (!/src\s*:\s*url\(["']?\.\/assets\/fonts\/overpass\.ttf["']?\)/i.test(stylesheet)) {
+if (!/src\s*:\s*url\(["']?\.\/assets\/fonts\/overpass-Regular\.ttf["']?\)/i.test(stylesheet)) {
   console.error("CTM must keep the source Overpass URL as ./assets/fonts/Overpass-Regular.ttf.");
   process.exitCode = 1;
 }

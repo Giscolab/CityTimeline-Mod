@@ -122,13 +122,21 @@ private const string ModFolderName = "CityTimelineMod";
         {
         }
 
-        [SettingsUIKeyboardBinding(
-            BindingKeyboard.Z,
-            nameof(KeyBindingToggleCohtmlHud),
-            alt: true
-        )]
-        [SettingsUISection(SectionGeneral, GroupMain)]
-        public ProxyBinding KeyBindingToggleCohtmlHud { get; set; }
+[SettingsUIKeyboardBinding(
+    BindingKeyboard.Z,
+    nameof(KeyBindingToggleCohtmlHud),
+    alt: true
+)]
+[SettingsUISection(SectionGeneral, GroupMain)]
+public ProxyBinding KeyBindingToggleCohtmlHud { get; set; }
+
+[SettingsUIKeyboardBinding(
+    BindingKeyboard.H,
+    nameof(KeyBindingToggleOverlayHud),
+    alt: true
+)]
+[SettingsUISection(SectionGeneral, GroupMain)]
+public ProxyBinding KeyBindingToggleOverlayHud { get; set; }
 
         [SettingsUISection(SectionGeneral, GroupMain)]
         public bool ModEnabled

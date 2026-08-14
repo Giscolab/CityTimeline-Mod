@@ -430,25 +430,11 @@ namespace CityTimelineMod
             foreach (SystemUpdatePhase phase in Enum.GetValues(typeof(SystemUpdatePhase)))
                 Log.Info("[CityTimelineMod] SystemUpdatePhase " + phase + " = " + (int)phase);
 
-            try
-            {
-                if (!GeoBundleBootstrap.RunOnce(runtimeConfig))
-                {
-                    Log.Error("[CityTimelineMod] Overlay bootstrap did not install an operational overlay.");
-                    AbortRuntimeStartup(
-                        "overlay bootstrap did not install an operational overlay"
-                    );
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError("[CityTimelineMod] Overlay bootstrap error: " + ex);
-                Log.Error(ex);
-                AbortRuntimeStartup("overlay bootstrap threw");
-                return;
-            }
-        }
+Log.Info(
+    "[CityTimelineMod] Visual runtime bootstrap deferred; " +
+    "GeoBundleBootstrap will not run during Mod.OnLoad()."
+);
+		}
 
         public void OnDispose()
         {

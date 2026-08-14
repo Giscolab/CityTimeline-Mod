@@ -34,7 +34,7 @@ namespace CityTimelineMod.Options
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupHeightMapBounds), "Limite heightmap" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupMapCenter), "Centre carte" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupBounds), "Limites worldmap / heightmap" },
-{ _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupRoutes), "Routes" },
+				{ _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupRoutes), "Routes" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupPaths), "Chemins" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupWater), "Eau" },
                 { _settings.GetOptionGroupLocaleID(CityTimelineSettings.GroupZoning), "Zonage" },
@@ -42,13 +42,18 @@ namespace CityTimelineMod.Options
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ModEnabled)), "Activer CityTimelineMod" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ModEnabled)), "Active ou désactive le comportement principal du mod." },
 
-                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
-                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Raccourci du panneau React/CoHTML. Valeur par défaut : Alt+Z. Le HUD IMGUI Alt+H reste indépendant." },
-                { _settings.GetBindingKeyLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
-                { _settings.GetBindingKeyHintLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
+				{ _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
+				{ _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Raccourci du panneau React/CoHTML. Valeur par défaut : Alt+Z." },
+				{ _settings.GetBindingKeyLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
+				{ _settings.GetBindingKeyHintLocaleID(nameof(CityTimelineSettings.KeyBindingToggleCohtmlHud)), "Ouvrir / fermer le HUD CoHTML" },
 
-                { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Afficher le HUD debug" },
-                { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Affiche ou masque le HUD IMGUI. Raccourci : Alt+H." },
+				{ _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.KeyBindingToggleOverlayHud)), "Ouvrir / fermer le HUD overlay" },
+				{ _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.KeyBindingToggleOverlayHud)), "Active le runtime visuel CTM à la première utilisation puis ouvre ou ferme le HUD IMGUI. Valeur par défaut : Alt+H." },
+				{ _settings.GetBindingKeyLocaleID(nameof(CityTimelineSettings.KeyBindingToggleOverlayHud)), "Ouvrir / fermer le HUD overlay" },
+				{ _settings.GetBindingKeyHintLocaleID(nameof(CityTimelineSettings.KeyBindingToggleOverlayHud)), "Ouvrir / fermer le HUD overlay" },
+
+				{ _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Afficher le HUD debug" },
+				{ _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.ShowOverlayHud)), "Affiche ou masque le HUD IMGUI lorsque le runtime visuel CTM est actif." },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RenderMapBounds)), "Afficher les limites worldmap / heightmap" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.RenderMapBounds)), "Affiche les repères de limites : worldmap en blanc, heightmap en magenta, centre carte en rouge." },
@@ -121,7 +126,7 @@ namespace CityTimelineMod.Options
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.UndoRuntimeRoadImport)), "Undo import routes runtime désactivé" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.UndoRuntimeRoadImport)), "Désactivé en V1: la suppression directe des entités réseau CS2 est non sûre." },
-{ _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RoadColorDefault)), "Couleur routes non classées" },
+				{ _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RoadColorDefault)), "Couleur routes non classées" },
                 { _settings.GetOptionDescLocaleID(nameof(CityTimelineSettings.RoadColorDefault)), couleurs },
 
                 { _settings.GetOptionLabelLocaleID(nameof(CityTimelineSettings.RoadColorMotorway)), "Couleur autoroutes" },
