@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Colossal.Serialization.Entities;
 using Colossal.UI.Binding;
 using Game;
@@ -33,9 +34,10 @@ namespace CityTimelineMod.UI
         private TriggerBinding _closeBinding;
         private ProxyAction _toggleAction;
         private bool _toggleActionSubscribed;
-		private ProxyAction _overlayToggleAction;
-		private bool _overlayToggleActionSubscribed;
-		private bool _gameLoadingComplete;
+        private ProxyAction _overlayToggleAction;
+        private bool _overlayToggleActionSubscribed;
+        private bool _gameLoadingComplete;
+        private Task<GeoBundleBootstrap.PreparedVisualRuntimeActivation> _visualRuntimeActivationTask;
         private bool _runtimeGateOpen;
         private readonly List<IBinding> _runtimeBindings = new List<IBinding>();
         private readonly HashSet<IBinding> _attachedRuntimeBindings = new HashSet<IBinding>();
@@ -118,37 +120,39 @@ namespace CityTimelineMod.UI
 
 
         protected override void OnGamePreload(Purpose purpose, GameMode mode)
-{
-    _gameLoadingComplete = false;
+        {
+            _visualRuntimeActivationTask = null;
+            _gameLoadingComplete = false;
 
-    // Never carry an opened gameplay HUD into the main menu or editor.
-    if (ReferenceEquals(_instance, this) &&
-        (mode & GameMode.Game) == 0 &&
-        _visibleBinding != null &&
-        _visibleBinding.value)
-    {
-        ForceCloseHud();
-        Log.Info("CityTimelineMod CoHTML HUD closed outside gameplay.");
-    }
+            // Never carry an opened gameplay HUD into the main menu or editor.
+            if (ReferenceEquals(_instance, this) &&
+                (mode & GameMode.Game) == 0 &&
+                _visibleBinding != null &&
+                _visibleBinding.value)
+            {
+                ForceCloseHud();
+                Log.Info("CityTimelineMod CoHTML HUD closed outside gameplay.");
+            }
 
-    // UISystemBase enables this system only when its declared gameMode
-    // matches the mode being loaded.
-    base.OnGamePreload(purpose, mode);
-}
+            // UISystemBase enables this system only when its declared gameMode
+            // matches the mode being loaded.
+            base.OnGamePreload(purpose, mode);
+        }
 
-protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
-{
-    base.OnGameLoadingComplete(purpose, mode);
+        protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
+        {
+            base.OnGameLoadingComplete(purpose, mode);
 
-    _gameLoadingComplete = (mode & GameMode.Game) != 0;
+            _gameLoadingComplete = (mode & GameMode.Game) != 0;
 
-    if (_gameLoadingComplete)
-    {
-        Log.Info(
-            "CityTimelineMod visual runtime is ready for manual activation."
-        );
-    }
-}
+            if (_gameLoadingComplete)
+            {
+                Log.Info(
+                    "CityTimelineMod visual runtime is ready for manual activation."
+                );
+            }
+        }
+
 
         protected override void OnDestroy()
         {
@@ -218,8 +222,8 @@ protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
 
                 if (!instance.AttachToggleAction())
                     throw new InvalidOperationException("the Alt+Z input action could not be attached");
-if (!instance.AttachOverlayToggleAction())
-    throw new InvalidOperationException("the Alt+H overlay input action could not be attached");
+                if (!instance.AttachOverlayToggleAction())
+                    throw new InvalidOperationException("the Alt+H overlay input action could not be attached");
 
                 instance._runtimeGateOpen = true;
                 instance.Enabled = true;
@@ -455,76 +459,78 @@ if (!instance.AttachOverlayToggleAction())
             _toggleAction.shouldBeEnabled = true;
             return true;
         }
-		
-		private bool AttachOverlayToggleAction()
-{
-    if (!ReleaseOverlayToggleAction(true))
-        return false;
 
-    if (InputManager.instance == null ||
-        !InputManager.instance.TryFindAction(
-            Mod.Settings.KeyBindingToggleOverlayHud,
-            out _overlayToggleAction
-        ) ||
-        _overlayToggleAction == null)
-    {
-        Log.Error(
-            "CityTimelineMod Alt+H action was not found; " +
-            "visual runtime remains manually inactive."
-        );
-        return true;
-    }
-
-    _overlayToggleAction.onInteraction += OnOverlayToggleActionInteraction;
-    _overlayToggleActionSubscribed = true;
-    _overlayToggleAction.shouldBeEnabled = true;
-
-    return true;
-}
-private bool ReleaseOverlayToggleAction(bool disableAction)
-{
-    var action = _overlayToggleAction;
-    if (action == null)
-        return true;
-
-    var complete = true;
-
-    if (_overlayToggleActionSubscribed)
-    {
-        try
+        private bool AttachOverlayToggleAction()
         {
-            action.onInteraction -= OnOverlayToggleActionInteraction;
-            _overlayToggleActionSubscribed = false;
-        }
-        catch (Exception ex)
-        {
-            complete = false;
-            Log.Error(
-                "CityTimelineMod Alt+H input callback detach failed: " + ex
-            );
-        }
-    }
+            if (!ReleaseOverlayToggleAction(true))
+                return false;
 
-    if (disableAction)
-    {
-        try
-        {
-            action.shouldBeEnabled = false;
-        }
-        catch (Exception ex)
-        {
-            complete = false;
-            Log.Error(
-                "CityTimelineMod Alt+H input disable failed: " + ex
-            );
-        }
-    }
+            if (InputManager.instance == null ||
+                !InputManager.instance.TryFindAction(
+                    Mod.Settings.KeyBindingToggleOverlayHud,
+                    out _overlayToggleAction
+                ) ||
+                _overlayToggleAction == null)
+            {
+                Log.Error(
+                    "CityTimelineMod Alt+H action was not found; " +
+                    "visual runtime remains manually inactive."
+                );
+                return true;
+            }
 
-    if (complete)
-        _overlayToggleAction = null;
+            _overlayToggleAction.onInteraction += OnOverlayToggleActionInteraction;
+            _overlayToggleActionSubscribed = true;
+            _overlayToggleAction.shouldBeEnabled = true;
 
-    return complete;
-}
+            return true;
+        }
+
+        private bool ReleaseOverlayToggleAction(bool disableAction)
+        {
+            var action = _overlayToggleAction;
+            if (action == null)
+                return true;
+
+            var complete = true;
+
+            if (_overlayToggleActionSubscribed)
+            {
+                try
+                {
+                    action.onInteraction -= OnOverlayToggleActionInteraction;
+                    _overlayToggleActionSubscribed = false;
+                }
+                catch (Exception ex)
+                {
+                    complete = false;
+                    Log.Error(
+                        "CityTimelineMod Alt+H input callback detach failed: " + ex
+                    );
+                }
+            }
+
+            if (disableAction)
+            {
+                try
+                {
+                    action.shouldBeEnabled = false;
+                }
+                catch (Exception ex)
+                {
+                    complete = false;
+                    Log.Error(
+                        "CityTimelineMod Alt+H input disable failed: " + ex
+                    );
+                }
+            }
+
+            if (complete)
+                _overlayToggleAction = null;
+
+            return complete;
+        }
+
         private bool ReleaseToggleAction(bool disableAction)
         {
             var action = _toggleAction;
@@ -597,9 +603,9 @@ private bool ReleaseOverlayToggleAction(bool disableAction)
                 }
             }
 
-complete = ReleaseToggleAction(disableAction) && complete;
-complete = ReleaseOverlayToggleAction(disableAction) && complete;
-complete = DetachRuntimeBindings() && complete;
+            complete = ReleaseToggleAction(disableAction) && complete;
+            complete = ReleaseOverlayToggleAction(disableAction) && complete;
+            complete = DetachRuntimeBindings() && complete;
             return complete;
         }
 
@@ -616,76 +622,164 @@ complete = DetachRuntimeBindings() && complete;
             _lastOverlaySublayersJson = null;
             _lastBundleStatsJson = null;
         }
-private void OnOverlayToggleActionInteraction(
-    ProxyAction action,
-    InputActionPhase phase
-)
-{
-    if (!RuntimeCallbacksAllowed)
-        return;
 
-    if (phase != InputActionPhase.Performed)
-        return;
-
-    if (InputManager.instance != null &&
-        InputManager.instance.hasInputFieldFocus)
-        return;
-
-    if (!_gameLoadingComplete)
-    {
-        Log.Info(
-            "CityTimelineMod Alt+H ignored because game loading is not complete."
-        );
-        return;
-    }
-
-    ToggleOverlayHud();
-}
-
-private void ToggleOverlayHud()
-{
-    var config = Mod.RuntimeConfig;
-
-    if (config == null || !config.IsReliable)
-    {
-        Log.Error(
-            "CityTimelineMod Alt+H blocked: runtime configuration is unavailable."
-        );
-        return;
-    }
-
-    if (!GeoDebugOverlay.IsInstalled)
-    {
-        Log.Info(
-            "CityTimelineMod Alt+H: starting visual runtime manually."
-        );
-
-        // The first Alt+H must create the overlay with the HUD already visible.
-        config.ShowOverlayHud = true;
-
-        if (!GeoBundleBootstrap.RunOnce(config))
+        private void OnOverlayToggleActionInteraction(
+            ProxyAction action,
+            InputActionPhase phase
+        )
         {
-            config.ShowOverlayHud = false;
+            if (!RuntimeCallbacksAllowed)
+                return;
 
-            Log.Error(
-                "CityTimelineMod Alt+H: visual runtime activation failed."
-            );
-            return;
+            if (phase != InputActionPhase.Performed)
+                return;
+
+            if (InputManager.instance != null &&
+                InputManager.instance.hasInputFieldFocus)
+                return;
+
+            if (!_gameLoadingComplete)
+            {
+                Log.Info(
+                    "CityTimelineMod Alt+H ignored because game loading is not complete."
+                );
+                return;
+            }
+
+            ToggleOverlayHud();
         }
 
-        Log.Info(
-            "CityTimelineMod visual runtime activated manually by Alt+H."
-        );
+        private void ToggleOverlayHud()
+        {
+            var config = Mod.RuntimeConfig;
 
-        return;
-    }
+            if (config == null || !config.IsReliable)
+            {
+                Log.Error(
+                    "CityTimelineMod Alt+H blocked: runtime configuration is unavailable."
+                );
+                return;
+            }
 
-    config.ShowOverlayHud = !config.ShowOverlayHud;
+            if (GeoDebugOverlay.IsInstalled)
+            {
+                config.ShowOverlayHud = !config.ShowOverlayHud;
 
-    Log.Info(
-        "GroundOverlay HUD panel: visible=" + config.ShowOverlayHud
-    );
-}
+                Log.Info(
+                    "GroundOverlay HUD panel: visible=" +
+                    config.ShowOverlayHud
+                );
+
+                return;
+            }
+
+            if (_visualRuntimeActivationTask != null)
+            {
+                Log.Info(
+                    "CityTimelineMod Alt+H ignored: visual runtime preparation is already running."
+                );
+                return;
+            }
+
+            Log.Info(
+                "CityTimelineMod Alt+H: visual runtime preparation queued."
+            );
+
+            // The worker must never mutate the live runtime configuration.
+            var activationConfig = config.CloneForBundleReload();
+
+            activationConfig.ShowOverlayHud = true;
+            config.ShowOverlayHud = true;
+
+            _visualRuntimeActivationTask = Task.Run(
+                () => GeoBundleBootstrap.PrepareVisualRuntimeActivation(
+                    activationConfig
+                )
+            );
+        }
+
+        private void UpdateVisualRuntimeActivation()
+        {
+            var task = _visualRuntimeActivationTask;
+
+            if (task == null || !task.IsCompleted)
+                return;
+
+            _visualRuntimeActivationTask = null;
+
+            var config = Mod.RuntimeConfig;
+
+            if (config == null)
+                return;
+
+            if (task.IsCanceled)
+            {
+                config.ShowOverlayHud = false;
+
+                Log.Error(
+                    "CityTimelineMod visual runtime preparation was canceled."
+                );
+                return;
+            }
+
+            if (task.IsFaulted)
+            {
+                config.ShowOverlayHud = false;
+
+                var error = task.Exception != null
+                    ? task.Exception.GetBaseException().ToString()
+                    : "unknown worker failure";
+
+                Log.Error(
+                    "CityTimelineMod visual runtime preparation failed: " +
+                    error
+                );
+                return;
+            }
+
+            var prepared = task.Result;
+
+            if (prepared == null)
+            {
+                config.ShowOverlayHud = false;
+
+                Log.Error(
+                    "CityTimelineMod visual runtime preparation returned no payload."
+                );
+                return;
+            }
+
+            if (!_gameLoadingComplete || !RuntimeCallbacksAllowed)
+            {
+                config.ShowOverlayHud = false;
+
+                Log.Info(
+                    "CityTimelineMod prepared visual runtime discarded because gameplay is no longer ready."
+                );
+                return;
+            }
+
+            Log.Info(
+                "CityTimelineMod visual runtime data ready; installing on main thread."
+            );
+
+            if (!GeoBundleBootstrap.InstallPreparedVisualRuntimeActivation(
+                prepared,
+                config
+            ))
+            {
+                config.ShowOverlayHud = false;
+
+                Log.Error(
+                    "CityTimelineMod visual runtime activation failed during main-thread install."
+                );
+                return;
+            }
+
+            Log.Info(
+                "CityTimelineMod visual runtime activated manually by Alt+H."
+            );
+        }
 
         private void OnToggleActionInteraction(
             ProxyAction action,

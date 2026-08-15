@@ -4,6 +4,7 @@ using CityTimelineMod.Rendering.Materials;
 using CityTimelineMod.Rendering.Railways;
 using CityTimelineMod.Rendering.Roads;
 using CityTimelineMod.Rendering.Services;
+using CityTimelineMod.Rendering.Batching;
 
 namespace CityTimelineMod.Rendering.Core
 {
@@ -19,6 +20,21 @@ namespace CityTimelineMod.Rendering.Core
         internal double OriginLon;
         internal double OriginLat;
         internal int Stride;
+
+        // --- Nouveaux champs pour le zoning progressif ---
+        internal readonly Dictionary<string, ZoningMeshBatch> ZoningBatches =
+            new Dictionary<string, ZoningMeshBatch>();
+        internal readonly Dictionary<string, int> ZoningEligibleCs2Counts =
+            new Dictionary<string, int>();
+        internal int ZoningPolygonIndex;
+        internal int ZoningEligibleMeshes;
+        internal int ZoningRenderedPolygons;
+        internal int ZoningSkippedByFilter;
+        internal int ZoningSkippedByLimit;
+        internal int ZoningSourceHoleRings;
+        internal int ZoningRenderedHoleRings;
+        // --- Fin des nouveaux champs ---
+
         internal readonly RoadRenderCounters RoadCounters = new RoadRenderCounters();
         internal readonly RailwayRenderCounters RailwayCounters = new RailwayRenderCounters();
         internal readonly ServiceRenderCounters ServiceCounters = new ServiceRenderCounters();

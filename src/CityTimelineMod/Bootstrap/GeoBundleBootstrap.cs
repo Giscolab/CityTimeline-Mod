@@ -36,6 +36,73 @@ namespace CityTimelineMod
             return snapshot;
         }
 
+        internal static PreparedVisualRuntimeActivation PrepareVisualRuntimeActivation(GeoOverlayConfig config)
+        {
+            if (config == null || !Mod.RuntimeEnabled)
+                return null;
+
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                BundleOverlayPayload payload;
+                if (!TryLoadActiveBundle(config, out payload, true))
+                {
+                    Log.Error("GeoBundleBootstrap: prepare visual runtime activation failed to load bundle.");
+                    return null;
+                }
+
+                var prepared = new PreparedVisualRuntimeActivation(config, payload);
+                stopwatch.Stop();
+                Log.Info($"GeoBundleBootstrap: visual runtime preparation completed in {stopwatch.ElapsedMilliseconds}ms.");
+                return prepared;
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                Log.Error($"GeoBundleBootstrap: async visual runtime preparation failed after {stopwatch.ElapsedMilliseconds}ms. {ex}");
+                return null;
+            }
+        }
+
+        internal static bool InstallPreparedVisualRuntimeActivation(
+            PreparedVisualRuntimeActivation prepared,
+            GeoOverlayConfig runtimeConfig)
+        {
+            if (prepared == null || runtimeConfig == null || !Mod.RuntimeEnabled)
+                return false;
+
+            var previousBundleState = runtimeConfig.CloneForBundleReload();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            try
+            {
+                runtimeConfig.ApplyPreparedBundleStateFrom(prepared.Config);
+
+                var installed =
+                    InstallLoadedBundle(prepared.Payload, runtimeConfig) &&
+                    GeoDebugOverlay.IsInstalled;
+
+                stopwatch.Stop();
+                _ran = installed;
+
+                Log.Info($"GeoBundleBootstrap: prepared visual runtime install completed. installed={installed}, elapsedMs={stopwatch.ElapsedMilliseconds}");
+
+                if (!installed)
+                    runtimeConfig.ApplyPreparedBundleStateFrom(previousBundleState);
+
+                return installed;
+            }
+            catch (Exception ex)
+            {
+                stopwatch.Stop();
+                runtimeConfig.ApplyPreparedBundleStateFrom(previousBundleState);
+                _ran = GeoDebugOverlay.IsInstalled;
+
+                Log.Error($"GeoBundleBootstrap: prepared visual runtime install failed after {stopwatch.ElapsedMilliseconds}ms. {ex}");
+                return false;
+            }
+        }
+
         internal static bool RunOnce(GeoOverlayConfig config)
         {
             if (!Mod.RuntimeEnabled)
@@ -314,10 +381,38 @@ namespace CityTimelineMod
                     return false;
                 }
 
+                var loadTiming = System.Diagnostics.Stopwatch.StartNew();
                 var lineStats = GeoJson.AnalyzeLines(lines);
+
+                Log.Info(
+                    "GeoBundle load timing: waterLineAnalysisMs=" +
+                    loadTiming.ElapsedMilliseconds
+                );
+                loadTiming.Restart();
+
                 var lineGeometries = GeoJson.LoadLineGeometries(lines);
+
+                Log.Info(
+                    "GeoBundle load timing: waterLinesMs=" +
+                    loadTiming.ElapsedMilliseconds
+                );
+                loadTiming.Restart();
+
                 var areaCount = GeoJson.CountFeatures(areas);
+
+                Log.Info(
+                    "GeoBundle load timing: waterAreaCountMs=" +
+                    loadTiming.ElapsedMilliseconds
+                );
+                loadTiming.Restart();
+
                 var areaOutlines = GeoJson.LoadPolygonOutlines(areas);
+
+                Log.Info(
+                    "GeoBundle load timing: waterAreasMs=" +
+                    loadTiming.ElapsedMilliseconds
+                );
+                loadTiming.Restart();
 
                 var selectedRoads = string.Equals(config.RoadGeometrySource, "driveable", StringComparison.OrdinalIgnoreCase)
                     ? roadsDriveable
@@ -333,9 +428,25 @@ namespace CityTimelineMod
                     ? GeoJson.LoadRoadGeometries(selectedRoads)
                     : new List<GeoRoadLine>();
 
+                Log.Info(
+                    "GeoBundle load timing: roadsMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", count=" +
+                    roadGeometries.Count
+                );
+                loadTiming.Restart();
+
                 var pathGeometries = File.Exists(paths)
                     ? GeoJson.LoadRoadGeometries(paths)
                     : new List<GeoRoadLine>();
+
+                Log.Info(
+                    "GeoBundle load timing: pathsMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", count=" +
+                    pathGeometries.Count
+                );
+                loadTiming.Restart();
 
                 MarkRoadLinesAsPath(pathGeometries);
 
@@ -355,7 +466,6 @@ namespace CityTimelineMod
                     }
                     catch (Exception ex)
                     {
-                        // railways.geojson is optional and must never prevent the bundle from loading.
                         railwayGeometries.Clear();
                         railwayStatus = "Données ferroviaires indisponibles ou illisibles. Le bundle reste utilisable.";
                         Log.Error("GeoBundleBootstrap: optional railway overlay failed to load. " + ex);
@@ -366,13 +476,43 @@ namespace CityTimelineMod
                     Log.Info("GeoBundleBootstrap: optional railways.geojson not found; bundle continues without railway overlay.");
                 }
 
+                Log.Info(
+                    "GeoBundle load timing: railwaysMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", count=" +
+                    railwayGeometries.Count
+                );
+                loadTiming.Restart();
+
                 var zoningPolygons = File.Exists(zoning)
                     ? GeoJson.LoadZoningPolygons(zoning)
                     : new List<GeoZoningPolygon>();
 
+                Log.Info(
+                    "GeoBundle load timing: zoningMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", count=" +
+                    zoningPolygons.Count
+                );
+                loadTiming.Restart();
+
                 var geoJsonPackRoot = BundleHudStatsLoader.ResolveGeoJsonPackRoot(geojsonRoot);
                 var serviceLoadResult = ServiceGeoJsonLoader.LoadPack(geoJsonPackRoot);
+
+                Log.Info(
+                    "GeoBundle load timing: servicesMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", count=" +
+                    serviceLoadResult.Points.Count
+                );
+                loadTiming.Restart();
+
                 var bundleHudSnapshot = BundleHudStatsLoader.Load(geoJsonPackRoot);
+
+                Log.Info(
+                    "GeoBundle load timing: hudStatsMs=" +
+                    loadTiming.ElapsedMilliseconds
+                );
 
                 Log.Info(
                     "Bundle completeness: " + bundleHudSnapshot.PresentSourceFileCount +
@@ -424,11 +564,6 @@ namespace CityTimelineMod
                 Log.Info("Loaded path geometries: " + pathGeometries.Count);
                 Log.Info("Loaded railway geometries: " + railwayGeometries.Count + ", available=" + railwayAvailable);
 
-                // Keep every loaded source geometry resident even when its layer is
-                // initially hidden.  CoHTML controls can then enable any layer and
-                // request a rebuild without having to reload or reparse the bundle.
-                // Visibility remains a rendering concern; it must never truncate the
-                // data contract installed by the bootstrap.
                 var renderWaterLineGeometries = new List<List<GeoPoint>>(lineGeometries);
                 var renderWaterAreaOutlines = new List<List<GeoPoint>>(areaOutlines);
                 var renderRoadGeometries = new List<GeoRoadLine>(roadGeometries);
@@ -502,9 +637,6 @@ namespace CityTimelineMod
                 if ((attributes & FileAttributes.Directory) != 0)
                     throw new IOException("Expected config.json but found a directory: " + configPath);
 
-                // An existing empty or malformed file is user/runtime state and
-                // must reach the strict parser. Never silently replace it with
-                // the embedded default.
                 return;
             }
             catch (FileNotFoundException)
@@ -927,6 +1059,18 @@ namespace CityTimelineMod
                 : "";
         }
 
+        internal sealed class PreparedVisualRuntimeActivation
+        {
+            internal readonly GeoOverlayConfig Config;
+            internal readonly BundleOverlayPayload Payload;
+
+            internal PreparedVisualRuntimeActivation(GeoOverlayConfig config, BundleOverlayPayload payload)
+            {
+                Config = config;
+                Payload = payload;
+            }
+        }
+
         private sealed class BundleSelectionFileState
         {
             internal readonly string ConfigPath;
@@ -954,7 +1098,7 @@ namespace CityTimelineMod
             }
         }
 
-        private sealed class BundleOverlayPayload
+        internal sealed class BundleOverlayPayload
         {
             internal readonly List<List<GeoPoint>> WaterLines;
             internal readonly List<List<GeoPoint>> WaterAreaOutlines;

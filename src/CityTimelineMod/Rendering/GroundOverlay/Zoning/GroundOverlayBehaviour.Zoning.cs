@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CityTimelineMod.Geometry;
 using CityTimelineMod.Rendering.Batching;
+using CityTimelineMod.Rendering.Core;
 using CityTimelineMod.Rendering.Zoning;
 using CityTimelineMod.Util;
 using UnityEngine;
@@ -172,6 +173,180 @@ namespace CityTimelineMod.Rendering
             );
 
             return createdMeshObjects;
+        }
+
+        /// <summary>
+        /// Traite progressivement les polygones de zoning, en construisant les batches
+        /// par petits groupes afin de répartir la charge sur plusieurs frames.
+        /// Retourne <c>true</c> lorsque tous les polygones ont été traités et les batches flushés.
+        /// </summary>
+        private bool BuildProgressiveZoningMeshes(
+            ProgressiveOverlayRebuildState state,
+            int maxPolygonsThisFrame)
+        {
+            if (state == null)
+                return true;
+
+            // Sécurité : si le zoning n'est pas activé ou aucune donnée, on considère terminé.
+            if (!_config.RenderZoning || _zoningPolygons == null || _zoningPolygons.Count == 0)
+                return true;
+
+            var originLon = _config.UseGeoJsonCenter ? _bounds.CenterLon : _config.OriginLon;
+            var originLat = _config.UseGeoJsonCenter ? _bounds.CenterLat : _config.OriginLat;
+
+            var sourceMeshes = _zoningPolygons.Count;
+            var maxPolygons = Math.Max(1, _config.MaxZoningFillMeshesDebug);
+            var renderAllPolygons = ShouldRenderAllZoningPolygons();
+            var safeStride = Math.Max(1, state.Stride);
+            const int maxVerticesPerMesh = 60000;
+
+            var processedThisFrame = 0;
+
+            while (state.ZoningPolygonIndex < sourceMeshes && processedThisFrame < maxPolygonsThisFrame)
+            {
+                var polygon = _zoningPolygons[state.ZoningPolygonIndex];
+                state.ZoningPolygonIndex++;
+                processedThisFrame++;
+
+                if (polygon == null || polygon.Rings == null || polygon.Rings.Count == 0)
+                    continue;
+
+                var materialKey = ZoningMaterialResolver.ResolveMaterialKey(polygon.Zone, polygon.Cs2);
+                var sublayerKey = ResolveZoningOverlaySublayerKey(materialKey);
+                if (!string.IsNullOrWhiteSpace(sublayerKey) && !ShouldRenderOverlaySublayer(sublayerKey))
+                {
+                    state.ZoningSkippedByFilter++;
+                    continue;
+                }
+
+                if (!ZoningFilterRules.ShouldRenderByFilter(
+                    polygon.Zone,
+                    polygon.Cs2,
+                    materialKey,
+                    _config.ZoningDebugFilterZone,
+                    _config.ZoningDebugFilterCs2Contains,
+                    _config.ZoningDebugFilterMaterialKey))
+                {
+                    state.ZoningSkippedByFilter++;
+                    continue;
+                }
+
+                state.ZoningEligibleMeshes++;
+
+                var cs2Key = string.IsNullOrWhiteSpace(polygon.Cs2) ? "(missing)" : polygon.Cs2;
+                int cs2Count;
+                state.ZoningEligibleCs2Counts.TryGetValue(cs2Key, out cs2Count);
+                state.ZoningEligibleCs2Counts[cs2Key] = cs2Count + 1;
+
+                if (!renderAllPolygons && state.ZoningRenderedPolygons >= maxPolygons)
+                {
+                    state.ZoningSkippedByLimit++;
+                    continue;
+                }
+
+                state.ZoningSourceHoleRings += Math.Max(0, polygon.Rings.Count - 1);
+                var worldRings = BuildSampledZoningRings(
+                    polygon.Rings,
+                    safeStride,
+                    maxVerticesPerMesh,
+                    originLon,
+                    originLat
+                );
+                if (worldRings.Count == 0 || worldRings[0].Count < 3)
+                    continue;
+
+                List<Vector3> vertices;
+                var triangles = PolygonTriangulator.MakeDoubleSidedTriangles(
+                    PolygonTriangulator.TriangulatePolygonWithHolesXZ(worldRings, out vertices)
+                );
+
+                if (triangles.Count < 3)
+                    continue;
+
+                state.ZoningRenderedHoleRings += Math.Max(0, worldRings.Count - 1);
+
+                ZoningMeshBatch batch;
+                if (!state.ZoningBatches.TryGetValue(materialKey, out batch))
+                {
+                    batch = new ZoningMeshBatch();
+                    batch.Material = ZoningMaterialResolver.ResolveMaterial(
+                        polygon.Zone,
+                        polygon.Cs2,
+                        state.Materials.ZoningResidentialLow,
+                        state.Materials.ZoningResidentialMedium,
+                        state.Materials.ZoningResidentialHigh,
+                        state.Materials.ZoningCommercialLow,
+                        state.Materials.ZoningCommercialHigh,
+                        state.Materials.ZoningRetailDetail,
+                        state.Materials.ZoningIndustrial,
+                        state.Materials.ZoningOffice,
+                        state.Materials.ZoningSurface,
+                        state.Materials.ZoningRamp,
+                        state.Materials.ZoningMixed,
+                        state.Materials.ZoningFallback
+                    );
+                    state.ZoningBatches[materialKey] = batch;
+                }
+
+                if (batch.Vertices.Count + vertices.Count >= maxVerticesPerMesh)
+                {
+                    state.CreatedZoningFillMeshes +=
+                        OverlayMeshFlusher.FlushZoningBatch(
+                            OverlayRenderParent,
+                            materialKey,
+                            batch,
+                            LogVerboseOverlay
+                        );
+                }
+
+                var vertexOffset = batch.Vertices.Count;
+                batch.Vertices.AddRange(vertices);
+
+                for (var i = 0; i < triangles.Count; i++)
+                    batch.Triangles.Add(vertexOffset + triangles[i]);
+
+                batch.PolygonCount++;
+                state.ZoningRenderedPolygons++;
+            }
+
+            // S'il reste des polygones, on rend la main à Unity.
+            if (state.ZoningPolygonIndex < sourceMeshes)
+                return false;
+
+            // Tous les polygones ont été traités : on flush les batches restants et on finalise.
+            var flushTiming = System.Diagnostics.Stopwatch.StartNew();
+
+            foreach (var pair in state.ZoningBatches)
+            {
+                state.CreatedZoningFillMeshes +=
+                    OverlayMeshFlusher.FlushZoningBatch(
+                        OverlayRenderParent,
+                        pair.Key,
+                        pair.Value,
+                        LogVerboseOverlay
+                    );
+            }
+
+            flushTiming.Stop();
+
+            Log.Info(
+                "GroundOverlay: progressive zoning finished. source=" + sourceMeshes +
+                ", eligible=" + state.ZoningEligibleMeshes +
+                ", rendered=" + state.ZoningRenderedPolygons +
+                ", meshObjects=" + state.CreatedZoningFillMeshes +
+                ", skippedByFilter=" + state.ZoningSkippedByFilter +
+                ", skippedByLimit=" + state.ZoningSkippedByLimit +
+                ", sourceHoleRings=" + state.ZoningSourceHoleRings +
+                ", renderedHoleRings=" + state.ZoningRenderedHoleRings +
+                ", flushMs=" + flushTiming.ElapsedMilliseconds
+            );
+
+            LogVerboseOverlay(
+                "GroundOverlay: eligible zoning cs2 summary: " +
+                FormatRoadHighwayCounts(state.ZoningEligibleCs2Counts)
+            );
+
+            return true;
         }
 
         private List<List<Vector3>> BuildSampledZoningRings(

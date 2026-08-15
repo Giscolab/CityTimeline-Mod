@@ -119,164 +119,253 @@ namespace CityTimelineMod.Rendering
             RebuildOverlayPreservingLiveTransform();
         }
 
-        private void StartProgressiveOverlayRebuild(string reason)
+private void StartProgressiveOverlayRebuild(string reason)
+{
+    if (_config == null)
+        return;
+
+    if (_progressiveRebuild != null && _progressiveRebuild.IsActive)
+    {
+        _rebuildRestartPending = true;
+        _pendingRebuildReason = SafeLogValue(reason);
+        _pendingRebuildRequestTime = Time.realtimeSinceStartup;
+        Log.Info(
+            "GroundOverlay: progressive rebuild already active; restart queued. reason=" + _pendingRebuildReason +
+            ", restartPending=" + _rebuildRestartPending +
+            ", cancelRequested=" + _rebuildCancelRequested
+        );
+        return;
+    }
+
+    var startupTiming = System.Diagnostics.Stopwatch.StartNew();
+
+    PrepareRoadPrefabWidthResolutionForBuild();
+
+    Log.Info(
+        "GroundOverlay startup timing: prefabResolutionMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    var state = new ProgressiveOverlayRebuildState();
+    state.Reason = SafeLogValue(reason);
+    state.Stopwatch = System.Diagnostics.Stopwatch.StartNew();
+    state.Phase = OverlayRebuildPhase.Clearing;
+    state.PreviousChildCount = CountVisibleOverlayChildren();
+    state.PreviousMaterials.AddRange(_ownedOverlayMaterials);
+
+    var stagingRoot = new GameObject("GroundOverlay_Staging");
+    stagingRoot.name += "_" + stagingRoot.GetInstanceID();
+    stagingRoot.transform.SetParent(transform, false);
+    stagingRoot.SetActive(false);
+    state.StagingRoot = stagingRoot;
+    _overlayRenderParent = stagingRoot.transform;
+    _progressiveRebuild = state;
+
+    Log.Info(
+        "GroundOverlay: rebuild staging started. reason=" + state.Reason +
+        ", previousChildren=" + state.PreviousChildCount +
+        ", previousMaterials=" + state.PreviousMaterials.Count
+    );
+
+    Log.Info(
+        "GroundOverlay: progressive overlay rebuild started. reason=" + state.Reason +
+        ", renderEverything=" + _config.RenderEverything +
+        ", renderAllRoadSegments=" + ShouldRenderAllRoadSegments() +
+        ", renderAllPathSegments=" + ShouldRenderAllPathSegments() +
+        ", roadRenderMode=" + _config.RoadRenderMode +
+        ", pathRenderMode=" + _config.PathRenderMode +
+        ", labels=" + _config.RenderRoadLabels +
+        ", arrows=" + _config.RenderRoadDirectionArrows +
+        ", semanticFilter=" + _config.RoadSemanticFilterMode +
+        ", spatialChunking=" + _config.EnableRoadSpatialChunking +
+        ", roadChunkSizeMeters=" + _config.RoadChunkSizeMeters +
+        ", roadChunksPerFrame=" + _config.RoadChunksPerFrame +
+        ", pathChunksPerFrame=" + _config.PathChunksPerFrame +
+        ", renderRailways=" + _config.RenderRailways +
+        ", railwaySpatialChunking=" + _config.EnableRailwaySpatialChunking +
+        ", railwayChunkSizeMeters=" + _config.RailwayChunkSizeMeters +
+        ", railwayChunksPerFrame=" + _config.RailwayChunksPerFrame +
+        ", renderServices=" + _config.RenderServices +
+        ", serviceChunkSizeMeters=" + _config.ServiceChunkSizeMeters +
+        ", serviceChunksPerFrame=" + _config.ServiceChunksPerFrame
+    );
+
+    if (_waterLines == null || _waterLines.Count == 0)
+    {
+        Log.Info("GroundOverlay: no water geometry; continuing rebuild for bounds/zoning/roads/paths.");
+    }
+
+    state.OriginLon = _config.UseGeoJsonCenter ? _bounds.CenterLon : _config.OriginLon;
+    state.OriginLat = _config.UseGeoJsonCenter ? _bounds.CenterLat : _config.OriginLat;
+
+    state.Stride = Math.Max(1, _config.PointStride);
+    state.Materials = CreateOverlayRenderMaterials();
+
+    ApplyCurrentOverlayVisibilityToMaterials();
+    MapBoundsRenderer.Render(
+        _config,
+        OverlayRenderParent,
+        state.Materials.WorldMapBounds,
+        state.Materials.HeightMapBounds,
+        state.Materials.MapCenter,
+        state.OriginLon,
+        state.OriginLat,
+        ResolveY,
+        LogVerboseOverlay
+    );
+
+    Log.Info(
+        "GroundOverlay startup timing: materialsAndBoundsMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    // Le zoning est maintenant progressif : on initialise la phase sans appeler
+    // RenderZoningFillMeshes ici.
+    state.Phase = OverlayRebuildPhase.Zoning;
+
+    // (Log temporel du zoning supprimé)
+
+    state.Phase = OverlayRebuildPhase.Water;
+    RenderWaterOverlayGroups(
+        state.Materials.Cyan,
+        state.Materials.WaterAreaBlue,
+        state.Materials.WaterAreaFillBlue,
+        state.Stride,
+        ref state.CreatedWaterSegments,
+        ref state.CreatedWaterLines,
+        ref state.FirstWorld,
+        ref state.LastWorld,
+        ref state.HasEndpoints
+    );
+
+    Log.Info(
+        "GroundOverlay startup timing: waterMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    CopyServiceLoadCounters(state.ServiceCounters);
+
+    state.ServiceChunks =
+        BuildServiceRenderChunks(
+            state.OriginLon,
+            state.OriginLat,
+            state.ServiceCounters
+        );
+
+    Log.Info(
+        "GroundOverlay startup timing: serviceChunkingMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    state.RailwayChunks =
+        BuildRailwayRenderChunks(
+            state.OriginLon,
+            state.OriginLat
+        );
+
+    Log.Info(
+        "GroundOverlay startup timing: railwayChunkingMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    state.RoadChunks =
+        BuildRoadRenderChunks(
+            false,
+            state.OriginLon,
+            state.OriginLat
+        );
+
+    Log.Info(
+        "GroundOverlay startup timing: roadChunkingMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    state.PathChunks =
+        BuildRoadRenderChunks(
+            true,
+            state.OriginLon,
+            state.OriginLat
+        );
+
+    Log.Info(
+        "GroundOverlay startup timing: pathChunkingMs=" +
+        startupTiming.ElapsedMilliseconds
+    );
+    startupTiming.Restart();
+
+    Log.Info(
+        "GroundOverlay: service chunking summary: chunks=" + state.ServiceChunks.Count +
+        ", sourcePoints=" + (_servicePoints != null ? _servicePoints.Count : 0) +
+        ", chunkSizeMeters=" + _config.ServiceChunkSizeMeters +
+        ", spatialChunking=" + _config.EnableServiceSpatialChunking
+    );
+
+    Log.Info(
+        "GroundOverlay: railway chunking summary: chunks=" + state.RailwayChunks.Count +
+        ", sourceLines=" + (_railwayLines != null ? _railwayLines.Count : 0) +
+        ", chunkSizeMeters=" + _config.RailwayChunkSizeMeters +
+        ", spatialChunking=" + _config.EnableRailwaySpatialChunking
+    );
+
+    var assignedRoadLines = CountRoadChunkLines(state.RoadChunks);
+    var assignedPathLines = CountRoadChunkLines(state.PathChunks);
+    var validRoadLines = CountValidRoadLines(false);
+    var validPathLines = CountValidRoadLines(true);
+
+    Log.Info(
+        "GroundOverlay: road/path chunking summary: roadChunks=" + state.RoadChunks.Count +
+        ", roadLinesAssigned=" + assignedRoadLines +
+        ", validRoadLines=" + validRoadLines +
+        ", unassignedRoadLines=" + Math.Max(0, validRoadLines - assignedRoadLines) +
+        ", pathChunks=" + state.PathChunks.Count +
+        ", pathLinesAssigned=" + assignedPathLines +
+        ", validPathLines=" + validPathLines +
+        ", unassignedPathLines=" + Math.Max(0, validPathLines - assignedPathLines) +
+        ", chunkSizeMeters=" + _config.RoadChunkSizeMeters +
+        ", spatialChunking=" + _config.EnableRoadSpatialChunking
+    );
+
+    if (state.RoadChunks.Count == 0 && state.PathChunks.Count == 0)
+        LogRoadRenderCounters(state.RoadCounters);
+
+    // On force la phase Zoning pour que le traitement progressif commence immédiatement.
+    state.Phase = OverlayRebuildPhase.Zoning;
+
+    LogProgressiveOverlayProgress(true);
+}
+
+private void UpdateProgressiveOverlayRebuild()
+{
+    var state = _progressiveRebuild;
+
+    if (state == null || !state.IsActive)
+        return;
+
+    if (_rebuildCancelRequested)
+    {
+        _rebuildCancelRequested = false;
+        Log.Info(
+            "GroundOverlay: active progressive rebuild cancellation requested. pendingReason=" +
+            SafeLogValue(_pendingRebuildReason)
+        );
+        CancelProgressiveOverlayRebuild("cancel requested", true);
+        return;
+    }
+
+    try
+    {
+        if (state.Phase == OverlayRebuildPhase.Zoning)
         {
-            if (_config == null)
+            // Budget CPU volontairement faible afin de conserver
+            // une frame Unity réactive pendant les ~53k polygones.
+            if (!BuildProgressiveZoningMeshes(state, 256))
                 return;
-
-            if (_progressiveRebuild != null && _progressiveRebuild.IsActive)
-            {
-                _rebuildRestartPending = true;
-                _pendingRebuildReason = SafeLogValue(reason);
-                _pendingRebuildRequestTime = Time.realtimeSinceStartup;
-                Log.Info(
-                    "GroundOverlay: progressive rebuild already active; restart queued. reason=" + _pendingRebuildReason +
-                    ", restartPending=" + _rebuildRestartPending +
-                    ", cancelRequested=" + _rebuildCancelRequested
-                );
-                return;
-            }
-
-            PrepareRoadPrefabWidthResolutionForBuild();
-
-            var state = new ProgressiveOverlayRebuildState();
-            state.Reason = SafeLogValue(reason);
-            state.Stopwatch = System.Diagnostics.Stopwatch.StartNew();
-            state.Phase = OverlayRebuildPhase.Clearing;
-            state.PreviousChildCount = CountVisibleOverlayChildren();
-            state.PreviousMaterials.AddRange(_ownedOverlayMaterials);
-
-            var stagingRoot = new GameObject("GroundOverlay_Staging");
-            stagingRoot.name += "_" + stagingRoot.GetInstanceID();
-            stagingRoot.transform.SetParent(transform, false);
-            stagingRoot.SetActive(false);
-            state.StagingRoot = stagingRoot;
-            _overlayRenderParent = stagingRoot.transform;
-            _progressiveRebuild = state;
-
-            Log.Info(
-                "GroundOverlay: rebuild staging started. reason=" + state.Reason +
-                ", previousChildren=" + state.PreviousChildCount +
-                ", previousMaterials=" + state.PreviousMaterials.Count
-            );
-
-            Log.Info(
-                "GroundOverlay: progressive overlay rebuild started. reason=" + state.Reason +
-                ", renderEverything=" + _config.RenderEverything +
-                ", renderAllRoadSegments=" + ShouldRenderAllRoadSegments() +
-                ", renderAllPathSegments=" + ShouldRenderAllPathSegments() +
-                ", roadRenderMode=" + _config.RoadRenderMode +
-                ", pathRenderMode=" + _config.PathRenderMode +
-                ", labels=" + _config.RenderRoadLabels +
-                ", arrows=" + _config.RenderRoadDirectionArrows +
-                ", semanticFilter=" + _config.RoadSemanticFilterMode +
-                ", spatialChunking=" + _config.EnableRoadSpatialChunking +
-                ", roadChunkSizeMeters=" + _config.RoadChunkSizeMeters +
-                ", roadChunksPerFrame=" + _config.RoadChunksPerFrame +
-                ", pathChunksPerFrame=" + _config.PathChunksPerFrame +
-                ", renderRailways=" + _config.RenderRailways +
-                ", railwaySpatialChunking=" + _config.EnableRailwaySpatialChunking +
-                ", railwayChunkSizeMeters=" + _config.RailwayChunkSizeMeters +
-                ", railwayChunksPerFrame=" + _config.RailwayChunksPerFrame +
-                ", renderServices=" + _config.RenderServices +
-                ", serviceChunkSizeMeters=" + _config.ServiceChunkSizeMeters +
-                ", serviceChunksPerFrame=" + _config.ServiceChunksPerFrame
-            );
-
-            if (_waterLines == null || _waterLines.Count == 0)
-            {
-                Log.Info("GroundOverlay: no water geometry; continuing rebuild for bounds/zoning/roads/paths.");
-            }
-
-            state.OriginLon = _config.UseGeoJsonCenter ? _bounds.CenterLon : _config.OriginLon;
-            state.OriginLat = _config.UseGeoJsonCenter ? _bounds.CenterLat : _config.OriginLat;
-
-            state.Stride = Math.Max(1, _config.PointStride);
-            state.Materials = CreateOverlayRenderMaterials();
-
-            ApplyCurrentOverlayVisibilityToMaterials();
-            MapBoundsRenderer.Render(
-                _config,
-                OverlayRenderParent,
-                state.Materials.WorldMapBounds,
-                state.Materials.HeightMapBounds,
-                state.Materials.MapCenter,
-                state.OriginLon,
-                state.OriginLat,
-                ResolveY,
-                LogVerboseOverlay
-            );
-
-            state.Phase = OverlayRebuildPhase.Zoning;
-            state.CreatedZoningFillMeshes = RenderZoningFillMeshes(
-                state.Materials.ZoningResidentialLow,
-                state.Materials.ZoningResidentialMedium,
-                state.Materials.ZoningResidentialHigh,
-                state.Materials.ZoningCommercialLow,
-                state.Materials.ZoningCommercialHigh,
-                state.Materials.ZoningRetailDetail,
-                state.Materials.ZoningIndustrial,
-                state.Materials.ZoningOffice,
-                state.Materials.ZoningSurface,
-                state.Materials.ZoningRamp,
-                state.Materials.ZoningMixed,
-                state.Materials.ZoningFallback,
-                state.Stride
-            );
-
-            state.Phase = OverlayRebuildPhase.Water;
-            RenderWaterOverlayGroups(
-                state.Materials.Cyan,
-                state.Materials.WaterAreaBlue,
-                state.Materials.WaterAreaFillBlue,
-                state.Stride,
-                ref state.CreatedWaterSegments,
-                ref state.CreatedWaterLines,
-                ref state.FirstWorld,
-                ref state.LastWorld,
-                ref state.HasEndpoints
-            );
-
-            CopyServiceLoadCounters(state.ServiceCounters);
-            state.ServiceChunks = BuildServiceRenderChunks(state.OriginLon, state.OriginLat, state.ServiceCounters);
-            state.RailwayChunks = BuildRailwayRenderChunks(state.OriginLon, state.OriginLat);
-            state.RoadChunks = BuildRoadRenderChunks(false, state.OriginLon, state.OriginLat);
-            state.PathChunks = BuildRoadRenderChunks(true, state.OriginLon, state.OriginLat);
-
-            Log.Info(
-                "GroundOverlay: service chunking summary: chunks=" + state.ServiceChunks.Count +
-                ", sourcePoints=" + (_servicePoints != null ? _servicePoints.Count : 0) +
-                ", chunkSizeMeters=" + _config.ServiceChunkSizeMeters +
-                ", spatialChunking=" + _config.EnableServiceSpatialChunking
-            );
-
-            Log.Info(
-                "GroundOverlay: railway chunking summary: chunks=" + state.RailwayChunks.Count +
-                ", sourceLines=" + (_railwayLines != null ? _railwayLines.Count : 0) +
-                ", chunkSizeMeters=" + _config.RailwayChunkSizeMeters +
-                ", spatialChunking=" + _config.EnableRailwaySpatialChunking
-            );
-
-            var assignedRoadLines = CountRoadChunkLines(state.RoadChunks);
-            var assignedPathLines = CountRoadChunkLines(state.PathChunks);
-            var validRoadLines = CountValidRoadLines(false);
-            var validPathLines = CountValidRoadLines(true);
-
-            Log.Info(
-                "GroundOverlay: road/path chunking summary: roadChunks=" + state.RoadChunks.Count +
-                ", roadLinesAssigned=" + assignedRoadLines +
-                ", validRoadLines=" + validRoadLines +
-                ", unassignedRoadLines=" + Math.Max(0, validRoadLines - assignedRoadLines) +
-                ", pathChunks=" + state.PathChunks.Count +
-                ", pathLinesAssigned=" + assignedPathLines +
-                ", validPathLines=" + validPathLines +
-                ", unassignedPathLines=" + Math.Max(0, validPathLines - assignedPathLines) +
-                ", chunkSizeMeters=" + _config.RoadChunkSizeMeters +
-                ", spatialChunking=" + _config.EnableRoadSpatialChunking
-            );
-
-            if (state.RoadChunks.Count == 0 && state.PathChunks.Count == 0)
-                LogRoadRenderCounters(state.RoadCounters);
 
             state.Phase = state.ServiceChunks.Count > 0
                 ? OverlayRebuildPhase.ServiceChunks
@@ -284,130 +373,113 @@ namespace CityTimelineMod.Rendering
                     ? OverlayRebuildPhase.RailwayChunks
                     : (state.RoadChunks.Count > 0
                         ? OverlayRebuildPhase.RoadChunks
-                        : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows)));
+                        : (state.PathChunks.Count > 0
+                            ? OverlayRebuildPhase.PathChunks
+                            : OverlayRebuildPhase.Arrows)));
 
             LogProgressiveOverlayProgress(true);
+            return;
         }
 
-        private void UpdateProgressiveOverlayRebuild()
+        if (state.Phase == OverlayRebuildPhase.ServiceChunks)
         {
-            var state = _progressiveRebuild;
+            BuildProgressiveServiceChunks(state, Mathf.Clamp(_config.ServiceChunksPerFrame, 1, 64));
 
-            if (state == null || !state.IsActive)
-                return;
-
-            if (_rebuildCancelRequested)
+            if (state.ServiceChunkIndex >= state.ServiceChunks.Count)
             {
-                _rebuildCancelRequested = false;
-                Log.Info(
-                    "GroundOverlay: active progressive rebuild cancellation requested. pendingReason=" +
-                    SafeLogValue(_pendingRebuildReason)
-                );
-                CancelProgressiveOverlayRebuild("cancel requested", true);
-                return;
+                _lastServiceRenderCounters = state.ServiceCounters.Copy();
+                LogServiceRenderCounters(state.ServiceCounters, state.ServiceChunks.Count);
+                state.Phase = state.RailwayChunks.Count > 0
+                    ? OverlayRebuildPhase.RailwayChunks
+                    : (state.RoadChunks.Count > 0
+                        ? OverlayRebuildPhase.RoadChunks
+                        : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows));
+                LogProgressiveOverlayProgress(true);
             }
 
-            try
-            {
-                if (state.Phase == OverlayRebuildPhase.ServiceChunks)
-                {
-                    BuildProgressiveServiceChunks(state, Mathf.Clamp(_config.ServiceChunksPerFrame, 1, 64));
-
-                    if (state.ServiceChunkIndex >= state.ServiceChunks.Count)
-                    {
-                        _lastServiceRenderCounters = state.ServiceCounters.Copy();
-                        LogServiceRenderCounters(state.ServiceCounters, state.ServiceChunks.Count);
-                        state.Phase = state.RailwayChunks.Count > 0
-                            ? OverlayRebuildPhase.RailwayChunks
-                            : (state.RoadChunks.Count > 0
-                                ? OverlayRebuildPhase.RoadChunks
-                                : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows));
-                        LogProgressiveOverlayProgress(true);
-                    }
-
-                    return;
-                }
-
-                if (state.Phase == OverlayRebuildPhase.RailwayChunks)
-                {
-                    BuildProgressiveRailwayChunks(state, Mathf.Clamp(_config.RailwayChunksPerFrame, 1, 64));
-
-                    if (state.RailwayChunkIndex >= state.RailwayChunks.Count)
-                    {
-                        _lastRailwayRenderCounters = state.RailwayCounters.Copy();
-                        LogRailwayRenderCounters(state.RailwayCounters, state.RailwayChunks.Count);
-                        state.Phase = state.RoadChunks.Count > 0
-                            ? OverlayRebuildPhase.RoadChunks
-                            : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows);
-                        LogProgressiveOverlayProgress(true);
-                    }
-
-                    return;
-                }
-
-                if (state.Phase == OverlayRebuildPhase.RoadChunks)
-                {
-                    BuildProgressiveRoadChunks(state, false, Mathf.Clamp(_config.RoadChunksPerFrame, 1, 64));
-
-                    if (state.RoadChunkIndex >= state.RoadChunks.Count)
-                    {
-                        if (state.PathChunks.Count == 0)
-                            LogRoadRenderCounters(state.RoadCounters);
-
-                        state.Phase = state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows;
-                        LogProgressiveOverlayProgress(true);
-                    }
-
-                    return;
-                }
-
-                if (state.Phase == OverlayRebuildPhase.PathChunks)
-                {
-                    BuildProgressiveRoadChunks(state, true, Mathf.Clamp(_config.PathChunksPerFrame, 1, 64));
-
-                    if (state.PathChunkIndex >= state.PathChunks.Count)
-                    {
-                        LogRoadRenderCounters(state.RoadCounters);
-                        state.Phase = OverlayRebuildPhase.Arrows;
-                        LogProgressiveOverlayProgress(true);
-                    }
-
-                    return;
-                }
-
-                if (state.Phase == OverlayRebuildPhase.Arrows)
-                {
-                    state.CreatedRoadArrows = RenderRoadDirectionArrows(state.Materials.RoadArrow, state.Stride);
-                    state.Phase = OverlayRebuildPhase.Labels;
-                    LogProgressiveOverlayProgress(true);
-                    return;
-                }
-
-                if (state.Phase == OverlayRebuildPhase.Labels)
-                {
-                    state.CreatedRoadLabels = RenderRoadLabels(state.Materials.RoadLabel, state.Stride);
-                    FinishProgressiveOverlayRebuild();
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error("GroundOverlay: progressive overlay rebuild failed. " + ex);
-                var previousOverlayRetained = state.PreviousChildCount > 0;
-                CancelProgressiveOverlayRebuild("error", false);
-
-                if (previousOverlayRetained)
-                {
-                    Log.Info(
-                        "GroundOverlay: failed staging discarded; previous overlay retained."
-                    );
-                    return;
-                }
-
-                _created = false;
-                GeoBundleBootstrap.Reset();
-                GeoDebugOverlay.Uninstall();
-            }
+            return;
         }
+
+        if (state.Phase == OverlayRebuildPhase.RailwayChunks)
+        {
+            BuildProgressiveRailwayChunks(state, Mathf.Clamp(_config.RailwayChunksPerFrame, 1, 64));
+
+            if (state.RailwayChunkIndex >= state.RailwayChunks.Count)
+            {
+                _lastRailwayRenderCounters = state.RailwayCounters.Copy();
+                LogRailwayRenderCounters(state.RailwayCounters, state.RailwayChunks.Count);
+                state.Phase = state.RoadChunks.Count > 0
+                    ? OverlayRebuildPhase.RoadChunks
+                    : (state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows);
+                LogProgressiveOverlayProgress(true);
+            }
+
+            return;
+        }
+
+        if (state.Phase == OverlayRebuildPhase.RoadChunks)
+        {
+            BuildProgressiveRoadChunks(state, false, Mathf.Clamp(_config.RoadChunksPerFrame, 1, 64));
+
+            if (state.RoadChunkIndex >= state.RoadChunks.Count)
+            {
+                if (state.PathChunks.Count == 0)
+                    LogRoadRenderCounters(state.RoadCounters);
+
+                state.Phase = state.PathChunks.Count > 0 ? OverlayRebuildPhase.PathChunks : OverlayRebuildPhase.Arrows;
+                LogProgressiveOverlayProgress(true);
+            }
+
+            return;
+        }
+
+        if (state.Phase == OverlayRebuildPhase.PathChunks)
+        {
+            BuildProgressiveRoadChunks(state, true, Mathf.Clamp(_config.PathChunksPerFrame, 1, 64));
+
+            if (state.PathChunkIndex >= state.PathChunks.Count)
+            {
+                LogRoadRenderCounters(state.RoadCounters);
+                state.Phase = OverlayRebuildPhase.Arrows;
+                LogProgressiveOverlayProgress(true);
+            }
+
+            return;
+        }
+
+        if (state.Phase == OverlayRebuildPhase.Arrows)
+        {
+            state.CreatedRoadArrows = RenderRoadDirectionArrows(state.Materials.RoadArrow, state.Stride);
+            state.Phase = OverlayRebuildPhase.Labels;
+            LogProgressiveOverlayProgress(true);
+            return;
+        }
+
+        if (state.Phase == OverlayRebuildPhase.Labels)
+        {
+            state.CreatedRoadLabels = RenderRoadLabels(state.Materials.RoadLabel, state.Stride);
+            FinishProgressiveOverlayRebuild();
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Error("GroundOverlay: progressive overlay rebuild failed. " + ex);
+        var previousOverlayRetained = state.PreviousChildCount > 0;
+        CancelProgressiveOverlayRebuild("error", false);
+
+        if (previousOverlayRetained)
+        {
+            Log.Info(
+                "GroundOverlay: failed staging discarded; previous overlay retained."
+            );
+            return;
+        }
+
+        _created = false;
+        GeoBundleBootstrap.Reset();
+        GeoDebugOverlay.Uninstall();
+    }
+}
 
         private void BuildProgressiveRoadChunks(ProgressiveOverlayRebuildState state, bool isPath, int chunksPerFrame)
         {

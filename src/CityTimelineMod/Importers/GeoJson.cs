@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace CityTimelineMod.Importers
@@ -27,55 +28,54 @@ namespace CityTimelineMod.Importers
         internal GeoPoint LastPoint;
     }
 
-internal sealed class GeoRoadLine
-{
-    internal List<GeoPoint> Points;
-    internal string Highway;
-    internal string Name;
-    internal bool IsPath;
-
-    internal string Oneway;
-    internal int? Lanes;
-    internal int? TargetLaneCount;
-    internal string MaxSpeed;
-    internal string Surface;
-    internal bool Bridge;
-    internal bool Tunnel;
-    internal bool Roundabout;
-    internal string Ref;
-
-    internal GeoRoadLine(
-        List<GeoPoint> points,
-        string highway,
-        string name,
-        bool isPath = false,
-        string oneway = null,
-        int? lanes = null,
-        int? targetLaneCount = null,
-        string maxSpeed = null,
-        string surface = null,
-        bool bridge = false,
-        bool tunnel = false,
-        bool roundabout = false,
-        string refValue = null)
+    internal sealed class GeoRoadLine
     {
-        Points = points ?? new List<GeoPoint>();
-        Highway = highway;
-        Name = name;
-        IsPath = isPath;
+        internal List<GeoPoint> Points;
+        internal string Highway;
+        internal string Name;
+        internal bool IsPath;
 
-        Oneway = oneway;
-        Lanes = lanes;
-        TargetLaneCount = targetLaneCount;
-        MaxSpeed = maxSpeed;
-        Surface = surface;
-        Bridge = bridge;
-        Tunnel = tunnel;
-        Roundabout = roundabout;
-        Ref = refValue;
+        internal string Oneway;
+        internal int? Lanes;
+        internal int? TargetLaneCount;
+        internal string MaxSpeed;
+        internal string Surface;
+        internal bool Bridge;
+        internal bool Tunnel;
+        internal bool Roundabout;
+        internal string Ref;
+
+        internal GeoRoadLine(
+            List<GeoPoint> points,
+            string highway,
+            string name,
+            bool isPath = false,
+            string oneway = null,
+            int? lanes = null,
+            int? targetLaneCount = null,
+            string maxSpeed = null,
+            string surface = null,
+            bool bridge = false,
+            bool tunnel = false,
+            bool roundabout = false,
+            string refValue = null)
+        {
+            Points = points ?? new List<GeoPoint>();
+            Highway = highway;
+            Name = name;
+            IsPath = isPath;
+
+            Oneway = oneway;
+            Lanes = lanes;
+            TargetLaneCount = targetLaneCount;
+            MaxSpeed = maxSpeed;
+            Surface = surface;
+            Bridge = bridge;
+            Tunnel = tunnel;
+            Roundabout = roundabout;
+            Ref = refValue;
+        }
     }
-}
-
 
     internal sealed class GeoZoningPolygon
     {
@@ -180,7 +180,6 @@ internal sealed class GeoRoadLine
                 if (geometry == null)
                     continue;
 
-
                 var type = geometry["type"] != null ? geometry["type"].ToString() : null;
                 var coordinates = geometry["coordinates"];
 
@@ -211,137 +210,306 @@ internal sealed class GeoRoadLine
             return result;
         }
 
+        // ------------------------------------------------------------------
+        // Lecture streaming : plus de File.ReadAllText + JObject.Parse global.
+        // Chaque feature est matérialisée seule, convertie, puis relâchée.
+        // ------------------------------------------------------------------
         internal static List<GeoRoadLine> LoadRoadGeometries(string path)
         {
-            var features = LoadFeatures(path);
+            if (!File.Exists(path))
+                throw new FileNotFoundException(path);
+
             var result = new List<GeoRoadLine>();
 
-            foreach (var feature in features)
+            string rootType = null;
+            var featuresFound = false;
+
+            using (var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                1024 * 1024,
+                FileOptions.SequentialScan))
+            using (var textReader = new StreamReader(stream))
+            using (var reader = new JsonTextReader(textReader))
             {
-                var properties = feature["properties"] as JObject;
-                var tags = properties != null ? properties["tags"] as JObject : null;
+                reader.DateParseHandling = DateParseHandling.None;
+                reader.FloatParseHandling = FloatParseHandling.Double;
 
-                var highway = GetStringProperty(properties, "highway");
+                if (!reader.Read() || reader.TokenType != JsonToken.StartObject)
+                    throw new InvalidDataException("Invalid GeoJSON root object");
 
-                if (string.IsNullOrWhiteSpace(highway))
-                    highway = GetStringProperty(tags, "highway");
-
-                if (string.IsNullOrWhiteSpace(highway))
-                    highway = GetSourceTagValue(GetStringProperty(properties, "sourceTag"), "highway");
-
-var name = GetStringProperty(properties, "name");
-
-var roadImport = properties != null ? properties["roadImport"] as JObject : null;
-
-var oneway = GetStringProperty(properties, "oneway");
-
-if (string.IsNullOrWhiteSpace(oneway))
-    oneway = GetStringProperty(tags, "oneway");
-
-if (string.IsNullOrWhiteSpace(oneway))
-    oneway = GetStringProperty(roadImport, "oneway");
-
-var lanes = GetIntProperty(properties, "lanes");
-
-if (!lanes.HasValue)
-    lanes = GetIntProperty(tags, "lanes");
-
-var targetLaneCount = GetIntProperty(roadImport, "targetLaneCount");
-
-var maxSpeed = GetStringProperty(properties, "maxspeed");
-
-if (string.IsNullOrWhiteSpace(maxSpeed))
-    maxSpeed = GetStringProperty(tags, "maxspeed");
-
-if (string.IsNullOrWhiteSpace(maxSpeed))
-    maxSpeed = GetStringProperty(roadImport, "maxspeed");
-
-var surface = GetStringProperty(properties, "surface");
-
-if (string.IsNullOrWhiteSpace(surface))
-    surface = GetStringProperty(tags, "surface");
-
-if (string.IsNullOrWhiteSpace(surface))
-    surface = GetStringProperty(roadImport, "surface");
-
-var bridge = GetBoolProperty(properties, "bridge") || GetBoolProperty(tags, "bridge") || GetBoolProperty(roadImport, "bridge");
-var tunnel = GetBoolProperty(properties, "tunnel") || GetBoolProperty(tags, "tunnel") || GetBoolProperty(roadImport, "tunnel");
-var roundabout = GetBoolProperty(roadImport, "roundabout");
-
-if (!roundabout)
-{
-    var junction = GetStringProperty(properties, "junction");
-
-    if (string.IsNullOrWhiteSpace(junction))
-        junction = GetStringProperty(tags, "junction");
-
-    roundabout = string.Equals(junction, "roundabout", StringComparison.OrdinalIgnoreCase);
-}
-
-var refValue = GetStringProperty(properties, "ref");
-
-if (string.IsNullOrWhiteSpace(refValue))
-    refValue = GetStringProperty(tags, "ref");
-
-var geometry = feature["geometry"] as JObject;
-
-                if (geometry == null)
-                    continue;
-
-                var type = geometry["type"] != null ? geometry["type"].ToString() : null;
-                var coordinates = geometry["coordinates"];
-
-                if (type == "LineString")
+                while (reader.Read())
                 {
-                    var line = ParseLineString(coordinates as JArray);
+                    if (reader.TokenType == JsonToken.EndObject)
+                        break;
 
-                    if (line.Count >= 2)
-                        result.Add(new GeoRoadLine(
-    line,
-    highway,
-    name,
-    false,
-    oneway,
-    lanes,
-    targetLaneCount,
-    maxSpeed,
-    surface,
-    bridge,
-    tunnel,
-    roundabout,
-    refValue));
-                }
-                else if (type == "MultiLineString")
-                {
-                    var multi = coordinates as JArray;
-
-                    if (multi == null)
+                    if (reader.TokenType != JsonToken.PropertyName)
                         continue;
 
-                    foreach (var lineToken in multi)
-                    {
-                        var line = ParseLineString(lineToken as JArray);
+                    var propertyName = reader.Value != null
+                        ? reader.Value.ToString()
+                        : string.Empty;
 
-                        if (line.Count >= 2)
-                            result.Add(new GeoRoadLine(
-    line,
-    highway,
-    name,
-    false,
-    oneway,
-    lanes,
-    targetLaneCount,
-    maxSpeed,
-    surface,
-    bridge,
-    tunnel,
-    roundabout,
-    refValue));
+                    if (!reader.Read())
+                        break;
+
+                    if (string.Equals(
+                        propertyName,
+                        "type",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        rootType = reader.Value != null
+                            ? reader.Value.ToString()
+                            : null;
+
+                        continue;
                     }
+
+                    if (string.Equals(
+                        propertyName,
+                        "features",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (reader.TokenType != JsonToken.StartArray)
+                            throw new InvalidDataException(
+                                "'features' is missing or not an array"
+                            );
+
+                        featuresFound = true;
+
+                        while (reader.Read())
+                        {
+                            if (reader.TokenType == JsonToken.EndArray)
+                                break;
+
+                            if (reader.TokenType != JsonToken.StartObject)
+                            {
+                                reader.Skip();
+                                continue;
+                            }
+
+                            var feature = JObject.Load(reader);
+
+                            AddRoadFeature(feature, result);
+                        }
+
+                        continue;
+                    }
+
+                    reader.Skip();
                 }
             }
 
+            if (!string.Equals(
+                rootType,
+                "FeatureCollection",
+                StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("Not a FeatureCollection");
+            }
+
+            if (!featuresFound)
+                throw new InvalidDataException("'features' is missing or not an array");
+
             return result;
+        }
+
+        private static void AddRoadFeature(
+            JObject feature,
+            List<GeoRoadLine> result)
+        {
+            if (feature == null || result == null)
+                return;
+
+            var properties = feature["properties"] as JObject;
+            var tags = properties != null
+                ? properties["tags"] as JObject
+                : null;
+
+            var highway = GetStringProperty(properties, "highway");
+
+            if (string.IsNullOrWhiteSpace(highway))
+                highway = GetStringProperty(tags, "highway");
+
+            if (string.IsNullOrWhiteSpace(highway))
+            {
+                highway = GetSourceTagValue(
+                    GetStringProperty(properties, "sourceTag"),
+                    "highway"
+                );
+            }
+
+            var name = GetStringProperty(properties, "name");
+
+            var roadImport = properties != null
+                ? properties["roadImport"] as JObject
+                : null;
+
+            var oneway = GetStringProperty(properties, "oneway");
+
+            if (string.IsNullOrWhiteSpace(oneway))
+                oneway = GetStringProperty(tags, "oneway");
+
+            if (string.IsNullOrWhiteSpace(oneway))
+                oneway = GetStringProperty(roadImport, "oneway");
+
+            var lanes = GetIntProperty(properties, "lanes");
+
+            if (!lanes.HasValue)
+                lanes = GetIntProperty(tags, "lanes");
+
+            var targetLaneCount =
+                GetIntProperty(roadImport, "targetLaneCount");
+
+            var maxSpeed = GetStringProperty(properties, "maxspeed");
+
+            if (string.IsNullOrWhiteSpace(maxSpeed))
+                maxSpeed = GetStringProperty(tags, "maxspeed");
+
+            if (string.IsNullOrWhiteSpace(maxSpeed))
+                maxSpeed = GetStringProperty(roadImport, "maxspeed");
+
+            var surface = GetStringProperty(properties, "surface");
+
+            if (string.IsNullOrWhiteSpace(surface))
+                surface = GetStringProperty(tags, "surface");
+
+            if (string.IsNullOrWhiteSpace(surface))
+                surface = GetStringProperty(roadImport, "surface");
+
+            var bridge =
+                GetBoolProperty(properties, "bridge") ||
+                GetBoolProperty(tags, "bridge") ||
+                GetBoolProperty(roadImport, "bridge");
+
+            var tunnel =
+                GetBoolProperty(properties, "tunnel") ||
+                GetBoolProperty(tags, "tunnel") ||
+                GetBoolProperty(roadImport, "tunnel");
+
+            var roundabout =
+                GetBoolProperty(roadImport, "roundabout");
+
+            if (!roundabout)
+            {
+                var junction =
+                    GetStringProperty(properties, "junction");
+
+                if (string.IsNullOrWhiteSpace(junction))
+                    junction = GetStringProperty(tags, "junction");
+
+                roundabout = string.Equals(
+                    junction,
+                    "roundabout",
+                    StringComparison.OrdinalIgnoreCase
+                );
+            }
+
+            var refValue =
+                GetStringProperty(properties, "ref");
+
+            if (string.IsNullOrWhiteSpace(refValue))
+                refValue = GetStringProperty(tags, "ref");
+
+            var geometry = feature["geometry"] as JObject;
+
+            if (geometry == null)
+                return;
+
+            var type = geometry["type"] != null
+                ? geometry["type"].ToString()
+                : null;
+
+            var coordinates = geometry["coordinates"];
+
+            if (type == "LineString")
+            {
+                AddRoadLine(
+                    coordinates as JArray,
+                    result,
+                    highway,
+                    name,
+                    oneway,
+                    lanes,
+                    targetLaneCount,
+                    maxSpeed,
+                    surface,
+                    bridge,
+                    tunnel,
+                    roundabout,
+                    refValue
+                );
+
+                return;
+            }
+
+            if (type != "MultiLineString")
+                return;
+
+            var multi = coordinates as JArray;
+
+            if (multi == null)
+                return;
+
+            foreach (var lineToken in multi)
+            {
+                AddRoadLine(
+                    lineToken as JArray,
+                    result,
+                    highway,
+                    name,
+                    oneway,
+                    lanes,
+                    targetLaneCount,
+                    maxSpeed,
+                    surface,
+                    bridge,
+                    tunnel,
+                    roundabout,
+                    refValue
+                );
+            }
+        }
+
+        private static void AddRoadLine(
+            JArray coordinates,
+            List<GeoRoadLine> result,
+            string highway,
+            string name,
+            string oneway,
+            int? lanes,
+            int? targetLaneCount,
+            string maxSpeed,
+            string surface,
+            bool bridge,
+            bool tunnel,
+            bool roundabout,
+            string refValue)
+        {
+            var line = ParseLineString(coordinates);
+
+            if (line.Count < 2)
+                return;
+
+            result.Add(
+                new GeoRoadLine(
+                    line,
+                    highway,
+                    name,
+                    false,
+                    oneway,
+                    lanes,
+                    targetLaneCount,
+                    maxSpeed,
+                    surface,
+                    bridge,
+                    tunnel,
+                    roundabout,
+                    refValue
+                )
+            );
         }
 
         internal static List<GeoZoningPolygon> LoadZoningPolygons(string path)
@@ -361,7 +529,6 @@ var geometry = feature["geometry"] as JObject;
 
                 if (geometry == null)
                     continue;
-
 
                 var type = geometry["type"] != null ? geometry["type"].ToString() : null;
                 var coordinates = geometry["coordinates"] as JArray;
@@ -402,7 +569,6 @@ var geometry = feature["geometry"] as JObject;
 
                 if (geometry == null)
                     continue;
-
 
                 var type = geometry["type"] != null ? geometry["type"].ToString() : null;
                 var coordinates = geometry["coordinates"] as JArray;
@@ -502,38 +668,38 @@ var geometry = feature["geometry"] as JObject;
             if (string.IsNullOrWhiteSpace(text))
                 return null;
 
-                return text;
-}
+            return text;
+        }
 
-private static int? GetIntProperty(JObject properties, string name)
-{
-    var text = GetStringProperty(properties, name);
+        private static int? GetIntProperty(JObject properties, string name)
+        {
+            var text = GetStringProperty(properties, name);
 
-    if (string.IsNullOrWhiteSpace(text))
-        return null;
+            if (string.IsNullOrWhiteSpace(text))
+                return null;
 
-    int value;
+            int value;
 
-    if (int.TryParse(text, out value))
-        return value;
+            if (int.TryParse(text, out value))
+                return value;
 
-    return null;
-}
+            return null;
+        }
 
-private static bool GetBoolProperty(JObject properties, string name)
-{
-    var text = GetStringProperty(properties, name);
+        private static bool GetBoolProperty(JObject properties, string name)
+        {
+            var text = GetStringProperty(properties, name);
 
-    if (string.IsNullOrWhiteSpace(text))
-        return false;
+            if (string.IsNullOrWhiteSpace(text))
+                return false;
 
-    return
-        string.Equals(text, "true", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(text, "yes", StringComparison.OrdinalIgnoreCase) ||
-        string.Equals(text, "1", StringComparison.OrdinalIgnoreCase);
-}
+            return
+                string.Equals(text, "true", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "yes", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(text, "1", StringComparison.OrdinalIgnoreCase);
+        }
 
-private static string GetSourceTagValue(string sourceTag, string key)
+        private static string GetSourceTagValue(string sourceTag, string key)
         {
             if (string.IsNullOrWhiteSpace(sourceTag) || string.IsNullOrWhiteSpace(key))
                 return null;

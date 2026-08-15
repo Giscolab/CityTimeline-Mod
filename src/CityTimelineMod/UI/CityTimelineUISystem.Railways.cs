@@ -150,6 +150,8 @@ namespace CityTimelineMod.UI
 
             base.OnUpdate();
 
+            UpdateVisualRuntimeActivation();
+
             // Keep CoHTML completely idle while the panel is closed.  The old
             // 4 Hz poll rebuilt statistics JSON and queried overlay progress
             // throughout gameplay even though no UI could consume it.

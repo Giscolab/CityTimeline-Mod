@@ -211,8 +211,8 @@ internal bool RenderZoning = true;
         internal bool EnableRoadSpatialChunking = true;
         internal float RoadChunkSizeMeters = 1024f;
         internal bool EnableProgressiveOverlayRebuild = true;
-        internal int RoadChunksPerFrame = 2;
-        internal int PathChunksPerFrame = 2;
+        internal int RoadChunksPerFrame = 16;
+        internal int PathChunksPerFrame = 16;
 
         internal bool RenderRoadDirectionArrows = false;
         internal bool RenderAllRoadArrows = false;
@@ -302,7 +302,5 @@ internal bool RenderZoning = true;
         internal int MaxWaterSegmentsDebug = 500;
         internal int PointStride = 1;
 
-
-        // --- Nouveau helper ---
     }
 }

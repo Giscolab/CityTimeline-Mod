@@ -19,7 +19,7 @@ namespace CityTimelineMod.Config
 
         internal bool EnableRailwaySpatialChunking = true;
         internal float RailwayChunkSizeMeters = 1024f;
-        internal int RailwayChunksPerFrame = 2;
+        internal int RailwayChunksPerFrame = 16;
         internal int MaxRailwaySegmentsDebug = 800000;
         internal bool RenderAllRailwaySegments = true;
 
