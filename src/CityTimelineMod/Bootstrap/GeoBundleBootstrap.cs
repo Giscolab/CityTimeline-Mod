@@ -381,37 +381,41 @@ namespace CityTimelineMod
                     return false;
                 }
 
-                var loadTiming = System.Diagnostics.Stopwatch.StartNew();
-                var lineStats = GeoJson.AnalyzeLines(lines);
+                var loadTiming =
+                    System.Diagnostics.Stopwatch.StartNew();
+
+                var waterLineLoad =
+                    GeoJson.LoadLineGeometriesWithAnalysis(lines);
+
+                var lineStats = waterLineLoad.Analysis;
+                var lineGeometries = waterLineLoad.Geometries;
 
                 Log.Info(
-                    "GeoBundle load timing: waterLineAnalysisMs=" +
-                    loadTiming.ElapsedMilliseconds
+                    "GeoBundle load timing: waterLinesCombinedMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", features=" +
+                    lineStats.FeatureCount +
+                    ", geometries=" +
+                    lineGeometries.Count
                 );
+
                 loadTiming.Restart();
 
-                var lineGeometries = GeoJson.LoadLineGeometries(lines);
+                var waterAreaLoad =
+                    GeoJson.LoadPolygonOutlinesWithCount(areas);
+
+                var areaCount = waterAreaLoad.FeatureCount;
+                var areaOutlines = waterAreaLoad.Outlines;
 
                 Log.Info(
-                    "GeoBundle load timing: waterLinesMs=" +
-                    loadTiming.ElapsedMilliseconds
+                    "GeoBundle load timing: waterAreasCombinedMs=" +
+                    loadTiming.ElapsedMilliseconds +
+                    ", features=" +
+                    areaCount +
+                    ", outlines=" +
+                    areaOutlines.Count
                 );
-                loadTiming.Restart();
 
-                var areaCount = GeoJson.CountFeatures(areas);
-
-                Log.Info(
-                    "GeoBundle load timing: waterAreaCountMs=" +
-                    loadTiming.ElapsedMilliseconds
-                );
-                loadTiming.Restart();
-
-                var areaOutlines = GeoJson.LoadPolygonOutlines(areas);
-
-                Log.Info(
-                    "GeoBundle load timing: waterAreasMs=" +
-                    loadTiming.ElapsedMilliseconds
-                );
                 loadTiming.Restart();
 
                 var selectedRoads = string.Equals(config.RoadGeometrySource, "driveable", StringComparison.OrdinalIgnoreCase)
@@ -484,8 +488,33 @@ namespace CityTimelineMod
                 );
                 loadTiming.Restart();
 
+                var zoningHudFeatureCount = 0;
+                var zoningHudCounts =
+                    new Dictionary<string, int>(
+                        StringComparer.OrdinalIgnoreCase
+                    );
+
                 var zoningPolygons = File.Exists(zoning)
-                    ? GeoJson.LoadZoningPolygons(zoning)
+                    ? GeoJson.LoadZoningPolygons(
+                        zoning,
+                        delegate(string cs2, string zone)
+                        {
+                            zoningHudFeatureCount++;
+
+                            var key =
+                                BundleHudStatsLoader.ClassifyZoning(
+                                    cs2,
+                                    zone
+                                );
+
+                            int count;
+                            zoningHudCounts.TryGetValue(
+                                key,
+                                out count
+                            );
+
+                            zoningHudCounts[key] = count + 1;
+                        })
                     : new List<GeoZoningPolygon>();
 
                 Log.Info(
@@ -507,7 +536,12 @@ namespace CityTimelineMod
                 );
                 loadTiming.Restart();
 
-                var bundleHudSnapshot = BundleHudStatsLoader.Load(geoJsonPackRoot);
+                var bundleHudSnapshot =
+                    BundleHudStatsLoader.Load(
+                        geoJsonPackRoot,
+                        zoningHudFeatureCount,
+                        zoningHudCounts
+                    );
 
                 Log.Info(
                     "GeoBundle load timing: hudStatsMs=" +

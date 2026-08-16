@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -14,7 +15,22 @@ namespace CityTimelineMod.Rendering.Statistics
     /// </summary>
     internal static class BundleHudStatsLoader
     {
-        internal static BundleHudSnapshot Load(string bundleOrGeoJsonPackPath)
+        private const bool ValidatePreloadedZoningStatsParity = false;
+
+        internal static BundleHudSnapshot Load(
+            string bundleOrGeoJsonPackPath)
+        {
+            return Load(
+                bundleOrGeoJsonPackPath,
+                null,
+                null
+            );
+        }
+
+        internal static BundleHudSnapshot Load(
+            string bundleOrGeoJsonPackPath,
+            int? preloadedZoningFeatureCount,
+            IDictionary<string, int> preloadedZoningCounts)
         {
             var snapshot = new BundleHudSnapshot();
             snapshot.PackRoot = ResolveGeoJsonPackRoot(bundleOrGeoJsonPackPath);
@@ -37,11 +53,63 @@ namespace CityTimelineMod.Rendering.Statistics
                 "servicesIndex",
                 Path.Combine(reports, "services_index.json"),
                 delegate(JObject root) { ReadServicesIndex(snapshot, root); });
-            LoadSource(
-                snapshot,
-                "zoningPolygons",
-                Path.Combine(geojson, "zoning_polygons.geojson"),
-                delegate(JObject root) { ReadZoningPolygons(snapshot, root); });
+            var zoningPath =
+                Path.Combine(
+                    geojson,
+                    "zoning_polygons.geojson"
+                );
+
+            if (preloadedZoningFeatureCount.HasValue &&
+                preloadedZoningCounts != null)
+            {
+                for (var i = 0;
+                     i < BundleHudSnapshot.ZoningKeys.Length;
+                     i++)
+                {
+                    snapshot.ZoningCounts[
+                        BundleHudSnapshot.ZoningKeys[i]
+                    ] = 0;
+                }
+
+                snapshot.ZoningFeatureCount =
+                    preloadedZoningFeatureCount.Value;
+
+                foreach (var pair in preloadedZoningCounts)
+                    snapshot.ZoningCounts[pair.Key] = pair.Value;
+
+                snapshot.SetSource(
+                    "zoningPolygons",
+                    zoningPath,
+                    File.Exists(zoningPath),
+                    File.Exists(zoningPath)
+                        ? ""
+                        : "missing"
+                );
+
+                LogPreloadedZoningStats(snapshot);
+
+                if (ValidatePreloadedZoningStatsParity)
+                {
+                    ValidatePreloadedZoningStats(
+                        snapshot,
+                        zoningPath
+                    );
+                }
+            }
+            else
+            {
+                LoadSource(
+                    snapshot,
+                    "zoningPolygons",
+                    zoningPath,
+                    delegate(JObject root)
+                    {
+                        ReadZoningPolygons(
+                            snapshot,
+                            root
+                        );
+                    });
+            }
             LoadSource(
                 snapshot,
                 "extractionReport",
@@ -89,30 +157,71 @@ namespace CityTimelineMod.Rendering.Statistics
             return Directory.Exists(nested) ? nested : candidate;
         }
 
-        private static void LoadSource(
-            BundleHudSnapshot snapshot,
-            string key,
-            string path,
-            Action<JObject> reader
-        )
-        {
-            if (!File.Exists(path))
-            {
-                snapshot.SetSource(key, path, false, "missing");
-                return;
-            }
+private static void LoadSource(
+    BundleHudSnapshot snapshot,
+    string key,
+    string path,
+    Action<JObject> reader
+)
+{
+    if (!File.Exists(path))
+    {
+        snapshot.SetSource(key, path, false, "missing");
+        return;
+    }
 
-            try
-            {
-                var root = JObject.Parse(File.ReadAllText(path));
-                reader(root);
-                snapshot.SetSource(key, path, true, "");
-            }
-            catch (Exception ex)
-            {
-                snapshot.SetSource(key, path, false, SafeError(ex));
-            }
-        }
+    var totalTimer =
+        System.Diagnostics.Stopwatch.StartNew();
+
+    long parseMs = 0;
+    long readerMs = 0;
+
+    try
+    {
+        var parseTimer =
+            System.Diagnostics.Stopwatch.StartNew();
+
+        var root =
+            JObject.Parse(File.ReadAllText(path));
+
+        parseTimer.Stop();
+        parseMs = parseTimer.ElapsedMilliseconds;
+
+        var readerTimer =
+            System.Diagnostics.Stopwatch.StartNew();
+
+        reader(root);
+
+        readerTimer.Stop();
+        readerMs = readerTimer.ElapsedMilliseconds;
+
+        snapshot.SetSource(key, path, true, "");
+    }
+    catch (Exception ex)
+    {
+        snapshot.SetSource(
+            key,
+            path,
+            false,
+            SafeError(ex)
+        );
+    }
+
+    totalTimer.Stop();
+
+    CityTimelineMod.Util.Log.Info(
+        "BundleHudStats source profile: key=" +
+        key +
+        ", parseMs=" +
+        parseMs +
+        ", readerMs=" +
+        readerMs +
+        ", totalMs=" +
+        totalTimer.ElapsedMilliseconds +
+        ", bytes=" +
+        new FileInfo(path).Length
+    );
+}
 
         private static void ReadLayerIndex(BundleHudSnapshot snapshot, JObject root)
         {
@@ -212,6 +321,99 @@ namespace CityTimelineMod.Rendering.Statistics
             }
         }
 
+        private static void LogPreloadedZoningStats(
+            BundleHudSnapshot snapshot)
+        {
+            var categorized = 0;
+
+            foreach (var pair in snapshot.ZoningCounts)
+                categorized += pair.Value;
+
+            CityTimelineMod.Util.Log.Info(
+                "BundleHudStats reused zoning stats: features=" +
+                snapshot.ZoningFeatureCount +
+                ", categorized=" +
+                categorized
+            );
+        }
+
+        private static void ValidatePreloadedZoningStats(
+            BundleHudSnapshot direct,
+            string path)
+        {
+            var legacy = new BundleHudSnapshot();
+
+            LoadSource(
+                legacy,
+                "zoningPolygons",
+                path,
+                delegate(JObject root)
+                {
+                    ReadZoningPolygons(
+                        legacy,
+                        root
+                    );
+                });
+
+            var mismatches = 0;
+
+            if (legacy.ZoningFeatureCount !=
+                direct.ZoningFeatureCount)
+            {
+                mismatches++;
+
+                CityTimelineMod.Util.Log.Error(
+                    "HUD zoning stats diff: featureCount legacy=" +
+                    legacy.ZoningFeatureCount +
+                    " direct=" +
+                    direct.ZoningFeatureCount
+                );
+            }
+
+            for (var i = 0;
+                 i < BundleHudSnapshot.ZoningKeys.Length;
+                 i++)
+            {
+                var key =
+                    BundleHudSnapshot.ZoningKeys[i];
+
+                int legacyCount;
+                int directCount;
+
+                legacy.ZoningCounts.TryGetValue(
+                    key,
+                    out legacyCount
+                );
+
+                direct.ZoningCounts.TryGetValue(
+                    key,
+                    out directCount
+                );
+
+                if (legacyCount == directCount)
+                    continue;
+
+                mismatches++;
+
+                CityTimelineMod.Util.Log.Error(
+                    "HUD zoning stats diff: key=" +
+                    key +
+                    ", legacy=" +
+                    legacyCount +
+                    ", direct=" +
+                    directCount
+                );
+            }
+
+            CityTimelineMod.Util.Log.Info(
+                "HUD zoning stats parity: legacyFeatures=" +
+                legacy.ZoningFeatureCount +
+                ", directFeatures=" +
+                direct.ZoningFeatureCount +
+                ", mismatches=" +
+                mismatches
+            );
+        }
         private static void ReadZoningPolygons(BundleHudSnapshot snapshot, JObject root)
         {
             if (!string.Equals(ReadString(root, "type"), "FeatureCollection", StringComparison.OrdinalIgnoreCase))
