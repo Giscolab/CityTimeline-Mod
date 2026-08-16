@@ -75,6 +75,7 @@ namespace CityTimelineMod
             );
 
             ClaimLifecycleOwnership();
+
             if (priorLifecycleOwner != null &&
                 !ReferenceEquals(priorLifecycleOwner, this))
             {
@@ -438,6 +439,8 @@ Log.Info(
 
         public void OnDispose()
         {
+
+
             if (!OwnsActiveLifecycle())
             {
                 DisposeSupersededInstance();
@@ -471,31 +474,62 @@ Log.Info(
             CityTimelineLargeMapState.Disable();
             PlayableWorldState.Disable();
 
-            // 5-6. Owner-scoped patch removal remains independent/best effort.
-            var playableWorldPatchesClean = SafeUninstallPlayableWorld("dispose");
-            var largeMapPatchesClean =
-                TryCoordinatedLargeMapPatcherTeardown("dispose");
-            var largeMapScopeEndReason =
-                "coordinated LargeMap teardown did not complete";
-            var largeMapScopeEnded = false;
+// 5-6. PlayableWorld can be removed normally.
+//
+// LargeMap is different: during normal application termination,
+// GameManager calls ModManager.Dispose() before DestroyWorld().
+// A dirty 57 km simulation World must therefore keep its Harmony owner
+// and extended layout until the process destroys that World.
+var playableWorldPatchesClean = SafeUninstallPlayableWorld("dispose");
 
-            if (largeMapPatchesClean)
-            {
-                largeMapScopeEnded = SafeEndLargeMapRuntimeWorld(
-                    _world,
-                    _lifecycleGeneration,
-                    "dispose",
-                    out largeMapScopeEndReason
-                );
-            }
+var gameManager = GameManager.instance;
+var processShutdown =
+    gameManager != null &&
+    gameManager.state == GameManager.State.Quitting;
 
-            if (!largeMapScopeEnded)
-            {
-                Log.Error(
-                    "[CityTimelineMod] dispose retained a dirty LargeMap World scope: " +
-                    largeMapScopeEndReason + "."
-                );
-            }
+var largeMapCleanupComplete = false;
+
+if (processShutdown)
+{
+    largeMapCleanupComplete = true;
+
+Debug.Log(
+    "[CityTimelineMod] LargeMap teardown intentionally skipped during " +
+    "game termination; the live World will be destroyed immediately " +
+    "after ModManager.Dispose()."
+);
+}
+else
+{
+    var largeMapPatchesClean =
+        TryCoordinatedLargeMapPatcherTeardown("dispose");
+
+    var largeMapScopeEndReason =
+        "coordinated LargeMap teardown did not complete";
+    var largeMapScopeEnded = false;
+
+    if (largeMapPatchesClean)
+    {
+        largeMapScopeEnded = SafeEndLargeMapRuntimeWorld(
+            _world,
+            _lifecycleGeneration,
+            "dispose",
+            out largeMapScopeEndReason
+        );
+    }
+
+    if (!largeMapScopeEnded)
+    {
+        Log.Error(
+            "[CityTimelineMod] dispose retained a dirty LargeMap World scope: " +
+            largeMapScopeEndReason + "."
+        );
+    }
+
+    largeMapCleanupComplete =
+        largeMapPatchesClean &&
+        largeMapScopeEnded;
+}
 
             // 7. Official options and exact localisation sources are removed.
             var supersededLifecycleRegistrationsClean =
@@ -509,8 +543,7 @@ Log.Info(
                 overlayCleanupComplete &&
                 runtimeControllerCleanupComplete &&
                 playableWorldPatchesClean &&
-                largeMapPatchesClean &&
-                largeMapScopeEnded &&
+				largeMapCleanupComplete &&
                 supersededLifecycleRegistrationsClean &&
                 optionsCleanupComplete &&
                 localizationCleanupComplete;
@@ -534,6 +567,8 @@ Log.Info(
             }
             else
                 Log.Error("[CityTimelineMod] dispose completed with pending rollback state.");
+
+
         }
 
         private void CapturePriorLifecycleScope(

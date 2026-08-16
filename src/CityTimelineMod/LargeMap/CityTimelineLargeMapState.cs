@@ -41,6 +41,8 @@ namespace CityTimelineMod.LargeMap
             _quarantinePreservesExtendedLayout ||
             RequiresWorldDestructionForCleanup;
 
+
+
         // Transpilers call these accessors instead of embedding 57 km constants.
         // This keeps patched paths vanilla until the complete Harmony manifest
         // has been verified. During quarantine, layout accessors remain extended

@@ -741,7 +741,7 @@ public ProxyBinding KeyBindingToggleOverlayHud { get; set; }
                 if (snapshot == null)
                 {
                     _modEnabled = false;
-                    _largeMapEnabled = false;
+                    _largeMapEnabled = true;
                     _playableWorldEnabled = false;
                     return;
                 }

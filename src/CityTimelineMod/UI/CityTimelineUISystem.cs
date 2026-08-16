@@ -122,7 +122,32 @@ namespace CityTimelineMod.UI
         protected override void OnGamePreload(Purpose purpose, GameMode mode)
         {
             _visualRuntimeActivationTask = null;
-            _gameLoadingComplete = false;
+_gameLoadingComplete = false;
+
+if (GeoDebugOverlay.IsInstalled)
+{
+    if (GeoDebugOverlay.Uninstall())
+    {
+        GeoBundleBootstrap.Reset();
+        Log.Info(
+            "CityTimelineMod visual runtime released before World load."
+        );
+    }
+    else
+    {
+        Log.Error(
+            "CityTimelineMod visual runtime cleanup failed before World load."
+        );
+    }
+}
+else
+{
+    GeoBundleBootstrap.Reset();
+}
+
+var config = Mod.RuntimeConfig;
+if (config != null)
+    config.ShowOverlayHud = false;
 
             // Never carry an opened gameplay HUD into the main menu or editor.
             if (ReferenceEquals(_instance, this) &&
