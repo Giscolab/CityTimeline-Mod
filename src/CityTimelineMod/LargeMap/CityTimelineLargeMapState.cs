@@ -1,3 +1,4 @@
+// CTM CONTRACT GUARD: Never disable the 57 km LargeMap + PlayableWorld contract unless explicitly requested.
 using System;
 using System.Threading;
 using Unity.Entities;

@@ -1,3 +1,4 @@
+// CTM CONTRACT GUARD: Never disable the 57 km LargeMap + PlayableWorld contract unless explicitly requested.
 using System;
 using System.IO;
 using System.Text;
@@ -256,7 +257,7 @@ namespace CityTimelineMod.Config
                 out ignored
             ))
             {
-                root["playableWorldEnabled"] = false;
+                root["playableWorldEnabled"] = true;
             }
         }
     }

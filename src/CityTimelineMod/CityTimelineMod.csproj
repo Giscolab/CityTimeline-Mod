@@ -32,6 +32,7 @@
     <Reference Include="UnityEngine.IMGUIModule"><HintPath>$(GameManagedRoot)\UnityEngine.IMGUIModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.TextRenderingModule"><HintPath>$(GameManagedRoot)\UnityEngine.TextRenderingModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(GameManagedRoot)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(GameManagedRoot)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.Burst"><Private>false</Private></Reference>
     <Reference Include="Unity.Collections"><Private>false</Private></Reference>
     <Reference Include="Unity.Entities"><Private>false</Private></Reference>
@@ -74,6 +75,10 @@
     <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\roads_major_clipped.geojson" Link="Resources\legacy-geojson\roads_major_clipped.geojson" />
     <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\zoning_polygons.geojson" Link="Resources\legacy-geojson\zoning_polygons.geojson" />
     <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\bbox_manifest.json" Link="Resources\legacy-geojson\bbox_manifest.json" />
+    <EmbeddedResource Include="$(ResourcesRoot)\textures\roads\tertiary\MikeAsphaltCoverOver\_BaseColorMap.png" Link="Resources\textures\roads\tertiary\MikeAsphaltCoverOver\_BaseColorMap.png" />
+	<EmbeddedResource Include="$(ResourcesRoot)\textures\roads\tertiary\MikeAsphaltCoverOver\_NormalMap.png" Link="Resources\textures\roads\tertiary\MikeAsphaltCoverOver\_NormalMap.png" />
+	
+	
   </ItemGroup>
 
   <!--

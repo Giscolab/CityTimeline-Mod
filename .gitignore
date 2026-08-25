@@ -42,3 +42,5 @@ pnpm-debug.log*
 __pycache__/
 *.py[cod]
 .venv/
+
+resources/bibliotheque-textures/

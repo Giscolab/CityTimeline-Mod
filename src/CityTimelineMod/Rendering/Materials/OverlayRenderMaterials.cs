@@ -12,6 +12,7 @@ namespace CityTimelineMod.Rendering.Materials
         internal Material RoadPrimary;
         internal Material RoadSecondary;
         internal Material RoadTertiary;
+        internal Material RoadTertiaryTextured;
         internal Material RoadLink;
         internal Material Path;
         internal Material RoadOneWay;

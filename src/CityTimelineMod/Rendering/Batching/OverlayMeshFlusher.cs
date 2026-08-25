@@ -147,8 +147,30 @@ namespace CityTimelineMod.Rendering.Batching
             var mesh = CreateOwnedMesh(obj, name + "_mesh");
             mesh.vertices = batch.Vertices.ToArray();
             mesh.triangles = batch.Triangles.ToArray();
+
+            // Only textured road batches populate UV0. Legacy solid-color
+            // ribbons leave it empty and keep the previous mesh layout.
+            if (batch.UV0.Count == batch.Vertices.Count)
+            {
+                mesh.uv = batch.UV0.ToArray();
+            }
+            else if (batch.UV0.Count != 0 && logVerbose != null)
+            {
+                logVerbose(
+                    "GroundOverlay: road UV0 mismatch ignored. batch=" + batchKey +
+                    ", vertices=" + batch.Vertices.Count +
+                    ", uv0=" + batch.UV0.Count
+                );
+            }
+
             mesh.RecalculateBounds();
             mesh.RecalculateNormals();
+
+            // Recalculate tangents if UVs are present (needed for normal maps on textured tertiary roads).
+            if (batch.UV0.Count == batch.Vertices.Count)
+            {
+                mesh.RecalculateTangents();
+            }
 
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
@@ -157,13 +179,15 @@ namespace CityTimelineMod.Rendering.Batching
                 "GroundOverlay: road batch created: " + name +
                 ", segments=" + batch.SegmentCount +
                 ", vertices=" + batch.Vertices.Count +
-                ", triangles=" + (batch.Triangles.Count / 3)
+                ", triangles=" + (batch.Triangles.Count / 3) +
+                ", uv0=" + batch.UV0.Count
             );
 
             batch.ChunkIndex++;
             batch.SegmentCount = 0;
             batch.Vertices.Clear();
             batch.Triangles.Clear();
+            batch.UV0.Clear();
 
             return 1;
         }

@@ -1201,6 +1201,7 @@ namespace CityTimelineMod.Rendering
             var roadPrimaryMaterial = materials.RoadPrimary;
             var roadSecondaryMaterial = materials.RoadSecondary;
             var roadTertiaryMaterial = materials.RoadTertiary;
+            var roadTertiaryTexturedMaterial = materials.RoadTertiaryTextured;
             var roadLinkMaterial = materials.RoadLink;
             var pathMaterial = materials.Path;
             var roadOneWayMaterial = materials.RoadOneWay;
@@ -1299,6 +1300,7 @@ namespace CityTimelineMod.Rendering
                 roadPrimaryMaterial,
                 roadSecondaryMaterial,
                 roadTertiaryMaterial,
+                roadTertiaryTexturedMaterial,
                 roadLinkMaterial,
                 pathMaterial,
                 orange,

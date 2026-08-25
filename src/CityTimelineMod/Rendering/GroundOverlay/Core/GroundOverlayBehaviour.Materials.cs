@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using System.Collections.Generic;
 using CityTimelineMod.Rendering.Materials;
 using CityTimelineMod.Util;
@@ -13,13 +15,16 @@ namespace CityTimelineMod.Rendering
         private readonly List<Material> _zoningOfficeFamilyMaterials = new List<Material>();
         private readonly List<Material> _zoningParkingFamilyMaterials = new List<Material>();
         private readonly List<Material> _zoningFallbackFamilyMaterials = new List<Material>();
-        private readonly Dictionary<string, List<Material>> _railwayMaterialGroups =
-            new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, List<Material>> _serviceMaterialGroups =
-            new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, List<Material>> _overlaySublayerMaterialGroups =
-            new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<Material>> _railwayMaterialGroups = new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<Material>> _serviceMaterialGroups = new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<Material>> _overlaySublayerMaterialGroups = new Dictionary<string, List<Material>>(System.StringComparer.OrdinalIgnoreCase);
         private readonly List<Material> _ownedOverlayMaterials = new List<Material>();
+
+        // Textures decoded from embedded resources are owned by this behaviour
+        // exactly like the materials that reference them. Keyed by material
+        // instance id so a rebuild destroys both together.
+        // Now each material can have multiple textures (base color, normal map etc.)
+        private readonly Dictionary<int, List<Texture2D>> _ownedOverlayTexturesByMaterialId = new Dictionary<int, List<Texture2D>>();
         private bool _overlayTeardownRequested;
         private bool _overlayTeardownInProgress;
         private bool _overlayTeardownComplete;
@@ -133,6 +138,322 @@ namespace CityTimelineMod.Rendering
             );
         }
 
+        // Texture property names, ordered from the most likely shader to the
+        // least: built-in Unlit, URP Lit, HDRP Unlit, HDRP Lit. The overlay
+        // shader is resolved at runtime by OverlayMaterialFactory, so the
+        // actual property name is only known once the material exists.
+        private static readonly string[] OverlayTexturePropertyNames =
+        {
+            "_MainTex",
+            "_BaseMap",
+            "_UnlitColorMap",
+            "_BaseColorMap"
+        };
+
+        private Material CreateOwnedTexturedOverlayMaterial(Color color, string embeddedResourceSuffix)
+        {
+            var material = CreateOwnedOverlayMaterial(color);
+
+            if (material == null)
+                return null;
+
+            var shaderName = material.shader != null ? material.shader.name : "(null)";
+            var texture = LoadEmbeddedOverlayTexture(embeddedResourceSuffix, "CityTimelineMod_OwnedTexture_TertiaryAsphalt", false);
+
+            if (texture == null)
+                return material;
+
+            var assignedProperties = string.Empty;
+
+            for (var i = 0; i < OverlayTexturePropertyNames.Length; i++)
+            {
+                var property = OverlayTexturePropertyNames[i];
+
+                if (!material.HasProperty(property))
+                    continue;
+
+                material.SetTexture(property, texture);
+                material.SetTextureScale(property, Vector2.one);
+                material.SetTextureOffset(property, Vector2.zero);
+
+                assignedProperties = assignedProperties.Length == 0
+                    ? property
+                    : assignedProperties + "+" + property;
+            }
+
+            if (assignedProperties.Length == 0)
+            {
+                UnityEngine.Object.Destroy(texture);
+
+                Log.Error(
+                    "GroundOverlay: textured tertiary material shader exposes no supported texture property. shader=" +
+                    shaderName +
+                    ", tried=" + string.Join("/", OverlayTexturePropertyNames)
+                );
+
+                return material;
+            }
+
+            RegisterOwnedOverlayTexture(material, texture);
+
+            Log.Info(
+                "GroundOverlay: tertiary asphalt texture bound. shader=" + shaderName +
+                ", properties=" + assignedProperties
+            );
+
+            return material;
+        }
+
+        /// <summary>
+        /// Finds the native NetCompositionMeshLit material template used by the game's road rendering.
+        /// </summary>
+        private static Material FindNativeNetCompositionMaterialTemplate()
+        {
+            var materials = Resources.FindObjectsOfTypeAll<Material>();
+
+            for (var i = 0; i < materials.Length; i++)
+            {
+                var material = materials[i];
+
+                if (material == null || material.shader == null)
+                    continue;
+
+                if (string.Equals(material.name, "NetCompositionMeshLit", StringComparison.Ordinal) &&
+                    string.Equals(material.shader.name, "BH/NetCompositionMeshLitShader", StringComparison.Ordinal))
+                {
+                    return material;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Creates a dedicated textured material for tertiary roads using the native shader.
+        /// </summary>
+        private Material CreateOwnedTertiaryRoadMaterial()
+        {
+            var template = FindNativeNetCompositionMaterialTemplate();
+
+            if (template == null)
+            {
+                Log.Error(
+                    "GroundOverlay: native NetCompositionMeshLit template not found; " +
+                    "tertiary textured ribbon remains on fallback material."
+                );
+
+                // Fallback to the old sprite-based method if the native template is missing.
+                return CreateOwnedTexturedOverlayMaterial(
+                    new Color(1f, 1f, 1f, _config.RoadAlpha),
+                    "MikeAsphaltCoverOver._BaseColorMap.png"
+                );
+            }
+
+            var material = new Material(template)
+            {
+                name = "CityTimelineMod_OwnedMaterial_TertiaryAsphalt"
+            };
+
+            // Our mesh uses classic tangent space.
+            material.DisableKeyword("_TANGENTSPACE_OCTO");
+
+            // We are not using CS2's virtual texturing.
+            material.DisableKeyword("ENABLE_VT");
+
+            material.SetColor("_BaseColor", Color.white);
+
+            if (material.HasProperty("_Metallic"))
+                material.SetFloat("_Metallic", 0f);
+
+            if (material.HasProperty("_Smoothness"))
+                material.SetFloat("_Smoothness", 0f);
+
+            if (material.HasProperty("_NormalOpacity"))
+                material.SetFloat("_NormalOpacity", 1f);
+
+            if (material.HasProperty("_MetallicOpacity"))
+                material.SetFloat("_MetallicOpacity", 0f);
+
+            // Load both base color (sRGB) and normal map (linear).
+            var baseColor = LoadEmbeddedOverlayTexture(
+                "MikeAsphaltCoverOver._BaseColorMap.png",
+                "CityTimelineMod_Tertiary_BaseColor",
+                false
+            );
+
+            var normal = LoadEmbeddedOverlayTexture(
+                "MikeAsphaltCoverOver._NormalMap.png",
+                "CityTimelineMod_Tertiary_Normal",
+                true
+            );
+
+            if (baseColor == null || normal == null)
+            {
+                if (baseColor != null)
+                    UnityEngine.Object.Destroy(baseColor);
+                if (normal != null)
+                    UnityEngine.Object.Destroy(normal);
+
+                UnityEngine.Object.Destroy(material);
+
+                Log.Error(
+                    "GroundOverlay: tertiary lit material creation failed because a texture could not be loaded."
+                );
+
+                return null;
+            }
+
+            material.SetTexture("_BaseColorMap", baseColor);
+            material.SetTexture("_NormalMap", normal);
+
+            // Register both textures for cleanup.
+            RegisterOwnedOverlayTexture(material, baseColor);
+            RegisterOwnedOverlayTexture(material, normal);
+
+            Log.Info(
+                "GroundOverlay: tertiary lit asphalt material created successfully. " +
+                "BaseColor=" + baseColor.width + "x" + baseColor.height +
+                ", Normal=" + normal.width + "x" + normal.height
+            );
+
+            return material;
+        }
+
+        private static Texture2D LoadEmbeddedOverlayTexture(string resourceSuffix, string textureName, bool linear)
+        {
+            try
+            {
+                var assembly = typeof(GroundOverlayBehaviour).Assembly;
+
+                string resourceName = null;
+                var names = assembly.GetManifestResourceNames();
+
+                for (var i = 0; i < names.Length; i++)
+                {
+                    if (names[i].EndsWith(resourceSuffix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resourceName = names[i];
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(resourceName))
+                {
+                    Log.Error("GroundOverlay: embedded road texture not found. suffix=" + resourceSuffix);
+                    return null;
+                }
+
+                byte[] bytes;
+
+                using (var stream = assembly.GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null)
+                    {
+                        Log.Error("GroundOverlay: embedded road texture stream is unavailable. resource=" + resourceName);
+                        return null;
+                    }
+
+                    using (var memory = new MemoryStream())
+                    {
+                        stream.CopyTo(memory);
+                        bytes = memory.ToArray();
+                    }
+                }
+
+                // mipChain: true keeps distant ribbons from aliasing.
+                // linear: controls whether the texture is treated as sRGB (false) or linear (true).
+                var texture = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear);
+                texture.name = textureName;
+
+                if (!ImageConversion.LoadImage(texture, bytes, false))
+                {
+                    UnityEngine.Object.Destroy(texture);
+                    Log.Error("GroundOverlay: failed to decode embedded road texture. resource=" + resourceName);
+                    return null;
+                }
+
+                texture.wrapMode = TextureWrapMode.Repeat;
+                texture.filterMode = FilterMode.Trilinear;
+                texture.anisoLevel = 8;
+                texture.Apply(true, false);
+
+                Log.Info(
+                    "GroundOverlay: road texture loaded. resource=" + resourceName +
+                    ", size=" + texture.width + "x" + texture.height +
+                    ", bytes=" + bytes.Length +
+                    ", linear=" + linear +
+                    ", wrap=Repeat"
+                );
+
+                return texture;
+            }
+            catch (Exception ex)
+            {
+                Log.Error("GroundOverlay: road texture loading failed. " + ex);
+                return null;
+            }
+        }
+
+        private void RegisterOwnedOverlayTexture(Material material, Texture2D texture)
+        {
+            if (material == null || texture == null)
+                return;
+
+            var id = material.GetInstanceID();
+
+            if (!_ownedOverlayTexturesByMaterialId.TryGetValue(id, out var textures))
+            {
+                textures = new List<Texture2D>();
+                _ownedOverlayTexturesByMaterialId[id] = textures;
+            }
+
+            textures.Add(texture);
+        }
+
+        private void ReleaseOwnedOverlayTexture(Material material)
+        {
+            if (material == null || _ownedOverlayTexturesByMaterialId.Count == 0)
+                return;
+
+            var id = material.GetInstanceID();
+
+            if (!_ownedOverlayTexturesByMaterialId.TryGetValue(id, out var textures))
+                return;
+
+            _ownedOverlayTexturesByMaterialId.Remove(id);
+
+            if (textures == null)
+                return;
+
+            foreach (var tex in textures)
+            {
+                if (tex != null)
+                    UnityEngine.Object.Destroy(tex);
+            }
+
+            textures.Clear();
+        }
+
+        private void ReleaseOrphanedOverlayTextures()
+        {
+            if (_ownedOverlayTexturesByMaterialId.Count == 0)
+                return;
+
+            foreach (var pair in _ownedOverlayTexturesByMaterialId)
+            {
+                if (pair.Value == null)
+                    continue;
+
+                foreach (var tex in pair.Value)
+                {
+                    if (tex != null)
+                        UnityEngine.Object.Destroy(tex);
+                }
+            }
+
+            _ownedOverlayTexturesByMaterialId.Clear();
+        }
+
         private OverlayRenderMaterials CreateOverlayRenderMaterials()
         {
             var materials = new OverlayRenderMaterials();
@@ -145,6 +466,18 @@ namespace CityTimelineMod.Rendering
             materials.RoadPrimary = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorPrimary, _config.RoadAlpha));
             materials.RoadSecondary = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorSecondary, _config.RoadAlpha));
             materials.RoadTertiary = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorTertiary, _config.RoadAlpha));
+
+            // Only real OSM highway=tertiary uses this one. The tint stays
+            // white so the sampled asphalt is not multiplied by a road color.
+            // Use the new native material method instead of the sprite-based fallback.
+            materials.RoadTertiaryTextured = CreateOwnedTexturedOverlayMaterial(
+    new Color(1f, 1f, 1f, _config.RoadAlpha),
+    "MikeAsphaltCoverOver._BaseColorMap.png"
+);
+ProbeRoadSurfaceShadersOnce();
+ProbeNativeNetCompositionMaterials();
+
+
             materials.RoadLink = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorLink, _config.RoadAlpha));
             materials.Path = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.PathColor, _config.PathAlpha));
             materials.RoadOneWay = CreateOwnedOverlayMaterial(new Color(0.25f, 0.9f, 1f, _config.RoadAlpha));
@@ -211,6 +544,7 @@ namespace CityTimelineMod.Rendering
             _roadMaterials.Add(materials.RoadPrimary);
             _roadMaterials.Add(materials.RoadSecondary);
             _roadMaterials.Add(materials.RoadTertiary);
+            _roadMaterials.Add(materials.RoadTertiaryTextured);
             _roadMaterials.Add(materials.RoadLink);
             _roadMaterials.Add(materials.RoadOneWay);
             _roadMaterials.Add(materials.RoadBridge);
@@ -225,6 +559,7 @@ namespace CityTimelineMod.Rendering
             RegisterOverlaySublayerMaterial("roads.large_road", materials.RoadPrimary);
             RegisterOverlaySublayerMaterial("roads.medium_road", materials.RoadSecondary);
             RegisterOverlaySublayerMaterial("roads.small_road", materials.RoadTertiary);
+            RegisterOverlaySublayerMaterial("roads.small_road", materials.RoadTertiaryTextured);
             RegisterOverlaySublayerMaterial("roads.ramp", materials.RoadLink);
             RegisterOverlaySublayerMaterial("roads.gravel_road", materials.FallbackRoad);
             RegisterOverlaySublayerMaterial("roads.pathway", materials.Path);
@@ -299,7 +634,6 @@ namespace CityTimelineMod.Rendering
             return materials;
         }
 
-
         private void ClearOverlayMaterialRegistries()
         {
             var failed = false;
@@ -311,7 +645,10 @@ namespace CityTimelineMod.Rendering
                 try
                 {
                     if (material != null)
+                    {
+                        ReleaseOwnedOverlayTexture(material);
                         UnityEngine.Object.Destroy(material);
+                    }
 
                     _ownedOverlayMaterials.RemoveAt(i);
                 }
@@ -321,6 +658,10 @@ namespace CityTimelineMod.Rendering
                     Log.Error("GroundOverlay: failed to destroy owned material. " + ex);
                 }
             }
+
+            // Any texture still mapped here has lost its owning material through
+            // another path. Destroying it now keeps rebuilds from leaking VRAM.
+            ReleaseOrphanedOverlayTextures();
 
             if (failed)
                 throw new System.InvalidOperationException("One or more owned overlay materials could not be destroyed.");
@@ -343,7 +684,6 @@ namespace CityTimelineMod.Rendering
             _zoningOfficeFamilyMaterials.Clear();
             _zoningParkingFamilyMaterials.Clear();
             _zoningFallbackFamilyMaterials.Clear();
-
         }
 
         private void ReleaseOverlayMaterials(IList<Material> materials)
@@ -362,6 +702,7 @@ namespace CityTimelineMod.Rendering
                 try
                 {
                     var materialId = material.GetInstanceID();
+                    ReleaseOwnedOverlayTexture(material);
                     UnityEngine.Object.Destroy(material);
                     releasedMaterialIds.Add(materialId);
                 }
@@ -425,7 +766,6 @@ namespace CityTimelineMod.Rendering
             foreach (var materials in groups.Values)
                 RemoveMaterialReferences(materials, materialIds);
         }
-
 
         private void ApplyCurrentOverlayVisibilityToMaterials()
         {
@@ -700,7 +1040,6 @@ namespace CityTimelineMod.Rendering
             );
         }
 
-
         private bool ResolveModernLayerVisibleForMaterials(string layerId, bool fallback)
         {
             bool value;
@@ -744,6 +1083,5 @@ namespace CityTimelineMod.Rendering
                 material.color = color;
             }
         }
-
     }
 }

@@ -1,3 +1,4 @@
+// CTM CONTRACT GUARD: Never disable the 57 km LargeMap + PlayableWorld contract unless explicitly requested.
 using System;
 using System.Globalization;
 using System.IO;
@@ -13,7 +14,7 @@ namespace CityTimelineMod.Config
         internal bool UseGeoJsonCenter = true;
         internal bool ModEnabled = true;
         internal bool LargeMapEnabled = true;
-        internal bool PlayableWorldEnabled = false;
+        internal bool PlayableWorldEnabled = true;
         internal bool IsReliable = true;
         internal string ReliabilityError = null;
         internal double OriginLon = -117.795;

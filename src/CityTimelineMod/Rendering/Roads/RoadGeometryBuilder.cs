@@ -49,6 +49,7 @@ namespace CityTimelineMod.Rendering.Roads
             batch.Triangles.Add(baseIndex + 0);
             batch.Triangles.Add(baseIndex + 2);
             batch.Triangles.Add(baseIndex + 3);
+
             batch.Triangles.Add(baseIndex + 0);
             batch.Triangles.Add(baseIndex + 3);
             batch.Triangles.Add(baseIndex + 1);
@@ -64,8 +65,76 @@ namespace CityTimelineMod.Rendering.Roads
             float ribbonYOffset
         )
         {
+            float ignoredDistance;
+
+            return AppendRoadPolylineRibbonInternal(
+                batch,
+                points,
+                roadWidth,
+                ribbonYOffset,
+                false,
+                1f,
+                0f,
+                0f,
+                1f,
+                out ignoredDistance
+            );
+        }
+
+        internal static int AppendTexturedRoadPolylineRibbon(
+            RoadMeshBatch batch,
+            IList<Vector3> points,
+            float roadWidth,
+            float ribbonYOffset,
+            float longitudinalRepeatMeters,
+            float distanceOffsetMeters,
+            float uMin,
+            float uMax,
+            out float appendedDistanceMeters
+        )
+        {
+            return AppendRoadPolylineRibbonInternal(
+                batch,
+                points,
+                roadWidth,
+                ribbonYOffset,
+                true,
+                longitudinalRepeatMeters,
+                distanceOffsetMeters,
+                uMin,
+                uMax,
+                out appendedDistanceMeters
+            );
+        }
+
+        private static int AppendRoadPolylineRibbonInternal(
+            RoadMeshBatch batch,
+            IList<Vector3> points,
+            float roadWidth,
+            float ribbonYOffset,
+            bool generateUv,
+            float longitudinalRepeatMeters,
+            float distanceOffsetMeters,
+            float uMin,
+            float uMax,
+            out float appendedDistanceMeters
+        )
+        {
+            appendedDistanceMeters = 0f;
+
             if (batch == null || points == null || points.Count < 2)
                 return 0;
+
+            // A RoadMeshBatch must never mix textured and non-textured geometry.
+            if (generateUv)
+            {
+                if (batch.UV0.Count != batch.Vertices.Count)
+                    return 0;
+            }
+            else if (batch.UV0.Count != 0)
+            {
+                return 0;
+            }
 
             var cleaned = new List<Vector3>(points.Count);
 
@@ -74,19 +143,29 @@ namespace CityTimelineMod.Rendering.Roads
                 var p = points[i];
                 p.y += ribbonYOffset;
 
-                if (cleaned.Count == 0 || HasMeaningfulHorizontalDistance(cleaned[cleaned.Count - 1], p))
+                if (
+                    cleaned.Count == 0 ||
+                    HasMeaningfulHorizontalDistance(
+                        cleaned[cleaned.Count - 1],
+                        p
+                    )
+                )
+                {
                     cleaned.Add(p);
+                }
             }
 
             if (cleaned.Count < 2)
                 return 0;
 
             var segmentNormals = new List<Vector2>(cleaned.Count - 1);
+            var segmentLengths = new List<float>(cleaned.Count - 1);
 
             for (var i = 0; i < cleaned.Count - 1; i++)
             {
                 var a = cleaned[i];
                 var b = cleaned[i + 1];
+
                 var dx = b.x - a.x;
                 var dz = b.z - a.z;
                 var lengthSq = dx * dx + dz * dz;
@@ -94,6 +173,7 @@ namespace CityTimelineMod.Rendering.Roads
                 if (lengthSq < 0.01f)
                 {
                     segmentNormals.Add(Vector2.zero);
+                    segmentLengths.Add(0f);
                     continue;
                 }
 
@@ -102,19 +182,72 @@ namespace CityTimelineMod.Rendering.Roads
                 var uz = dz / length;
 
                 segmentNormals.Add(new Vector2(-uz, ux));
+                segmentLengths.Add(length);
             }
 
             var halfWidth = Mathf.Max(0.1f, roadWidth) * 0.5f;
             var baseIndex = batch.Vertices.Count;
 
+            var safeRepeatMeters = Mathf.Max(
+                0.01f,
+                longitudinalRepeatMeters
+            );
+
+            var safeUMin = Mathf.Clamp01(uMin);
+            var safeUMax = Mathf.Clamp01(uMax);
+
+            if (safeUMax <= safeUMin)
+            {
+                safeUMin = 0f;
+                safeUMax = 1f;
+            }
+
+            var cumulativeDistance = Mathf.Max(
+                0f,
+                distanceOffsetMeters
+            );
+
             for (var i = 0; i < cleaned.Count; i++)
             {
-                var offset = ResolvePolylineOffset(segmentNormals, i, halfWidth);
+                if (i > 0)
+                    cumulativeDistance += segmentLengths[i - 1];
+
+                var offset = ResolvePolylineOffset(
+                    segmentNormals,
+                    i,
+                    halfWidth
+                );
+
                 var p = cleaned[i];
 
-                batch.Vertices.Add(new Vector3(p.x + offset.x, p.y, p.z + offset.y));
-                batch.Vertices.Add(new Vector3(p.x - offset.x, p.y, p.z - offset.y));
+                batch.Vertices.Add(
+                    new Vector3(
+                        p.x + offset.x,
+                        p.y,
+                        p.z + offset.y
+                    )
+                );
+
+                batch.Vertices.Add(
+                    new Vector3(
+                        p.x - offset.x,
+                        p.y,
+                        p.z - offset.y
+                    )
+                );
+
+                if (generateUv)
+                {
+                    var v = cumulativeDistance / safeRepeatMeters;
+
+                    batch.UV0.Add(new Vector2(safeUMin, v));
+                    batch.UV0.Add(new Vector2(safeUMax, v));
+                }
             }
+
+            appendedDistanceMeters =
+                cumulativeDistance -
+                Mathf.Max(0f, distanceOffsetMeters);
 
             var appendedSegments = 0;
 
@@ -142,10 +275,15 @@ namespace CityTimelineMod.Rendering.Roads
             }
 
             batch.SegmentCount += appendedSegments;
+
             return appendedSegments;
         }
 
-        private static Vector2 ResolvePolylineOffset(IList<Vector2> segmentNormals, int pointIndex, float halfWidth)
+        private static Vector2 ResolvePolylineOffset(
+            IList<Vector2> segmentNormals,
+            int pointIndex,
+            float halfWidth
+        )
         {
             if (segmentNormals == null || segmentNormals.Count == 0)
                 return new Vector2(halfWidth, 0f);
@@ -154,7 +292,12 @@ namespace CityTimelineMod.Rendering.Roads
                 return SafeScaledNormal(segmentNormals[0], halfWidth);
 
             if (pointIndex >= segmentNormals.Count)
-                return SafeScaledNormal(segmentNormals[segmentNormals.Count - 1], halfWidth);
+            {
+                return SafeScaledNormal(
+                    segmentNormals[segmentNormals.Count - 1],
+                    halfWidth
+                );
+            }
 
             var previous = segmentNormals[pointIndex - 1];
             var next = segmentNormals[pointIndex];
@@ -172,7 +315,9 @@ namespace CityTimelineMod.Rendering.Roads
 
             miter.Normalize();
 
-            var denominator = Mathf.Abs(Vector2.Dot(miter, next));
+            var denominator = Mathf.Abs(
+                Vector2.Dot(miter, next)
+            );
 
             if (denominator < 0.2f)
                 return SafeScaledNormal(next, halfWidth);
@@ -186,7 +331,10 @@ namespace CityTimelineMod.Rendering.Roads
             return miter * miterLength;
         }
 
-        private static Vector2 SafeScaledNormal(Vector2 normal, float halfWidth)
+        private static Vector2 SafeScaledNormal(
+            Vector2 normal,
+            float halfWidth
+        )
         {
             if (normal.sqrMagnitude < 0.0001f)
                 return new Vector2(halfWidth, 0f);
@@ -195,14 +343,24 @@ namespace CityTimelineMod.Rendering.Roads
             return normal * halfWidth;
         }
 
-        private static bool HasMeaningfulHorizontalDistance(Vector3 a, Vector3 b)
+        private static bool HasMeaningfulHorizontalDistance(
+            Vector3 a,
+            Vector3 b
+        )
         {
             var dx = b.x - a.x;
             var dz = b.z - a.z;
+
             return dx * dx + dz * dz >= 0.01f;
         }
 
-        internal static bool AppendRoadArrow(RoadArrowBatch batch, Vector3 center, Vector3 a, Vector3 b, float size)
+        internal static bool AppendRoadArrow(
+            RoadArrowBatch batch,
+            Vector3 center,
+            Vector3 a,
+            Vector3 b,
+            float size
+        )
         {
             if (batch == null)
                 return false;
@@ -220,25 +378,50 @@ namespace CityTimelineMod.Rendering.Roads
             var safeSize = Mathf.Max(0.1f, size);
             var halfWidth = safeSize * 0.35f;
             var halfLength = safeSize * 0.5f;
+
             var px = -uz * halfWidth;
             var pz = ux * halfWidth;
 
-            var tip = new Vector3(center.x + ux * halfLength, center.y, center.z + uz * halfLength);
-            var tailCenter = new Vector3(center.x - ux * halfLength, center.y, center.z - uz * halfLength);
-            var left = new Vector3(tailCenter.x + px, center.y, tailCenter.z + pz);
-            var right = new Vector3(tailCenter.x - px, center.y, tailCenter.z - pz);
+            var tip = new Vector3(
+                center.x + ux * halfLength,
+                center.y,
+                center.z + uz * halfLength
+            );
+
+            var tailCenter = new Vector3(
+                center.x - ux * halfLength,
+                center.y,
+                center.z - uz * halfLength
+            );
+
+            var left = new Vector3(
+                tailCenter.x + px,
+                center.y,
+                tailCenter.z + pz
+            );
+
+            var right = new Vector3(
+                tailCenter.x - px,
+                center.y,
+                tailCenter.z - pz
+            );
 
             var baseIndex = batch.Vertices.Count;
+
             batch.Vertices.Add(tip);
             batch.Vertices.Add(left);
             batch.Vertices.Add(right);
+
             batch.Triangles.Add(baseIndex);
             batch.Triangles.Add(baseIndex + 1);
             batch.Triangles.Add(baseIndex + 2);
+
             batch.Triangles.Add(baseIndex);
             batch.Triangles.Add(baseIndex + 2);
             batch.Triangles.Add(baseIndex + 1);
+
             batch.ArrowCount++;
+
             return true;
         }
     }

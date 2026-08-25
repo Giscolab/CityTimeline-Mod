@@ -1,3 +1,4 @@
+// CTM CONTRACT GUARD: Never disable the 57 km LargeMap + PlayableWorld contract unless explicitly requested.
 using Colossal.Mathematics;
 using CityTimelineMod.LargeMap;
 using Unity.Mathematics;

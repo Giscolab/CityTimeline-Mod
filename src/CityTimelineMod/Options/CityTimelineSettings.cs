@@ -1,3 +1,4 @@
+// CTM CONTRACT GUARD: Never disable the 57 km LargeMap + PlayableWorld contract unless explicitly requested.
 using System;
 using CityTimelineMod.Rendering;
 using CityTimelineMod.Config;
@@ -42,7 +43,7 @@ private const string ModFolderName = "CityTimelineMod";
 
         private bool _modEnabled = true;
         private bool _largeMapEnabled = true;
-        private bool _playableWorldEnabled = false;
+        private bool _playableWorldEnabled = true;
         private bool _showOverlayHud = false;
 
         private bool _renderRoads = true;
@@ -652,7 +653,7 @@ public ProxyBinding KeyBindingToggleOverlayHud { get; set; }
 
             _modEnabled = true;
             _largeMapEnabled = true;
-            _playableWorldEnabled = false;
+            _playableWorldEnabled = true;
             _showOverlayHud = false;
 
             _renderRoads = true;
@@ -741,7 +742,7 @@ public ProxyBinding KeyBindingToggleOverlayHud { get; set; }
                 if (snapshot == null)
                 {
                     _modEnabled = false;
-                    _largeMapEnabled = true;
+                    _largeMapEnabled = false;
                     _playableWorldEnabled = false;
                     return;
                 }

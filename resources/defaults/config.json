@@ -183,7 +183,7 @@
   "heightMapSizeKm": 14.336,
   "modEnabled": true,
   "largeMapEnabled": true,
-  "playableWorldEnabled": false,
+  "playableWorldEnabled": true,
   "showOverlayHud": false,
   "verboseOverlayLogs": false,
   "waterLineColor": "bleuClair",

@@ -363,6 +363,7 @@ namespace CityTimelineMod.Rendering
             List<Vector3> points,
             float segmentWidth,
             int maxVerticesPerMesh,
+            bool texturedTertiary,
             out int flushedObjects
         )
         {
@@ -374,6 +375,12 @@ namespace CityTimelineMod.Rendering
             var appendedSegments = 0;
             var startIndex = 0;
             var safeMaxVertices = Math.Max(16, maxVerticesPerMesh);
+            var ribbonYOffset = _config != null ? Mathf.Max(0f, _config.RibbonYOffset) : 0.05f;
+
+            // Carried across slices so a polyline split over several meshes
+            // keeps a continuous V and does not restart the asphalt pattern
+            // at every batch boundary.
+            var textureDistanceOffsetMeters = 0f;
 
             while (startIndex < points.Count - 1)
             {
@@ -394,12 +401,33 @@ namespace CityTimelineMod.Rendering
                     ? points
                     : points.GetRange(startIndex, endExclusive - startIndex);
 
-                appendedSegments += RoadGeometryBuilder.AppendRoadPolylineRibbon(
-                    batch,
-                    slice,
-                    segmentWidth,
-                    _config != null ? Mathf.Max(0f, _config.RibbonYOffset) : 0.05f
-                );
+                if (texturedTertiary)
+                {
+                    float appendedDistanceMeters;
+
+                    appendedSegments += RoadGeometryBuilder.AppendTexturedRoadPolylineRibbon(
+                        batch,
+                        slice,
+                        segmentWidth,
+                        ribbonYOffset,
+                        RoadRenderStyleResolver.TertiaryTextureRepeatMeters,
+                        textureDistanceOffsetMeters,
+                        RoadRenderStyleResolver.TertiaryTextureUMin,
+                        RoadRenderStyleResolver.TertiaryTextureUMax,
+                        out appendedDistanceMeters
+                    );
+
+                    textureDistanceOffsetMeters += appendedDistanceMeters;
+                }
+                else
+                {
+                    appendedSegments += RoadGeometryBuilder.AppendRoadPolylineRibbon(
+                        batch,
+                        slice,
+                        segmentWidth,
+                        ribbonYOffset
+                    );
+                }
 
                 startIndex = endExclusive - 1;
             }
@@ -509,7 +537,15 @@ namespace CityTimelineMod.Rendering
 
                 if (ribbonPoints.Count >= 2)
                 {
-                    var batchKey = RoadRenderStyleResolver.ResolveRoadRenderBatchKey(roadLine, _config) +
+                    var baseBatchKey = RoadRenderStyleResolver.ResolveRoadRenderBatchKey(roadLine, _config);
+
+                    var texturedTertiary = !isPath && string.Equals(
+                        baseBatchKey,
+                        RoadRenderStyleResolver.TertiaryTexturedBatchKey,
+                        StringComparison.Ordinal
+                    );
+
+                    var batchKey = baseBatchKey +
                         "_cx" + chunk.ChunkX +
                         "_cz" + chunk.ChunkZ;
 
@@ -527,6 +563,7 @@ namespace CityTimelineMod.Rendering
                                 materials.RoadPrimary,
                                 materials.RoadSecondary,
                                 materials.RoadTertiary,
+                                materials.RoadTertiaryTextured,
                                 materials.RoadLink,
                                 materials.FallbackRoad,
                                 materials.RoadOneWay,
@@ -546,6 +583,7 @@ namespace CityTimelineMod.Rendering
                         ribbonPoints,
                         segmentWidth,
                         maxVerticesPerMesh,
+                        texturedTertiary,
                         out flushedObjects
                     );
 
@@ -600,6 +638,7 @@ namespace CityTimelineMod.Rendering
             Material roadPrimaryMaterial,
             Material roadSecondaryMaterial,
             Material roadTertiaryMaterial,
+            Material roadTertiaryTexturedMaterial,
             Material roadLinkMaterial,
             Material pathMaterial,
             Material fallbackRoadMaterial,
@@ -726,7 +765,15 @@ namespace CityTimelineMod.Rendering
 
                 if (ribbonPoints.Count >= 2)
                 {
-                    var batchKey = RoadRenderStyleResolver.ResolveRoadRenderBatchKey(roadLine, _config);
+                    var baseBatchKey = RoadRenderStyleResolver.ResolveRoadRenderBatchKey(roadLine, _config);
+
+                    var texturedTertiary = !isPath && string.Equals(
+                        baseBatchKey,
+                        RoadRenderStyleResolver.TertiaryTexturedBatchKey,
+                        StringComparison.Ordinal
+                    );
+
+                    var batchKey = baseBatchKey;
 
                     RoadMeshBatch batch;
 
@@ -742,6 +789,7 @@ namespace CityTimelineMod.Rendering
                                 roadPrimaryMaterial,
                                 roadSecondaryMaterial,
                                 roadTertiaryMaterial,
+                                roadTertiaryTexturedMaterial,
                                 roadLinkMaterial,
                                 fallbackRoadMaterial,
                                 roadOneWayMaterial,
@@ -761,6 +809,7 @@ namespace CityTimelineMod.Rendering
                         ribbonPoints,
                         segmentWidth,
                         maxVerticesPerMesh,
+                        texturedTertiary,
                         out flushedObjects
                     );
 
