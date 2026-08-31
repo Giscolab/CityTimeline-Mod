@@ -488,20 +488,6 @@ else {
 }
 
 # 5) Stage data safely.
-# Mirror repository GeoJSON resources to runtime data\legacy-geojson.
-$srcData = Join-Path $resourcesRoot "legacy-geojson"
-$dstData = Join-Path $dst "data\legacy-geojson"
-
-if (Test-Path $srcData) {
-    New-Item -ItemType Directory -Force -Path $dstData | Out-Null
-
-    robocopy $srcData $dstData /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
-    if ($LASTEXITCODE -ge 8) {
-        throw "robocopy data failed with exit code $LASTEXITCODE"
-    }
-    $global:LASTEXITCODE = 0
-}
-# else: no legacy-geojson to deploy (intentional no-op).
 
 # 6) Stage the single CS2 UI module in the code mod root.
 Copy-Item -Force (Join-Path $uiOut "CityTimelineMod.mjs") (Join-Path $dst "CityTimelineMod.mjs")
@@ -537,11 +523,6 @@ $requiredFiles = @(
     (Join-Path $dst "0Harmony.dll"),
     (Join-Path $dst "mod.json"),
     (Join-Path $dst "config.json"),
-    (Join-Path $dst "data\legacy-geojson\bbox_manifest.json"),
-    (Join-Path $dst "data\legacy-geojson\roads_major_clipped.geojson"),
-    (Join-Path $dst "data\legacy-geojson\water_areas_clipped.geojson"),
-    (Join-Path $dst "data\legacy-geojson\water_lines_clipped.geojson"),
-    (Join-Path $dst "data\legacy-geojson\zoning_polygons.geojson"),
     (Join-Path $dst "CityTimelineMod.mjs"),
     (Join-Path $dst "CityTimelineMod.css"),
     (Join-Path $dst "CityTimelineMod.mjs.LICENSE.txt"),
@@ -665,3 +646,4 @@ TryRemove-BuildPathIfExists `
     -Label "MSBuild temporary directory" | Out-Null
 
 [Console]::WriteLine("Deploy OK: $dst")
+

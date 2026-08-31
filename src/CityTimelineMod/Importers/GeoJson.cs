@@ -123,7 +123,7 @@ namespace CityTimelineMod.Importers
     internal static class GeoJson
     {
         private static readonly bool ValidateRoadParserParity = false;
-        private const bool ValidateZoningParserParity = false;
+        private static readonly bool ValidateZoningParserParity = false;
 
         internal static int CountFeatures(string path)
         {

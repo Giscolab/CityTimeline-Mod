@@ -42,7 +42,6 @@ namespace CityTimelineMod.Config
                 config.OriginLat = GetDouble(root, "originLat", config.OriginLat);
                 config.PackPath = GetString(root, "packPath", config.PackPath);
                 config.BundleManifestPath = GetString(root, "bundleManifestPath", config.BundleManifestPath);
-                config.UseBundleIndex = GetBool(root, "useBundleIndex", config.UseBundleIndex);
                 config.BundlesRoot = GetString(root, "bundlesRoot", config.BundlesRoot);
                 config.ActiveBundleId = GetString(root, "activeBundleId", config.ActiveBundleId);
 
@@ -614,16 +613,10 @@ Log.Info(
                     return applied;
                 }
 
-                if (UseBundleIndex)
-                {
-                    BundleManifestPath = null;
-                    PackPath = null;
-                    ActiveBundleRoot = null;
-                    return false;
-                }
-
-                // Legacy mode may intentionally rely on packPath alone.
-                return true;
+                BundleManifestPath = null;
+                PackPath = null;
+                ActiveBundleRoot = null;
+                return false;
             }
             catch (Exception ex)
             {
@@ -753,7 +746,6 @@ Log.Info(
             FlipZ = source.FlipZ;
 
             BundleManifestPath = source.BundleManifestPath;
-            UseBundleIndex = source.UseBundleIndex;
             ActiveBundleId = source.ActiveBundleId;
             ResolvedBundlesRoot = source.ResolvedBundlesRoot;
             ActiveBundleRoot = source.ActiveBundleRoot;
@@ -832,7 +824,6 @@ Log.Info(
                 nameof(ReliabilityError),
                 nameof(ConfigPath),
                 nameof(BundleManifestPath),
-                nameof(UseBundleIndex),
                 nameof(BundlesRoot),
                 nameof(ActiveBundleId),
                 nameof(ResolvedBundlesRoot),
@@ -1499,3 +1490,5 @@ Log.Info(
 
     }
 }
+
+

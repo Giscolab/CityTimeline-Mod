@@ -105,7 +105,7 @@ namespace CityTimelineMod.Rendering.Services
     internal static class ServiceGeoJsonLoader
     {
         // Enable/disable the exhaustive parity validation against legacy parser
-        private const bool ValidateServiceParserParity = false;
+        private static readonly bool ValidateServiceParserParity = false;
 
         // ----------------------------- ServiceFeatureData (new) -----------------------------
 

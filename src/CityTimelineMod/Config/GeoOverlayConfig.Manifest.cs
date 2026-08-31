@@ -8,7 +8,7 @@ namespace CityTimelineMod.Config
 {
     internal sealed partial class GeoOverlayConfig
     {
-        private static bool ApplyBundleManifest(GeoOverlayConfig config, string modDir)
+        internal static bool ApplyBundleManifest(GeoOverlayConfig config, string modDir)
         {
             try
             {
@@ -200,3 +200,4 @@ namespace CityTimelineMod.Config
         }
     }
 }
+

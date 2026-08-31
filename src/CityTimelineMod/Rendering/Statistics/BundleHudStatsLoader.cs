@@ -15,7 +15,7 @@ namespace CityTimelineMod.Rendering.Statistics
     /// </summary>
     internal static class BundleHudStatsLoader
     {
-        private const bool ValidatePreloadedZoningStatsParity = false;
+        private static readonly bool ValidatePreloadedZoningStatsParity = false;
 
         internal static BundleHudSnapshot Load(
             string bundleOrGeoJsonPackPath)
@@ -588,3 +588,4 @@ private static void LoadSource(
         }
     }
 }
+

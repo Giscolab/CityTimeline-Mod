@@ -173,7 +173,6 @@
   "zoningDebugFilterCs2Contains": "",
   "zoningDebugFilterMaterialKey": "",
   "overlayProfile": "custom",
-  "useBundleIndex": true,
   "bundlesRoot": "data/exports/bundles",
   "activeBundleId": "",
   "packPath": "",
@@ -236,3 +235,4 @@
   "runtimeRoadImportBatchSize": 256,
   "runtimeRoadImportPipelineMode": "fast-flush"
 }
+

@@ -374,6 +374,22 @@ namespace CityTimelineMod.LargeMap
                 }
             }
 
+            // Lors du chargement d'une sauvegarde vanilla/57 km, TerrainSystem
+            // fournit encore deux sources distinctes :
+            // - map      = heightmap détaillée centrale 14,336 km
+            // - worldMap = relief couvrant 57,344 km
+            //
+            // Ne jamais étirer ici la heightmap 14 km sur 57 km.
+            // InitializeTerrainData_Postfix promouvra ensuite worldMap en
+            // heightmap principale avant l'utilisation du terrain 57 km.
+            if (isVanillaPrimary && worldMap != null)
+            {
+                Util.Log.Info(
+                    "[LargeMap] vanilla terrain hierarchy retained pending loaded worldmap promotion."
+                );
+                return;
+            }
+
             float2 unifiedSize = new float2(
                 CityTimelineLargeMapState.MapSizeMetersFloat,
                 CityTimelineLargeMapState.MapSizeMetersFloat
@@ -398,7 +414,201 @@ namespace CityTimelineMod.LargeMap
             }
         }
 
-        [HarmonyPatch(nameof(TerrainSystem.GetTerrainBounds))]
+        /*
+         * Au chargement d'une sauvegarde, le jeu ne passe pas par
+         * ReplaceWorldHeightmap : InitializeTerrainData installe directement
+         * la heightmap 14,336 km et la worldMap 57,344 km.
+         *
+         * FinalizeTerrainData_Prefix conserve d'abord cette hierarchie afin
+         * de ne jamais etirer la heightmap 14 km sur 57 km.
+         *
+         * Une fois l'initialisation vanilla terminee, on repasse volontairement
+         * par ReplaceWorldHeightmap. UnifiedWorldmapImportPatch prend alors en
+         * charge la promotion transactionnelle de la worldMap en terrain
+         * principal 57 km, avec son propre snapshot et son rollback.
+         */
+        [HarmonyPatch("InitializeTerrainData")]
+        [HarmonyPostfix]
+        private static void InitializeTerrainData_Postfix(
+            TerrainSystem __instance,
+            Texture2D inMap,
+            Texture2D worldMap,
+            float2 inMapSize,
+            float2 inWorldSize)
+        {
+            if (!CityTimelineLargeMapState.Enabled)
+                return;
+
+            if (__instance == null || inMap == null || worldMap == null)
+                return;
+
+            bool vanillaHierarchy =
+                Approximately(
+                    inMapSize.x,
+                    CityTimelineLargeMapState.OriginalMapSizeMetersFloat
+                ) &&
+                Approximately(
+                    inMapSize.y,
+                    CityTimelineLargeMapState.OriginalMapSizeMetersFloat
+                ) &&
+                Approximately(
+                    inWorldSize.x,
+                    CityTimelineLargeMapState.MapSizeMetersFloat
+                ) &&
+                Approximately(
+                    inWorldSize.y,
+                    CityTimelineLargeMapState.MapSizeMetersFloat
+                );
+
+            if (!vanillaHierarchy)
+                return;
+
+            if (!Approximately(
+                    __instance.playableArea.x,
+                    CityTimelineLargeMapState.OriginalMapSizeMetersFloat) ||
+                !Approximately(
+                    __instance.playableArea.y,
+                    CityTimelineLargeMapState.OriginalMapSizeMetersFloat))
+            {
+                Util.Log.Error(
+                    "[LargeMap] loaded worldmap promotion refused: " +
+                    "vanilla 14 km playable area was not preserved before promotion."
+                );
+                return;
+            }
+
+            Texture2D readableLoadedWorldMap = null;
+
+            try
+            {
+                Util.Log.Info(
+                    "[LargeMap] loaded 57 km worldmap detected; " +
+                    "requesting transactional promotion to primary terrain."
+                );
+
+                Texture2D promotionMap = worldMap;
+
+                if (!worldMap.isReadable)
+                {
+                    readableLoadedWorldMap =
+                        CreateReadableLoadedWorldMapCopy(worldMap);
+
+                    promotionMap = readableLoadedWorldMap;
+
+                    Util.Log.Info(
+                        "[LargeMap] loaded worldmap copied to readable R16 texture before promotion."
+                    );
+                }
+
+                __instance.ReplaceWorldHeightmap(promotionMap);
+
+                if (!Approximately(
+                        __instance.playableArea.x,
+                        CityTimelineLargeMapState.MapSizeMetersFloat) ||
+                    !Approximately(
+                        __instance.playableArea.y,
+                        CityTimelineLargeMapState.MapSizeMetersFloat))
+                {
+                    CityTimelineLargeMapState.FailRuntime(
+                        "loaded worldmap promotion did not produce a 57 km playable area"
+                    );
+
+                    Util.Log.Error(
+                        "[LargeMap] loaded worldmap promotion failed: " +
+                        "playableArea=" + __instance.playableArea + "."
+                    );
+                    return;
+                }
+
+                Util.Log.Info(
+                    "[LargeMap] loaded worldmap promotion confirmed. " +
+                    "playableArea=" + __instance.playableArea + "."
+                );
+            }
+            catch (Exception ex)
+            {
+                CityTimelineLargeMapState.FailRuntime(
+                    "loaded worldmap promotion threw an exception"
+                );
+
+                Util.Log.Error(
+                    "[LargeMap] loaded worldmap promotion threw: " + ex
+                );
+            }
+            finally
+            {
+                if (readableLoadedWorldMap != null)
+                    UnityEngine.Object.Destroy(readableLoadedWorldMap);
+            }
+        }
+
+        private static Texture2D CreateReadableLoadedWorldMapCopy(
+            Texture2D source)
+        {
+            if (source == null || source.width <= 0 || source.height <= 0)
+                throw new InvalidOperationException(
+                    "Loaded worldmap is unavailable."
+                );
+
+            RenderTexture previousActive = RenderTexture.active;
+            RenderTexture temporary = null;
+            Texture2D copy = null;
+
+            try
+            {
+                temporary = RenderTexture.GetTemporary(
+                    source.width,
+                    source.height,
+                    0,
+                    RenderTextureFormat.R16,
+                    RenderTextureReadWrite.Linear
+                );
+
+                temporary.filterMode = FilterMode.Point;
+                temporary.wrapMode = TextureWrapMode.Clamp;
+
+                Graphics.Blit(source, temporary);
+                RenderTexture.active = temporary;
+
+                copy = new Texture2D(
+                    source.width,
+                    source.height,
+                    TextureFormat.R16,
+                    false,
+                    true
+                );
+
+                copy.name = "CityTimelineMod_LoadedWorldHeightMap_Readable";
+                copy.hideFlags = HideFlags.HideAndDontSave;
+                copy.filterMode = FilterMode.Bilinear;
+                copy.wrapMode = TextureWrapMode.Clamp;
+
+                copy.ReadPixels(
+                    new Rect(0f, 0f, source.width, source.height),
+                    0,
+                    0,
+                    false
+                );
+
+                copy.Apply(false, false);
+                return copy;
+            }
+            catch
+            {
+                if (copy != null)
+                    UnityEngine.Object.Destroy(copy);
+
+                throw;
+            }
+            finally
+            {
+                RenderTexture.active = previousActive;
+
+                if (temporary != null)
+                    RenderTexture.ReleaseTemporary(temporary);
+            }
+        }
+[HarmonyPatch(nameof(TerrainSystem.GetTerrainBounds))]
         [HarmonyTranspiler]
         private static IEnumerable<CodeInstruction> GetTerrainBounds_Transpiler(
             IEnumerable<CodeInstruction> instructions)
@@ -633,3 +843,7 @@ namespace CityTimelineMod.LargeMap
         }
     }
 }
+
+
+
+

@@ -37,7 +37,6 @@ namespace CityTimelineMod.Config
 
 		internal string ConfigPath = null;
 		internal string BundleManifestPath = null;
-         internal bool UseBundleIndex = true;
          internal string BundlesRoot = "data/exports/bundles";
          internal string ActiveBundleId = "";
          internal string ResolvedBundlesRoot = null;
@@ -305,3 +304,4 @@ internal bool RenderZoning = true;
 
     }
 }
+

@@ -25,12 +25,6 @@ namespace CityTimelineMod.Bundles
             config.BundleIndexResolutionSucceeded = false;
             config.BundleIndexResolutionError = null;
 
-            if (!config.UseBundleIndex)
-            {
-                Log.Info("BundleResolver: useBundleIndex=false. Using legacy bundleManifestPath.");
-                return ResolvePath(config.BundleManifestPath, modDir);
-            }
-
             string bundlesRoot;
             try
             {
@@ -429,7 +423,7 @@ namespace CityTimelineMod.Bundles
         {
             config.BundleIndexResolutionSucceeded = false;
             config.BundleIndexResolutionError = message;
-            Log.Error("BundleResolver: " + message + " No legacy fallback because useBundleIndex=true.");
+            Log.Error("BundleResolver: " + message);
             return null;
         }
 
@@ -484,3 +478,5 @@ namespace CityTimelineMod.Bundles
         }
     }
 }
+
+

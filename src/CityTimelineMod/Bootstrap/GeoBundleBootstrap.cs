@@ -295,52 +295,40 @@ namespace CityTimelineMod
                     );
                     return false;
                 }
-
                 string geojsonRoot;
 
-                if (config.UseBundleIndex)
+                if (!config.BundleIndexResolutionSucceeded)
                 {
-                    if (!config.BundleIndexResolutionSucceeded)
-                    {
-                        Log.Error(
-                            "GeoBundleBootstrap: active indexed bundle was not installed: " +
-                            (string.IsNullOrWhiteSpace(config.BundleIndexResolutionError)
-                                ? "unknown bundle resolution error."
-                                : config.BundleIndexResolutionError)
-                        );
-                        return false;
-                    }
-
-                    if (string.IsNullOrWhiteSpace(config.PackPath))
-                    {
-                        Log.Error("GeoBundleBootstrap: validated indexed bundle has no GeoJSON packPath.");
-                        return false;
-                    }
-
-                    var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
-                    if (!Directory.Exists(candidateGeojsonRoot))
-                    {
-                        Log.Error("GeoBundleBootstrap: validated indexed GeoJSON folder disappeared: " + candidateGeojsonRoot);
-                        return false;
-                    }
-
-                    geojsonRoot = candidateGeojsonRoot;
+                    Log.Error(
+                        "GeoBundleBootstrap: active indexed bundle was not installed: " +
+                        (string.IsNullOrWhiteSpace(config.BundleIndexResolutionError)
+                            ? "unknown bundle resolution error."
+                            : config.BundleIndexResolutionError)
+                    );
+                    return false;
                 }
-                else
+
+                if (string.IsNullOrWhiteSpace(config.PackPath))
                 {
-                    var legacyGeojsonRoot = Path.Combine(modDir, "data", "legacy-geojson");
-                    EnsureBundledLegacyGeojson(legacyGeojsonRoot);
-                    geojsonRoot = legacyGeojsonRoot;
-
-                    if (!string.IsNullOrWhiteSpace(config.PackPath))
-                    {
-                        var candidateGeojsonRoot = Path.Combine(config.PackPath, "geojson");
-                        if (Directory.Exists(candidateGeojsonRoot))
-                            geojsonRoot = candidateGeojsonRoot;
-                        else
-                            Log.Error("GeoBundleBootstrap: legacy packPath not found; using bundled legacy GeoJSON. candidate=" + candidateGeojsonRoot);
-                    }
+                    Log.Error(
+                        "GeoBundleBootstrap: validated indexed bundle has no GeoJSON packPath."
+                    );
+                    return false;
                 }
+
+                var candidateGeojsonRoot =
+                    Path.Combine(config.PackPath, "geojson");
+
+                if (!Directory.Exists(candidateGeojsonRoot))
+                {
+                    Log.Error(
+                        "GeoBundleBootstrap: validated indexed GeoJSON folder disappeared: " +
+                        candidateGeojsonRoot
+                    );
+                    return false;
+                }
+
+                geojsonRoot = candidateGeojsonRoot;
 
                 var lines = Path.Combine(geojsonRoot, "water_lines_clipped.geojson");
                 var areas = Path.Combine(geojsonRoot, "water_areas_clipped.geojson");
@@ -825,18 +813,16 @@ namespace CityTimelineMod
                 }
 
                 candidate = runtimeConfig.CloneForBundleReloadCandidate(fallbackBaseline);
-                candidate.UseBundleIndex = false;
                 candidate.BundleManifestPath = manifestPath;
                 candidate.PackPath = null;
                 BundleResolver.ApplyIndexMetadata(candidate, selected);
 
-                if (!candidate.PrepareBundle(modDir))
+                if (!GeoOverlayConfig.ApplyBundleManifest(candidate, modDir))
                 {
                     candidate = null;
                     return false;
                 }
 
-                candidate.UseBundleIndex = true;
                 candidate.ResolvedBundlesRoot = bundlesRoot;
                 candidate.ActiveBundleRoot = bundleRoot;
                 candidate.ActiveBundleId = canonicalId;
@@ -872,25 +858,24 @@ namespace CityTimelineMod
                 configPath,
                 root =>
                 {
-                    root["useBundleIndex"] = true;
                     RemoveLegacyActiveBundleId(root);
                 },
                 out ignoredRoot,
                 out updateError
             ))
             {
-                Log.Error("GeoBundleBootstrap: failed to persist bundle-index mode in config.json. " + updateError);
+                Log.Error("GeoBundleBootstrap: failed to clean legacy bundle selection from config.json. " + updateError);
                 return false;
             }
 
             string configVerificationError;
-            if (!VerifyPersistedBundleIndexMode(
+            if (!VerifyPersistedBundleSelectionConfig(
                 configPath,
                 out configVerificationError
             ))
             {
                 Log.Error(
-                    "GeoBundleBootstrap: config.json bundle-index mode verification failed. " +
+                    "GeoBundleBootstrap: config.json bundle selection verification failed. " +
                     configVerificationError
                 );
                 if (!RestoreActiveBundleSelection(captured))
@@ -1041,7 +1026,7 @@ namespace CityTimelineMod
             }
         }
 
-        private static bool VerifyPersistedBundleIndexMode(
+        private static bool VerifyPersistedBundleSelectionConfig(
             string configPath,
             out string error
         )
@@ -1051,17 +1036,7 @@ namespace CityTimelineMod
             try
             {
                 var root = JObject.Parse(File.ReadAllText(configPath));
-                JToken useBundleIndexToken;
-                if (!root.TryGetValue(
-                    "useBundleIndex",
-                    StringComparison.OrdinalIgnoreCase,
-                    out useBundleIndexToken
-                ) || useBundleIndexToken.Type != JTokenType.Boolean ||
-                    !useBundleIndexToken.Value<bool>())
-                {
-                    error = "useBundleIndex=true was not persisted.";
-                    return false;
-                }
+
 
                 JToken legacyActiveBundleToken;
                 if (root.TryGetValue(
@@ -1262,3 +1237,5 @@ namespace CityTimelineMod
         }
     }
 }
+
+

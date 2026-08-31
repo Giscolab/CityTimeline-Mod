@@ -358,6 +358,28 @@ namespace CityTimelineMod.LargeMap
                 manifest,
                 AccessTools.Method(
                     typeof(TerrainSystem),
+                    "InitializeTerrainData",
+                    new[]
+                    {
+                        typeof(Texture2D),
+                        typeof(Texture2D),
+                        typeof(float2),
+                        typeof(float2),
+                        typeof(float2),
+                        typeof(float2),
+                        typeof(float2),
+                        typeof(float2)
+                    }
+                ),
+                AccessTools.Method(
+                    typeof(LargeMapTerrainSystemPatches),
+                    "InitializeTerrainData_Postfix"
+                )
+            );
+            AddExpectedPatch(
+                manifest,
+                AccessTools.Method(
+                    typeof(TerrainSystem),
                     nameof(TerrainSystem.GetTerrainBounds),
                     Type.EmptyTypes
                 ),
@@ -915,3 +937,4 @@ namespace CityTimelineMod.LargeMap
         }
     }
 }
+

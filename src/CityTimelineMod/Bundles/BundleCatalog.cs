@@ -29,12 +29,6 @@ namespace CityTimelineMod.Bundles
             if (config == null)
                 return result;
 
-            if (!config.UseBundleIndex)
-            {
-                Log.Info("BundleCatalog: bundle index disabled.");
-                return result;
-            }
-
             var bundlesRoot = config.ResolvedBundlesRoot;
             if (string.IsNullOrWhiteSpace(bundlesRoot))
             {
@@ -55,7 +49,7 @@ namespace CityTimelineMod.Bundles
 
             if (string.IsNullOrWhiteSpace(bundlesRoot))
             {
-                Log.Info("BundleCatalog: bundle index disabled or bundlesRoot is empty.");
+                Log.Info("BundleCatalog: bundlesRoot is empty.");
                 return result;
             }
 
@@ -197,3 +191,4 @@ namespace CityTimelineMod.Bundles
         }
     }
 }
+

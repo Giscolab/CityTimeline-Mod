@@ -71,13 +71,6 @@
 
   <ItemGroup>
     <EmbeddedResource Include="$(ResourcesRoot)\defaults\config.json" Link="Resources\config.json" />
-    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\water_lines_clipped.geojson" Link="Resources\legacy-geojson\water_lines_clipped.geojson" />
-    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\water_areas_clipped.geojson" Link="Resources\legacy-geojson\water_areas_clipped.geojson" />
-    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\roads_major_clipped.geojson" Link="Resources\legacy-geojson\roads_major_clipped.geojson" />
-    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\zoning_polygons.geojson" Link="Resources\legacy-geojson\zoning_polygons.geojson" />
-    <EmbeddedResource Include="$(ResourcesRoot)\legacy-geojson\bbox_manifest.json" Link="Resources\legacy-geojson\bbox_manifest.json" />
-	
-	
   </ItemGroup>
 
 
@@ -142,7 +135,6 @@
     <ItemGroup>
       <CityTimelineRootFiles Include="$(PackagingRoot)\mod.json" />
       <CityTimelineRootFiles Include="$(ResourcesRoot)\defaults\config.json" />
-      <CityTimelineDataFiles Include="$(ResourcesRoot)\legacy-geojson\**\*.*" />
       <CityTimelineUiRootFiles Include="$(UiOutputRoot)\CityTimelineMod.mjs" Condition="Exists('$(UiOutputRoot)\CityTimelineMod.mjs')" />
       <CityTimelineUiRootFiles Include="$(UiOutputRoot)\CityTimelineMod.css" Condition="Exists('$(UiOutputRoot)\CityTimelineMod.css')" />
       <CityTimelineUiLicenseFile Include="$(UiOutputRoot)\CityTimelineMod.mjs.LICENSE.txt"
@@ -154,9 +146,6 @@
           DestinationFiles="@(CityTimelineRootFiles->'$(DeployDir)\%(Filename)%(Extension)')"
           SkipUnchangedFiles="true" />
 
-    <Copy SourceFiles="@(CityTimelineDataFiles)"
-          DestinationFiles="@(CityTimelineDataFiles->'$(DeployDir)\data\legacy-geojson\%(RecursiveDir)%(Filename)%(Extension)')"
-          SkipUnchangedFiles="true" />
 
     <Copy SourceFiles="@(CityTimelineUiRootFiles)"
           DestinationFiles="@(CityTimelineUiRootFiles->'$(DeployDir)\%(Filename)%(Extension)')"
@@ -252,4 +241,5 @@
     <Copy SourceFiles="@(HarmonyRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>
 </Project>
+
 

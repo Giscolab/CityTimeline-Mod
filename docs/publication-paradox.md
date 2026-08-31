@@ -113,7 +113,6 @@ CityTimelineMod.mjs.LICENSE.txt
 config.json
 mod.json
 fonts\
-data\legacy-geojson\
 
 Les bundles complets restent des actifs utilisateur externes et ne font jamais
 partie du contenu Paradox Mods.
@@ -150,3 +149,4 @@ Depuis la racine du repo :
     & $env:CSII_MODPUBLISHERPATH Publish .\src\CityTimelineMod\Properties\PublishConfiguration.xml -c $content -v
 
 Cette commande recree un nouveau mod Paradox Mods.
+
