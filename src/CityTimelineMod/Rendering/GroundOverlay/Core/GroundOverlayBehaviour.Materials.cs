@@ -470,15 +470,23 @@ namespace CityTimelineMod.Rendering
             // Only real OSM highway=tertiary uses this one. The tint stays
             // white so the sampled asphalt is not multiplied by a road color.
             // Use the new native material method instead of the sprite-based fallback.
-            materials.RoadTertiaryTextured = CreateOwnedTexturedOverlayMaterial(
-    new Color(1f, 1f, 1f, _config.RoadAlpha),
-    "MikeAsphaltCoverOver._BaseColorMap.png"
-);
-ProbeRoadSurfaceShadersOnce();
-ProbeNativeNetCompositionMaterials();
+            materials.RoadTertiaryTextured = CreateOwnedRoadSurfaceMaterial(
+                "Resources.textures.roads.tertiary.MikeAsphaltCoverOver",
+                new Color(1f, 1f, 1f, _config.RoadAlpha)
+            );
+            materials.RoadTertiaryCurb = CreateOwnedRoadSurfaceMaterial(
+                "Resources.textures.roads.tertiary.MikeCurb1Street",
+                new Color(1f, 1f, 1f, _config.RoadAlpha)
+            );
 
+            _roadTertiaryCurbMaterial =
+                materials.RoadTertiaryCurb;
 
-            materials.RoadLink = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorLink, _config.RoadAlpha));
+            Log.Info(
+                "GroundOverlay: tertiary curb layer loaded. " +
+                "asset=MikeCurb1Street"
+            );
+materials.RoadLink = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.RoadColorLink, _config.RoadAlpha));
             materials.Path = CreateOwnedOverlayMaterial(_config.ResolveColorName(_config.PathColor, _config.PathAlpha));
             materials.RoadOneWay = CreateOwnedOverlayMaterial(new Color(0.25f, 0.9f, 1f, _config.RoadAlpha));
             materials.RoadBridge = CreateOwnedOverlayMaterial(new Color(1f, 0.85f, 0.15f, _config.RoadAlpha));
@@ -666,6 +674,9 @@ ProbeNativeNetCompositionMaterials();
             if (failed)
                 throw new System.InvalidOperationException("One or more owned overlay materials could not be destroyed.");
 
+            ReleaseAllOwnedRoadSurfaceTextures();
+            _roadTertiaryCurbMaterial = null;
+
             _zoningMaterials.Clear();
             _roadMaterials.Clear();
             _pathMaterials.Clear();
@@ -705,6 +716,7 @@ ProbeNativeNetCompositionMaterials();
                     ReleaseOwnedOverlayTexture(material);
                     UnityEngine.Object.Destroy(material);
                     releasedMaterialIds.Add(materialId);
+                    ReleaseOwnedRoadSurfaceTextures(materialId);
                 }
                 catch (System.Exception ex)
                 {
@@ -1085,3 +1097,5 @@ ProbeNativeNetCompositionMaterials();
         }
     }
 }
+
+

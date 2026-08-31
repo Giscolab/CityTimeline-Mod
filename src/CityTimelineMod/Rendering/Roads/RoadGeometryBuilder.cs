@@ -354,6 +354,227 @@ namespace CityTimelineMod.Rendering.Roads
             return dx * dx + dz * dz >= 0.01f;
         }
 
+        internal static int AppendTexturedOffsetPolylineStrip(
+            RoadMeshBatch batch,
+            IList<Vector3> points,
+            float stripWidth,
+            float centerOffset,
+            float ribbonYOffset,
+            float uMin,
+            float uMax,
+            float longitudinalRepeatMeters,
+            float distanceOffset,
+            bool mirrorU,
+            out float distanceEnd
+        )
+        {
+            distanceEnd = distanceOffset;
+
+            if (batch == null || points == null || points.Count < 2)
+                return 0;
+
+            var cleaned = new List<Vector3>(points.Count);
+
+            for (var i = 0; i < points.Count; i++)
+            {
+                var p = points[i];
+                p.y += ribbonYOffset;
+
+                if (
+                    cleaned.Count == 0 ||
+                    HasMeaningfulHorizontalDistance(
+                        cleaned[cleaned.Count - 1],
+                        p
+                    )
+                )
+                {
+                    cleaned.Add(p);
+                }
+            }
+
+            if (cleaned.Count < 2)
+                return 0;
+
+            var segmentNormals =
+                new List<Vector2>(cleaned.Count - 1);
+
+            var segmentLengths =
+                new List<float>(cleaned.Count - 1);
+
+            for (var i = 0; i < cleaned.Count - 1; i++)
+            {
+                var a = cleaned[i];
+                var b = cleaned[i + 1];
+
+                var dx = b.x - a.x;
+                var dz = b.z - a.z;
+                var lengthSq = dx * dx + dz * dz;
+
+                if (lengthSq < 0.01f)
+                {
+                    segmentNormals.Add(Vector2.zero);
+                    segmentLengths.Add(0f);
+                    continue;
+                }
+
+                var length = Mathf.Sqrt(lengthSq);
+
+                segmentNormals.Add(
+                    new Vector2(
+                        -dz / length,
+                        dx / length
+                    )
+                );
+
+                segmentLengths.Add(length);
+            }
+
+            var safeStripWidth =
+                Mathf.Max(0.05f, stripWidth);
+
+            var halfStripWidth =
+                safeStripWidth * 0.5f;
+
+            var edgeA =
+                centerOffset + halfStripWidth;
+
+            var edgeB =
+                centerOffset - halfStripWidth;
+
+            var repeat =
+                Mathf.Max(
+                    0.01f,
+                    longitudinalRepeatMeters
+                );
+
+            var firstU =
+                mirrorU ? uMax : uMin;
+
+            var secondU =
+                mirrorU ? uMin : uMax;
+
+            var baseIndex =
+                batch.Vertices.Count;
+
+            var cumulativeDistance =
+                distanceOffset;
+
+            for (var i = 0; i < cleaned.Count; i++)
+            {
+                if (i > 0)
+                {
+                    cumulativeDistance +=
+                        segmentLengths[i - 1];
+                }
+
+                var offsetA =
+                    ResolveSignedPolylineOffset(
+                        segmentNormals,
+                        i,
+                        edgeA
+                    );
+
+                var offsetB =
+                    ResolveSignedPolylineOffset(
+                        segmentNormals,
+                        i,
+                        edgeB
+                    );
+
+                var p = cleaned[i];
+
+                batch.Vertices.Add(
+                    new Vector3(
+                        p.x + offsetA.x,
+                        p.y,
+                        p.z + offsetA.y
+                    )
+                );
+
+                batch.Vertices.Add(
+                    new Vector3(
+                        p.x + offsetB.x,
+                        p.y,
+                        p.z + offsetB.y
+                    )
+                );
+
+                var v =
+                    cumulativeDistance / repeat;
+
+                batch.UV0.Add(
+                    new Vector2(firstU, v)
+                );
+
+                batch.UV0.Add(
+                    new Vector2(secondU, v)
+                );
+            }
+
+            var appendedSegments = 0;
+
+            for (var i = 0; i < cleaned.Count - 1; i++)
+            {
+                if (
+                    segmentNormals[i].sqrMagnitude <
+                    0.0001f
+                )
+                {
+                    continue;
+                }
+
+                var a0 =
+                    baseIndex + i * 2;
+
+                var a1 =
+                    a0 + 1;
+
+                var b0 =
+                    baseIndex + (i + 1) * 2;
+
+                var b1 =
+                    b0 + 1;
+
+                batch.Triangles.Add(a0);
+                batch.Triangles.Add(b0);
+                batch.Triangles.Add(b1);
+
+                batch.Triangles.Add(a0);
+                batch.Triangles.Add(b1);
+                batch.Triangles.Add(a1);
+
+                appendedSegments++;
+            }
+
+            batch.SegmentCount +=
+                appendedSegments;
+
+            distanceEnd =
+                cumulativeDistance;
+
+            return appendedSegments;
+        }
+
+        private static Vector2 ResolveSignedPolylineOffset(
+            IList<Vector2> segmentNormals,
+            int pointIndex,
+            float signedDistance
+        )
+        {
+            if (Mathf.Abs(signedDistance) < 0.0001f)
+                return Vector2.zero;
+
+            var offset =
+                ResolvePolylineOffset(
+                    segmentNormals,
+                    pointIndex,
+                    Mathf.Abs(signedDistance)
+                );
+
+            return signedDistance < 0f
+                ? -offset
+                : offset;
+        }
         internal static bool AppendRoadArrow(
             RoadArrowBatch batch,
             Vector3 center,
@@ -426,3 +647,4 @@ namespace CityTimelineMod.Rendering.Roads
         }
     }
 }
+

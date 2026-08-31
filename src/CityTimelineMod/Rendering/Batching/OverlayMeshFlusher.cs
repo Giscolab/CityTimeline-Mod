@@ -175,6 +175,13 @@ namespace CityTimelineMod.Rendering.Batching
             var renderer = obj.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = batch.Material;
 
+            if (batch.UV0.Count == batch.Vertices.Count)
+            {
+                renderer.shadowCastingMode =
+                    UnityEngine.Rendering.ShadowCastingMode.Off;
+                renderer.receiveShadows = false;
+            }
+
             logVerbose(
                 "GroundOverlay: road batch created: " + name +
                 ", segments=" + batch.SegmentCount +

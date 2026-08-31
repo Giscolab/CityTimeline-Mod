@@ -435,6 +435,178 @@ namespace CityTimelineMod.Rendering
             return appendedSegments;
         }
 
+        private int AppendTertiaryCurbPolylineToBatch(
+            RoadMeshBatch batch,
+            string batchKey,
+            List<Vector3> points,
+            float segmentWidth,
+            int maxVerticesPerMesh,
+            out int flushedObjects
+        )
+        {
+            flushedObjects = 0;
+
+            if (
+                batch == null ||
+                points == null ||
+                points.Count < 2
+            )
+            {
+                return 0;
+            }
+
+            // Mike - Bordure 1 - Rue
+            //
+            // Texture : 1024 px de large.
+            // Zone alpha utile : x=434..585,
+            // soit 152 px.
+            //
+            // colossal_MeshSize.x = 6.4 m
+            // => 6.4 * 152 / 1024 = 0.95 m.
+            const float curbWidthMeters =
+                6.4f * 152f / 1024f;
+
+            const float curbUMin =
+                434f / 1024f;
+
+            const float curbUMax =
+                586f / 1024f;
+
+            const float curbRepeatMeters =
+                12.8f;
+
+            var appendedSegments = 0;
+            var startIndex = 0;
+
+            var safeMaxVertices =
+                Math.Max(
+                    32,
+                    maxVerticesPerMesh
+                );
+
+            var distanceOffset = 0f;
+
+            while (startIndex < points.Count - 1)
+            {
+                // Deux bandes :
+                // 2 sommets par point et par côté,
+                // donc 4 sommets par point.
+                if (
+                    batch.Vertices.Count + 8 >=
+                    safeMaxVertices
+                )
+                {
+                    flushedObjects +=
+                        OverlayMeshFlusher.FlushRoadBatch(
+                            OverlayRenderParent,
+                            batchKey,
+                            batch,
+                            LogVerboseOverlay
+                        );
+                }
+
+                var availableVertices =
+                    Math.Max(
+                        8,
+                        safeMaxVertices -
+                        batch.Vertices.Count
+                    );
+
+                var maxPointsThisBatch =
+                    Math.Max(
+                        2,
+                        availableVertices / 4
+                    );
+
+                var endExclusive =
+                    Math.Min(
+                        points.Count,
+                        startIndex +
+                        maxPointsThisBatch
+                    );
+
+                if (endExclusive - startIndex < 2)
+                {
+                    flushedObjects +=
+                        OverlayMeshFlusher.FlushRoadBatch(
+                            OverlayRenderParent,
+                            batchKey,
+                            batch,
+                            LogVerboseOverlay
+                        );
+
+                    continue;
+                }
+
+                var slice =
+                    startIndex == 0 &&
+                    endExclusive == points.Count
+                        ? points
+                        : points.GetRange(
+                            startIndex,
+                            endExclusive - startIndex
+                        );
+
+                var ribbonYOffset =
+                    (_config != null
+                        ? Mathf.Max(
+                            0f,
+                            _config.RibbonYOffset
+                        )
+                        : 0.05f) +
+                    0.02f;
+
+                float leftDistanceEnd;
+
+                // Côté gauche de la route.
+                appendedSegments +=
+                    RoadGeometryBuilder
+                        .AppendTexturedOffsetPolylineStrip(
+                            batch,
+                            slice,
+                            curbWidthMeters,
+                            segmentWidth * 0.5f,
+                            ribbonYOffset,
+                            curbUMin,
+                            curbUMax,
+                            curbRepeatMeters,
+                            distanceOffset,
+                            false,
+                            out leftDistanceEnd
+                        );
+
+                float rightDistanceEnd;
+
+                // Côté droit : UV inversés afin que
+                // la bordure soit miroir de la gauche.
+                appendedSegments +=
+                    RoadGeometryBuilder
+                        .AppendTexturedOffsetPolylineStrip(
+                            batch,
+                            slice,
+                            curbWidthMeters,
+                            -segmentWidth * 0.5f,
+                            ribbonYOffset,
+                            curbUMin,
+                            curbUMax,
+                            curbRepeatMeters,
+                            distanceOffset,
+                            true,
+                            out rightDistanceEnd
+                        );
+
+                distanceOffset =
+                    Mathf.Max(
+                        leftDistanceEnd,
+                        rightDistanceEnd
+                    );
+
+                startIndex =
+                    endExclusive - 1;
+            }
+
+            return appendedSegments;
+        }
         private int RenderRoadChunk(
             RoadRenderChunk chunk,
             OverlayRenderMaterials materials,
@@ -586,6 +758,59 @@ namespace CityTimelineMod.Rendering
                         texturedTertiary,
                         out flushedObjects
                     );
+                    // CTM_TERTIARY_CURB_LAYER
+                    if (
+                        appendedSegments > 0 &&
+                        !isPath &&
+                        _roadTertiaryCurbMaterial != null &&
+                        string.Equals(
+                            RoadRenderStyleResolver
+                                .ResolveRoadRenderBatchKey(
+                                    roadLine,
+                                    _config
+                                ),
+                            RoadRenderStyleResolver
+                                .TertiaryTexturedBatchKey,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        var curbBatchKey =
+                            batchKey + "_curb_street";
+
+                        RoadMeshBatch curbBatch;
+
+                        if (
+                            !batches.TryGetValue(
+                                curbBatchKey,
+                                out curbBatch
+                            )
+                        )
+                        {
+                            curbBatch =
+                                new RoadMeshBatch();
+
+                            curbBatch.Material =
+                                _roadTertiaryCurbMaterial;
+
+                            batches[curbBatchKey] =
+                                curbBatch;
+                        }
+
+                        int curbFlushedObjects;
+
+                        AppendTertiaryCurbPolylineToBatch(
+                            curbBatch,
+                            curbBatchKey,
+                            ribbonPoints,
+                            segmentWidth,
+                            maxVerticesPerMesh,
+                            out curbFlushedObjects
+                        );
+
+                        counters.CreatedRoadMeshObjects +=
+                            curbFlushedObjects;
+                    }
 
                     if (isPath)
                         counters.CreatedPathMeshObjects += flushedObjects;
@@ -812,6 +1037,59 @@ namespace CityTimelineMod.Rendering
                         texturedTertiary,
                         out flushedObjects
                     );
+                    // CTM_TERTIARY_CURB_LAYER
+                    if (
+                        appendedSegments > 0 &&
+                        !isPath &&
+                        _roadTertiaryCurbMaterial != null &&
+                        string.Equals(
+                            RoadRenderStyleResolver
+                                .ResolveRoadRenderBatchKey(
+                                    roadLine,
+                                    _config
+                                ),
+                            RoadRenderStyleResolver
+                                .TertiaryTexturedBatchKey,
+                            StringComparison.Ordinal
+                        )
+                    )
+                    {
+                        var curbBatchKey =
+                            batchKey + "_curb_street";
+
+                        RoadMeshBatch curbBatch;
+
+                        if (
+                            !batches.TryGetValue(
+                                curbBatchKey,
+                                out curbBatch
+                            )
+                        )
+                        {
+                            curbBatch =
+                                new RoadMeshBatch();
+
+                            curbBatch.Material =
+                                _roadTertiaryCurbMaterial;
+
+                            batches[curbBatchKey] =
+                                curbBatch;
+                        }
+
+                        int curbFlushedObjects;
+
+                        AppendTertiaryCurbPolylineToBatch(
+                            curbBatch,
+                            curbBatchKey,
+                            ribbonPoints,
+                            segmentWidth,
+                            maxVerticesPerMesh,
+                            out curbFlushedObjects
+                        );
+
+                        createdRoadMeshObjects +=
+                            curbFlushedObjects;
+                    }
 
                     if (isPath)
                         createdPathMeshObjects += flushedObjects;
@@ -890,3 +1168,5 @@ namespace CityTimelineMod.Rendering
         }
     }
 }
+
+
